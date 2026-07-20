@@ -31,15 +31,6 @@ if [[ -z "${TMDB_API:-}" ]]; then
     exit 1
 fi
 
-auth_args=()
-api_key_args=()
-
-if [[ "$TMDB_API" == *.* || "$TMDB_API" == eyJ* ]]; then
-    auth_args=(-H "Authorization: Bearer $TMDB_API")
-else
-    api_key_args=(--data-urlencode "api_key=$TMDB_API")
-fi
-
 tmp_response="$(mktemp)"
 trap 'rm -f "$tmp_response"' EXIT
 
@@ -52,12 +43,11 @@ while true; do
     fi
 
     curl -fsS --get "$TMDB_URL/search/movie" \
-        "${auth_args[@]}" \
+        -H "Authorization: Bearer $TMDB_API" \
         --data-urlencode "query=$movie_title" \
         --data-urlencode "language=$TMDB_LANG" \
         --data "include_adult=false" \
         --data "page=1" \
-        "${api_key_args[@]}" \
         > "$tmp_response"
 
     match="$(

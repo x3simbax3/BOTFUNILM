@@ -116,11 +116,7 @@ def _request_json(url: str, query: str) -> dict:
         "page": "1",
     }
 
-    headers = {}
-    if _is_bearer_token(TMDB_API):
-        headers["Authorization"] = f"Bearer {TMDB_API}"
-    else:
-        params["api_key"] = TMDB_API
+    headers = {"Authorization": f"Bearer {TMDB_API}"}
 
     request = Request(f"{url}?{urlencode(params)}", headers=headers)
 
@@ -129,10 +125,6 @@ def _request_json(url: str, query: str) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
         raise TmdbError from error
-
-
-def _is_bearer_token(api_key: str) -> bool:
-    return "." in api_key or api_key.startswith("eyJ")
 
 
 __all__ = (

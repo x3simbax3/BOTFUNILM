@@ -94,7 +94,7 @@ Create `config/.env`:
 
 ```env
 BOT_TOKEN=your_telegram_bot_token
-TMDB_API=your_tmdb_api_key_or_bearer_token
+TMDB_API=your_tmdb_bearer_token
 TMDB_LANG=ru-RU
 DATABASE_URL=sqlite:///bot.db
 DEBUG=false
