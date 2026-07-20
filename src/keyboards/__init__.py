@@ -56,10 +56,15 @@ def content_type_keyboard(action: str, content_format: str) -> InlineKeyboardMar
     )
 
 
-def selected_type_keyboard() -> InlineKeyboardMarkup:
+def selected_type_keyboard(action: str, content_format: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:content_type")],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=f"back:content_type:{action}:{content_format}",
+                ),
+            ],
         ],
     )
 
@@ -75,7 +80,16 @@ def tmdb_guess_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def tmdb_retry_keyboard() -> InlineKeyboardMarkup:
+def tmdb_retry_keyboard(
+    action: str | None = None,
+    content_format: str | None = None,
+) -> InlineKeyboardMarkup:
+    back_callback = (
+        f"back:content_type:{action}:{content_format}"
+        if action and content_format
+        else "back:content_type"
+    )
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -87,7 +101,7 @@ def tmdb_retry_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="🔁 Сменить категорию",
-                    callback_data="back:content_type",
+                    callback_data=back_callback,
                 ),
             ],
         ],

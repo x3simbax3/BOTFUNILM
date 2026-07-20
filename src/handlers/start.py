@@ -50,7 +50,7 @@ MENU_TREE = {
         "state": MenuState.choosing_content_type,
         "clear_fields": ("content_type",),
         "required_fields": ("action", "content_format"),
-        "param_fields": (),
+        "param_fields": ("action", "content_format"),
         "text": lambda data: content_type_text(data["action"], data["content_format"]),
         "keyboard": lambda data: content_type_keyboard(
             data["action"],
@@ -124,7 +124,7 @@ async def choose_content_type(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.message.edit_text(
         selected_type_text(action, content_format, content_type),
         parse_mode="HTML",
-        reply_markup=selected_type_keyboard(),
+        reply_markup=selected_type_keyboard(action, content_format),
     )
     await callback.answer("Выбор сохранен")
 
@@ -205,9 +205,13 @@ async def reject_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.set_state(MenuState.choosing_tmdb_retry)
     await state.update_data(tmdb_guess_message_id=None)
+    data = await state.get_data()
     await callback.message.answer(
         "Ок, не оно. Что сделать?",
-        reply_markup=tmdb_retry_keyboard(),
+        reply_markup=tmdb_retry_keyboard(
+            data.get("action"),
+            data.get("content_format"),
+        ),
     )
     await callback.answer()
 
