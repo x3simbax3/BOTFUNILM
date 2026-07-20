@@ -1,4 +1,5 @@
 import asyncio
+from difflib import SequenceMatcher
 import json
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -10,7 +11,6 @@ from config.config import TMDB_API, TMDB_LANG, TMDB_URL
 
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 TITLE_QUOTES = "\"'`«»„“”"
-MAX_QUERY_CANDIDATES = 16
 
 
 @dataclass(frozen=True)
@@ -41,11 +41,10 @@ def _find_title_guess(query: str, content_format: str) -> TmdbTitle:
     media_path = "tv" if content_format == "series" else "movie"
     url = f"{TMDB_URL.rstrip('/')}/search/{media_path}"
 
-    for query_candidate in _query_candidates(normalized_query):
-        data = _request_json(url, query_candidate)
-        results = data.get("results") or []
-        if results:
-            return _parse_title(results[0])
+    data = _request_json(url, normalized_query)
+    results = data.get("results") or []
+    if results:
+        return _parse_title(_select_best_result(results, normalized_query))
 
     raise TmdbNotFoundError
 
@@ -77,32 +76,40 @@ def _normalize_query(query: str) -> str:
     return normalized
 
 
-def _query_candidates(query: str) -> list[str]:
-    candidates = [query]
-    if "е" not in query and "Е" not in query:
-        return candidates
+def _select_best_result(results: list[dict], query: str) -> dict:
+    normalized_query = _normalize_for_match(query)
+    return max(
+        results,
+        key=lambda result: _result_score(result, normalized_query),
+    )
 
-    positions = [
-        index for index, char in enumerate(query)
-        if char in {"е", "Е"}
+
+def _result_score(result: dict, normalized_query: str) -> float:
+    names = [
+        result.get("name"),
+        result.get("title"),
+        result.get("original_name"),
+        result.get("original_title"),
     ]
 
-    for mask in range(1, 2 ** len(positions)):
-        chars = list(query)
-        for bit_index, char_index in enumerate(positions):
-            if not mask & (1 << bit_index):
-                continue
+    scores = [
+        _match_score(normalized_query, name)
+        for name in names
+        if isinstance(name, str) and name.strip()
+    ]
+    return max(scores, default=0.0)
 
-            chars[char_index] = "Ё" if chars[char_index] == "Е" else "ё"
 
-        candidate = "".join(chars)
-        if candidate not in candidates:
-            candidates.append(candidate)
+def _match_score(normalized_query: str, title: str) -> float:
+    normalized_title = _normalize_for_match(title)
+    if normalized_title == normalized_query:
+        return 2.0
 
-        if len(candidates) >= MAX_QUERY_CANDIDATES:
-            break
+    return SequenceMatcher(None, normalized_query, normalized_title).ratio()
 
-    return candidates
+
+def _normalize_for_match(value: str) -> str:
+    return _normalize_query(value).casefold().replace("ё", "е")
 
 
 def _request_json(url: str, query: str) -> dict:
