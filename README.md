@@ -1,6 +1,38 @@
-# BOTFUNILM
+<div align="center">
+  <img src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif" width="160" alt="Typing cat">
 
-**Your personal media tracker in Telegram.**
+  <h1>BOTFUNILM</h1>
+
+  <p><strong>Your personal media tracker in Telegram.</strong></p>
+
+  <p>
+    <a href="https://github.com/x3simbax3/BOTFUNILM/commits/main">
+      <img src="https://img.shields.io/github/last-commit/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=111827" alt="Last commit">
+    </a>
+    <a href="https://github.com/x3simbax3/BOTFUNILM/issues">
+      <img src="https://img.shields.io/github/issues/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=2563eb" alt="Issues">
+    </a>
+    <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+">
+    <img src="https://img.shields.io/badge/aiogram-3.30.0-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="aiogram 3.30.0">
+    <img src="https://img.shields.io/badge/TMDB-powered-01B4E4?style=for-the-badge&logo=themoviedatabase&logoColor=white" alt="TMDB powered">
+    <img src="https://img.shields.io/badge/self--hostable-yes-10b981?style=for-the-badge" alt="Self-hostable">
+  </p>
+
+  <p>
+    <a href="https://github.com/topics/telegram-bot"><img src="https://img.shields.io/badge/topic-telegram--bot-2CA5E0?style=flat-square" alt="telegram-bot"></a>
+    <a href="https://github.com/topics/media-tracker"><img src="https://img.shields.io/badge/topic-media--tracker-f97316?style=flat-square" alt="media-tracker"></a>
+    <a href="https://github.com/topics/movie-tracker"><img src="https://img.shields.io/badge/topic-movie--tracker-ef4444?style=flat-square" alt="movie-tracker"></a>
+    <a href="https://github.com/topics/anime"><img src="https://img.shields.io/badge/topic-anime-a855f7?style=flat-square" alt="anime"></a>
+    <a href="https://github.com/topics/tv-series"><img src="https://img.shields.io/badge/topic-tv--series-14b8a6?style=flat-square" alt="tv-series"></a>
+    <a href="https://github.com/topics/tmdb"><img src="https://img.shields.io/badge/topic-tmdb-01B4E4?style=flat-square" alt="tmdb"></a>
+    <a href="https://github.com/topics/python"><img src="https://img.shields.io/badge/topic-python-3776AB?style=flat-square" alt="python"></a>
+    <a href="https://github.com/topics/self-hosted"><img src="https://img.shields.io/badge/topic-self--hosted-10b981?style=flat-square" alt="self-hosted"></a>
+  </p>
+</div>
+
+## Topics
+
+`telegram-bot` `media-tracker` `movie-tracker` `anime` `tv-series` `tmdb` `python` `aiogram` `self-hosted` `watchlist`
 
 BOTFUNILM is a sleek, open-source Telegram bot for beautifully logging and organizing everything you watch: movies, anime, and TV series. Track seasons, keep your watch history in one place, follow clean statistics, and never lose the next episode again.
 
@@ -41,8 +73,8 @@ Planned areas:
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-username/BotFunilm.git
-cd BotFunilm
+git clone https://github.com/x3simbax3/BOTFUNILM.git
+cd BOTFUNILM
 ```
 
 Create and activate a virtual environment:
