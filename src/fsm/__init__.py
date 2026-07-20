@@ -6,6 +6,8 @@ class MenuState(StatesGroup):
     choosing_format = State()
     choosing_content_type = State()
     waiting_title = State()
+    confirming_tmdb_guess = State()
+    choosing_tmdb_retry = State()
 
 
 __all__ = ("MenuState",)

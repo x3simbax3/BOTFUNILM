@@ -166,40 +166,53 @@ async def search_title(message: Message, state: FSMContext) -> None:
     text = _tmdb_guess_caption(content_format, guess.title, guess.overview)
 
     if guess.poster_url:
-        await message.answer_photo(
+        guess_message = await message.answer_photo(
             photo=guess.poster_url,
             caption=text,
             parse_mode="HTML",
             reply_markup=tmdb_guess_keyboard(),
         )
+        await state.update_data(tmdb_guess_message_id=guess_message.message_id)
+        await state.set_state(MenuState.confirming_tmdb_guess)
         return
 
-    await message.answer(
+    guess_message = await message.answer(
         text,
         parse_mode="HTML",
         reply_markup=tmdb_guess_keyboard(),
     )
+    await state.update_data(tmdb_guess_message_id=guess_message.message_id)
+    await state.set_state(MenuState.confirming_tmdb_guess)
 
 
-@router.callback_query(F.data == "tmdb_guess:yes")
-async def confirm_tmdb_guess(callback: CallbackQuery) -> None:
-    pass
+@router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:yes")
+async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _is_active_tmdb_guess(callback, state):
+        await callback.answer("Это старый вариант.")
+        return
+
+    await callback.answer()
 
 
-@router.callback_query(F.data == "tmdb_guess:no")
-async def reject_tmdb_guess(callback: CallbackQuery) -> None:
+@router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:no")
+async def reject_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         return
 
-    await _edit_message(
-        callback.message,
+    if not await _is_active_tmdb_guess(callback, state):
+        await callback.answer("Это старый вариант.")
+        return
+
+    await state.set_state(MenuState.choosing_tmdb_retry)
+    await state.update_data(tmdb_guess_message_id=None)
+    await callback.message.answer(
         "Ок, не оно. Что сделать?",
         reply_markup=tmdb_retry_keyboard(),
     )
     await callback.answer()
 
 
-@router.callback_query(F.data == "title:retry")
+@router.callback_query(MenuState.choosing_tmdb_retry, F.data == "title:retry")
 async def retry_title(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         return
@@ -265,6 +278,14 @@ async def _edit_message(
         parse_mode=parse_mode,
         reply_markup=reply_markup,
     )
+
+
+async def _is_active_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> bool:
+    if not callback.message:
+        return False
+
+    data = await state.get_data()
+    return callback.message.message_id == data.get("tmdb_guess_message_id")
 
 
 async def _replace_message(
