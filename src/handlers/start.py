@@ -14,10 +14,14 @@ from src.keyboards import (
 )
 from src.texts import (
     START_TEXT,
+    TMDB_SEARCHING,
+    TMDB_TOO_LONG,
     action_text,
     content_type_text,
     selected_type_text,
+    tmdb_found_text,
     tmdb_guess_text,
+    tmdb_not_found_text,
 )
 from src.tmdb import (
     TmdbError,
@@ -146,22 +150,35 @@ async def search_title(message: Message, state: FSMContext) -> None:
         await message.answer("Название не может быть пустым. Введи название ещё раз.")
         return
 
-    await message.answer("Ищу в TMDB...")
+    if len(title_query) > 342:
+        await message.answer(TMDB_TOO_LONG)
+        return
+
+    status_msg = await message.answer(TMDB_SEARCHING, parse_mode="HTML")
 
     try:
-        guess = await find_title_guess(title_query, content_format)
+        content_type = data.get("content_type", "movie")
+        guess = await find_title_guess(title_query, content_format, content_type)
     except ValueError:
-        await message.answer("Название не может быть пустым. Введи название ещё раз.")
+        await status_msg.edit_text("Название не может быть пустым. Введи название ещё раз.")
         return
     except TmdbNotConfiguredError:
-        await message.answer("TMDB_API не настроен. Добавь ключ в config/.env.")
+        await status_msg.edit_text("TMDB_API не настроен. Добавь ключ в config/.env.")
         return
     except TmdbNotFoundError:
-        await message.answer("TMDB ничего не нашёл. Попробуй ввести название иначе.")
+        await status_msg.edit_text(
+            tmdb_not_found_text(title_query),
+            parse_mode="HTML",
+        )
         return
     except TmdbError:
-        await message.answer("Не удалось получить ответ от TMDB. Попробуй позже.")
+        await status_msg.edit_text("Не удалось получить ответ от TMDB. Попробуй позже.")
         return
+
+    await status_msg.edit_text(
+        tmdb_found_text(guess.title),
+        parse_mode="HTML"
+    )
 
     text = _tmdb_guess_caption(content_format, guess.title, guess.overview)
 

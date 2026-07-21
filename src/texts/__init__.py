@@ -85,6 +85,22 @@ def tmdb_guess_text(content_format: str, title: str, overview: str | None) -> st
     )
 
 
+TMDB_SEARCHING = "🔍 Ищу в TMDB..."
+
+TMDB_TOO_LONG = "⚠️ Слишком длинное название. Сократи и попробуй снова."
+
+
+def tmdb_found_text(title: str) -> str:
+    return f"🎯 Нашёл: <b>{escape(title)}</b>"
+
+
+def tmdb_not_found_text(query: str) -> str:
+    return (
+        f"😕 Ничего не нашёл по запросу <b>\"{escape(query)}\"</b>.\n"
+        "Попробуй ввести название иначе."
+    )
+
+
 __all__ = (
     "ACTION_TITLES",
     "BOT_NAME",
@@ -92,8 +108,12 @@ __all__ = (
     "FORMAT_RESULT_TITLES",
     "FORMAT_TITLES",
     "START_TEXT",
+    "TMDB_SEARCHING",
+    "TMDB_TOO_LONG",
     "action_text",
     "content_type_text",
     "selected_type_text",
+    "tmdb_found_text",
     "tmdb_guess_text",
+    "tmdb_not_found_text",
 )

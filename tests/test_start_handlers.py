@@ -9,7 +9,16 @@ from src.keyboards import (
     main_menu_keyboard,
     selected_type_keyboard,
 )
-from src.texts import START_TEXT, action_text, content_type_text, selected_type_text
+from src.texts import (
+    START_TEXT,
+    TMDB_SEARCHING,
+    TMDB_TOO_LONG,
+    action_text,
+    content_type_text,
+    selected_type_text,
+    tmdb_found_text,
+    tmdb_not_found_text,
+)
 from src.tmdb import (
     TmdbError,
     TmdbNotConfiguredError,
@@ -45,6 +54,10 @@ class StateStub:
 class SentMessageStub:
     def __init__(self, message_id: int) -> None:
         self.message_id = message_id
+        self.last_text = None
+
+    async def edit_text(self, text: str, **kwargs) -> None:
+        self.last_text = text
 
 
 class MessageStub:
@@ -57,12 +70,14 @@ class MessageStub:
         self.photo = []
 
     async def answer(self, text: str, **kwargs) -> SentMessageStub:
-        self.answers.append({"text": text, **kwargs})
-        return SentMessageStub(100 + len(self.answers) + len(self.photo_answers))
+        stub = SentMessageStub(100 + len(self.answers) + len(self.photo_answers))
+        self.answers.append({"text": text, "stub": stub, **kwargs})
+        return stub
 
     async def answer_photo(self, photo: str, **kwargs) -> SentMessageStub:
-        self.photo_answers.append({"photo": photo, **kwargs})
-        return SentMessageStub(200 + len(self.answers) + len(self.photo_answers))
+        stub = SentMessageStub(200 + len(self.answers) + len(self.photo_answers))
+        self.photo_answers.append({"photo": photo, "stub": stub, **kwargs})
+        return stub
 
     async def edit_text(self, text: str, **kwargs) -> None:
         self.edit_text_calls.append({"text": text, **kwargs})
@@ -99,6 +114,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
                     "text": START_TEXT,
                     "parse_mode": "HTML",
                     "reply_markup": main_menu_keyboard(),
+                    "stub": message.answers[0]["stub"],
                 }
             ],
         )
@@ -209,33 +225,41 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "Не найден выбранный формат. Начни заново через /start.",
         )
 
+    async def test_search_title_too_long_rejects(self) -> None:
+        message = MessageStub(text="x" * 343)
+        state = StateStub({"content_format": "full_length"})
+
+        await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], TMDB_TOO_LONG)
+
     async def test_search_title_found_with_poster_sends_photo_guess(self) -> None:
         message = MessageStub(text="Матрица")
         state = StateStub({"content_format": "full_length"})
-        guess = TmdbTitle("Матрица", "Описание", "https://image.test/poster.jpg")
+        guess = TmdbTitle("Матрица", "Описание", "https://image.test/poster.jpg", "Матрица", "Матрица")
 
         with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
             await start.search_title(message, state)
 
-        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
+        self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
         self.assertEqual(message.photo_answers[0]["photo"], guess.poster_url)
         self.assertIn("Матрица", message.photo_answers[0]["caption"])
         self.assertEqual(message.photo_answers[0]["parse_mode"], "HTML")
-        self.assertEqual(state.data["tmdb_guess_message_id"], 202)
+        self.assertEqual(state.data["tmdb_guess_message_id"], 201)
         self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
 
     async def test_search_title_found_without_poster_sends_text_guess(self) -> None:
         message = MessageStub(text="Матрица")
         state = StateStub({"content_format": "full_length"})
-        guess = TmdbTitle("Матрица", None, None)
+        guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица")
 
         with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
             await start.search_title(message, state)
 
-        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
-        self.assertIn("Матрица", message.answers[1]["text"])
-        self.assertEqual(message.answers[1]["parse_mode"], "HTML")
-        self.assertEqual(state.data["tmdb_guess_message_id"], 102)
+        self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
+        status_stub = message.answers[0]["stub"]
+        self.assertIn("Матрица", status_stub.last_text)
+        self.assertEqual(state.data["tmdb_guess_message_id"], 101)
         self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
 
     async def test_search_title_handles_tmdb_not_configured(self) -> None:
@@ -245,10 +269,19 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_search_title_handles_tmdb_not_found(self) -> None:
-        await self._assert_tmdb_error_answer(
-            TmdbNotFoundError,
-            "TMDB ничего не нашёл. Попробуй ввести название иначе.",
-        )
+        message = MessageStub(text="Матрица")
+        state = StateStub({"content_format": "full_length"})
+
+        with patch.object(
+            start,
+            "find_title_guess",
+            AsyncMock(side_effect=TmdbNotFoundError),
+        ):
+            await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
+        status_stub = message.answers[0]["stub"]
+        self.assertIn("Матрица", status_stub.last_text)
 
     async def test_search_title_handles_common_tmdb_error(self) -> None:
         await self._assert_tmdb_error_answer(
@@ -271,9 +304,9 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         ):
             await start.search_title(message, state)
 
-        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
-        self.assertEqual(message.answers[1]["text"], expected_text)
-        self.assertIsNone(state.state)
+        self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
+        status_stub = message.answers[0]["stub"]
+        self.assertEqual(status_stub.last_text, expected_text)
 
 
 class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
