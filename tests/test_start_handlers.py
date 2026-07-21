@@ -1,0 +1,327 @@
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from src.fsm import MenuState
+from src.handlers import start
+from src.keyboards import (
+    content_type_keyboard,
+    format_keyboard,
+    main_menu_keyboard,
+    selected_type_keyboard,
+)
+from src.texts import START_TEXT, action_text, content_type_text, selected_type_text
+from src.tmdb import (
+    TmdbError,
+    TmdbNotConfiguredError,
+    TmdbNotFoundError,
+    TmdbTitle,
+)
+
+
+class StateStub:
+    def __init__(self, data: dict | None = None) -> None:
+        self.data = data or {}
+        self.state = None
+        self.cleared = False
+
+    async def clear(self) -> None:
+        self.data.clear()
+        self.state = None
+        self.cleared = True
+
+    async def set_state(self, state) -> None:
+        self.state = state
+
+    async def get_data(self) -> dict:
+        return self.data
+
+    async def set_data(self, data: dict) -> None:
+        self.data = data
+
+    async def update_data(self, **kwargs) -> None:
+        self.data.update(kwargs)
+
+
+class SentMessageStub:
+    def __init__(self, message_id: int) -> None:
+        self.message_id = message_id
+
+
+class MessageStub:
+    def __init__(self, text: str | None = "Title", message_id: int = 10) -> None:
+        self.text = text
+        self.message_id = message_id
+        self.answers = []
+        self.photo_answers = []
+        self.edit_text_calls = []
+        self.photo = []
+
+    async def answer(self, text: str, **kwargs) -> SentMessageStub:
+        self.answers.append({"text": text, **kwargs})
+        return SentMessageStub(100 + len(self.answers) + len(self.photo_answers))
+
+    async def answer_photo(self, photo: str, **kwargs) -> SentMessageStub:
+        self.photo_answers.append({"photo": photo, **kwargs})
+        return SentMessageStub(200 + len(self.answers) + len(self.photo_answers))
+
+    async def edit_text(self, text: str, **kwargs) -> None:
+        self.edit_text_calls.append({"text": text, **kwargs})
+
+
+class CallbackStub:
+    def __init__(
+        self,
+        data: str | None,
+        message: MessageStub | None = None,
+    ) -> None:
+        self.data = data
+        self.message = message
+        self.answers = []
+
+    async def answer(self, text: str | None = None, **kwargs) -> None:
+        self.answers.append({"text": text, **kwargs})
+
+
+class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_clears_state_sets_choosing_action_and_sends_menu(self) -> None:
+        message = MessageStub()
+        state = StateStub({"action": "add"})
+
+        await start.start(message, state)
+
+        self.assertTrue(state.cleared)
+        self.assertEqual(state.data, {})
+        self.assertEqual(state.state, MenuState.choosing_action)
+        self.assertEqual(
+            message.answers,
+            [
+                {
+                    "text": START_TEXT,
+                    "parse_mode": "HTML",
+                    "reply_markup": main_menu_keyboard(),
+                }
+            ],
+        )
+
+    async def test_choose_action_saves_action_and_moves_to_choosing_format(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:add", message)
+        state = StateStub()
+
+        await start.choose_action(callback, state)
+
+        self.assertEqual(state.data, {"action": "add"})
+        self.assertEqual(state.state, MenuState.choosing_format)
+        self.assertEqual(
+            message.edit_text_calls,
+            [
+                {
+                    "text": action_text("add"),
+                    "parse_mode": "HTML",
+                    "reply_markup": format_keyboard("add"),
+                }
+            ],
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_choose_format_saves_format_and_moves_to_choosing_content_type(
+        self,
+    ) -> None:
+        message = MessageStub()
+        callback = CallbackStub("format:add:series", message)
+        state = StateStub()
+
+        await start.choose_format(callback, state)
+
+        self.assertEqual(state.data, {"action": "add", "content_format": "series"})
+        self.assertEqual(state.state, MenuState.choosing_content_type)
+        self.assertEqual(
+            message.edit_text_calls,
+            [
+                {
+                    "text": content_type_text("add", "series"),
+                    "parse_mode": "HTML",
+                    "reply_markup": content_type_keyboard("add", "series"),
+                }
+            ],
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_choose_content_type_saves_type_and_moves_to_waiting_title(
+        self,
+    ) -> None:
+        message = MessageStub()
+        callback = CallbackStub("type:add:series:anime", message)
+        state = StateStub()
+
+        await start.choose_content_type(callback, state)
+
+        self.assertEqual(
+            state.data,
+            {
+                "action": "add",
+                "content_format": "series",
+                "content_type": "anime",
+            },
+        )
+        self.assertEqual(state.state, MenuState.waiting_title)
+        self.assertEqual(
+            message.edit_text_calls,
+            [
+                {
+                    "text": selected_type_text("add", "series", "anime"),
+                    "parse_mode": "HTML",
+                    "reply_markup": selected_type_keyboard("add", "series"),
+                }
+            ],
+        )
+        self.assertEqual(callback.answers, [{"text": "Выбор сохранен"}])
+
+
+class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_title_without_text_asks_for_text(self) -> None:
+        message = MessageStub(text=None)
+        state = StateStub({"content_format": "full_length"})
+
+        await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], "Введи название текстом.")
+
+    async def test_search_title_with_empty_text_rejects_title(self) -> None:
+        message = MessageStub(text="   ")
+        state = StateStub({"content_format": "full_length"})
+
+        await start.search_title(message, state)
+
+        self.assertEqual(
+            message.answers[0]["text"],
+            "Название не может быть пустым. Введи название ещё раз.",
+        )
+
+    async def test_search_title_without_content_format_asks_to_restart(self) -> None:
+        message = MessageStub(text="Матрица")
+        state = StateStub()
+
+        await start.search_title(message, state)
+
+        self.assertEqual(
+            message.answers[0]["text"],
+            "Не найден выбранный формат. Начни заново через /start.",
+        )
+
+    async def test_search_title_found_with_poster_sends_photo_guess(self) -> None:
+        message = MessageStub(text="Матрица")
+        state = StateStub({"content_format": "full_length"})
+        guess = TmdbTitle("Матрица", "Описание", "https://image.test/poster.jpg")
+
+        with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
+            await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
+        self.assertEqual(message.photo_answers[0]["photo"], guess.poster_url)
+        self.assertIn("Матрица", message.photo_answers[0]["caption"])
+        self.assertEqual(message.photo_answers[0]["parse_mode"], "HTML")
+        self.assertEqual(state.data["tmdb_guess_message_id"], 202)
+        self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
+
+    async def test_search_title_found_without_poster_sends_text_guess(self) -> None:
+        message = MessageStub(text="Матрица")
+        state = StateStub({"content_format": "full_length"})
+        guess = TmdbTitle("Матрица", None, None)
+
+        with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
+            await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
+        self.assertIn("Матрица", message.answers[1]["text"])
+        self.assertEqual(message.answers[1]["parse_mode"], "HTML")
+        self.assertEqual(state.data["tmdb_guess_message_id"], 102)
+        self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
+
+    async def test_search_title_handles_tmdb_not_configured(self) -> None:
+        await self._assert_tmdb_error_answer(
+            TmdbNotConfiguredError,
+            "TMDB_API не настроен. Добавь ключ в config/.env.",
+        )
+
+    async def test_search_title_handles_tmdb_not_found(self) -> None:
+        await self._assert_tmdb_error_answer(
+            TmdbNotFoundError,
+            "TMDB ничего не нашёл. Попробуй ввести название иначе.",
+        )
+
+    async def test_search_title_handles_common_tmdb_error(self) -> None:
+        await self._assert_tmdb_error_answer(
+            TmdbError,
+            "Не удалось получить ответ от TMDB. Попробуй позже.",
+        )
+
+    async def _assert_tmdb_error_answer(
+        self,
+        error_class: type[Exception],
+        expected_text: str,
+    ) -> None:
+        message = MessageStub(text="Матрица")
+        state = StateStub({"content_format": "full_length"})
+
+        with patch.object(
+            start,
+            "find_title_guess",
+            AsyncMock(side_effect=error_class),
+        ):
+            await start.search_title(message, state)
+
+        self.assertEqual(message.answers[0]["text"], "Ищу в TMDB...")
+        self.assertEqual(message.answers[1]["text"], expected_text)
+        self.assertIsNone(state.state)
+
+
+class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reject_tmdb_guess_ignores_stale_guess(self) -> None:
+        message = MessageStub(message_id=99)
+        callback = CallbackStub("tmdb_guess:no", message)
+        state = StateStub({"tmdb_guess_message_id": 100})
+        state.state = MenuState.confirming_tmdb_guess
+
+        await start.reject_tmdb_guess(callback, state)
+
+        self.assertEqual(callback.answers, [{"text": "Это старый вариант."}])
+        self.assertEqual(state.data["tmdb_guess_message_id"], 100)
+        self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
+        self.assertEqual(message.answers, [])
+
+    async def test_reject_tmdb_guess_current_guess_moves_to_retry(self) -> None:
+        message = MessageStub(message_id=100)
+        callback = CallbackStub("tmdb_guess:no", message)
+        state = StateStub(
+            {
+                "action": "add",
+                "content_format": "series",
+                "tmdb_guess_message_id": 100,
+            }
+        )
+
+        await start.reject_tmdb_guess(callback, state)
+
+        self.assertEqual(state.state, MenuState.choosing_tmdb_retry)
+        self.assertIsNone(state.data["tmdb_guess_message_id"])
+        self.assertEqual(message.answers[0]["text"], "Ок, не оно. Что сделать?")
+        self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_retry_title_moves_back_to_waiting_title(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("title:retry", message)
+        state = StateStub()
+
+        await start.retry_title(callback, state)
+
+        self.assertEqual(state.state, MenuState.waiting_title)
+        self.assertEqual(
+            message.edit_text_calls,
+            [{"text": "Введи название ещё раз.", "parse_mode": None, "reply_markup": None}],
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
+
+
+if __name__ == "__main__":
+    unittest.main()
