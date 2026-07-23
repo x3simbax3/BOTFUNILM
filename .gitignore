@@ -3,3 +3,7 @@ __pycache__/
 *.py[cod]
 .env
 config/.env
+*.db
+*.db-shm
+*.db-wal
+bot.log

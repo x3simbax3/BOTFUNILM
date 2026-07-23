@@ -90,6 +90,12 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+Install the Atlas migration CLI:
+
+```bash
+curl -sSf https://atlasgo.sh | sh
+```
+
 Create `config/.env`:
 
 ```env
@@ -104,6 +110,42 @@ Run the bot:
 
 ```bash
 ./run_bot.sh
+```
+
+## Database and migrations
+
+The application uses SQLite through asynchronous `aiosqlite` calls. Queries are
+plain SQL functions in `src/database/queries.py`; there is no ORM. Atlas manages
+versioned SQL migrations, while `schema.sql` describes the desired schema.
+
+The Python database URL remains configured in `config/.env`:
+
+```env
+DATABASE_URL=sqlite:///bot.db
+```
+
+Apply all migrations:
+
+```bash
+make migrate
+```
+
+Starting through `make start` or `./run_bot.sh` applies pending migrations before
+the bot starts. The local Atlas environment targets `bot.db` in `atlas.hcl`.
+
+After changing `schema.sql`, generate and inspect a SQL migration, then apply it:
+
+```bash
+make migration name="add media runtime"
+make migrate
+```
+
+Useful migration commands:
+
+```bash
+make db-status
+make db-check      # validates migration order and checksums
+make db-downgrade  # reverts one migration; review data-loss risk first
 ```
 
 ## TMDB Search Helper
