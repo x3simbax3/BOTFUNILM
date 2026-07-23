@@ -8,6 +8,8 @@ class MenuState(StatesGroup):
     waiting_title = State()
     confirming_tmdb_guess = State()
     choosing_tmdb_retry = State()
+    rating_category = State()
+    tracking_series = State()
 
 
 __all__ = ("MenuState",)

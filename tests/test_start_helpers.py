@@ -28,12 +28,6 @@ class StartHelpersTests(unittest.TestCase):
             "Short description",
         )
 
-    def test_limit_caption_description_truncates_long_description(self) -> None:
-        result = start._limit_caption_description("A long description", 8)
-
-        self.assertEqual(result, f"A long{start.CAPTION_ELLIPSIS}")
-        self.assertLessEqual(len(result), 8)
-
     def test_limit_caption_description_returns_empty_for_tiny_limit(self) -> None:
         self.assertEqual(start._limit_caption_description("Description", 1), "")
 

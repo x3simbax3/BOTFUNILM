@@ -30,6 +30,21 @@ class TmdbTitle:
     poster_url: str | None
     original_query: str
     normalized_query: str
+    tmdb_id: int = 0
+
+
+@dataclass(frozen=True)
+class TmdbSeasonInfo:
+    season_number: int
+    name: str
+    episode_count: int
+
+
+@dataclass(frozen=True)
+class TmdbTvDetails:
+    number_of_seasons: int
+    number_of_episodes: int
+    seasons: list[TmdbSeasonInfo]
 
 
 class TmdbError(Exception):
@@ -56,32 +71,25 @@ def _make_queries(original: str) -> list[str]:
     words = original.split()
     meaningful = [w for w in words if w not in STOP_WORDS]
 
-    # 1. Оригинал
     queries.append(original)
 
-    # 2. Без стоп-слов
     if meaningful and meaningful != words:
         queries.append(" ".join(meaningful))
 
-    # 3. Только слова длиннее 3 символов
     long_words = [w for w in meaningful if len(w) > 3]
     if long_words and long_words != meaningful:
         queries.append(" ".join(long_words))
 
-    # 4. Без последнего слова (часто там опечатка)
     if len(meaningful) > 1:
         queries.append(" ".join(meaningful[:-1]))
 
-    # 5. Без первого слова
     if len(meaningful) > 1:
         queries.append(" ".join(meaningful[1:]))
 
-    # 6. Только 2 самых длинных слова
     if len(meaningful) > 2:
         top2 = sorted(meaningful, key=len, reverse=True)[:2]
         queries.append(" ".join(top2))
 
-    # Дедупликация
     seen: set[str] = set()
     unique: list[str] = []
     for q in queries:
@@ -104,6 +112,7 @@ async def find_title_guess(query: str, content_format: str, content_type: str) -
     search_url = f"{TMDB_URL.rstrip('/')}/search"
     multi_url = f"{search_url}/multi"
     specific_url = f"{search_url}/{media_path}"
+    genre_filter = _discover_genre_filter(content_type)
 
     queries = _make_queries(original_query)
     logger.info("Поиск '%s', варианты: %s", original_query, queries)
@@ -112,11 +121,23 @@ async def find_title_guess(query: str, content_format: str, content_type: str) -
         for q in queries:
             multi_task = _fetch_json(
                 session, multi_url,
-                {"query": q, "language": TMDB_LANG, "include_adult": "false", "page": "1"},
+                {
+                    "query": q,
+                    "language": TMDB_LANG,
+                    "include_adult": "false",
+                    "page": "1",
+                    **genre_filter,
+                },
             )
             specific_task = _fetch_json(
                 session, specific_url,
-                {"query": q, "language": TMDB_LANG, "include_adult": "false", "page": "1"},
+                {
+                    "query": q,
+                    "language": TMDB_LANG,
+                    "include_adult": "false",
+                    "page": "1",
+                    **genre_filter,
+                },
             )
 
             multi_data, specific_data = await asyncio.gather(
@@ -139,6 +160,39 @@ async def find_title_guess(query: str, content_format: str, content_type: str) -
                     return best
 
         raise TmdbNotFoundError(original_query)
+
+
+async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
+    """Получает информацию о сезонах и сериях сериала из TMDB."""
+    if not TMDB_API:
+        raise TmdbNotConfiguredError
+
+    url = f"{TMDB_URL.rstrip('/')}/tv/{tv_id}"
+    params = {"language": TMDB_LANG}
+
+    async with aiohttp.ClientSession() as session:
+        data = await _fetch_json(session, url, params)
+
+    if not data:
+        raise TmdbError("Не удалось получить информацию о сериале")
+
+    raw_seasons = data.get("seasons") or []
+    seasons = []
+    for s in raw_seasons:
+        season_num = s.get("season_number", 0)
+        if season_num < 0:
+            continue
+        seasons.append(TmdbSeasonInfo(
+            season_number=season_num,
+            name=s.get("name", f"Сезон {season_num}"),
+            episode_count=s.get("episode_count", 0),
+        ))
+
+    return TmdbTvDetails(
+        number_of_seasons=data.get("number_of_seasons", len(seasons)),
+        number_of_episodes=data.get("number_of_episodes", 0),
+        seasons=seasons,
+    )
 
 
 def _merge_search_results(
@@ -177,6 +231,7 @@ def _extract_results(data: Any) -> list[dict]:
 
 def _relevance_score(result: dict, query: str) -> float:
     query_normalized = _normalize_text(query)
+    query_words = [w for w in query_normalized.split() if w and w not in STOP_WORDS]
     titles = [
         result.get("title") or "",
         result.get("name") or "",
@@ -190,20 +245,25 @@ def _relevance_score(result: dict, query: str) -> float:
 
     best_title_score = 0.0
     for title in titles:
+        title_words = [w for w in title.split() if w and w not in STOP_WORDS]
+        word_count_diff = abs(len(query_words) - len(title_words))
         if title == query_normalized:
-            best_title_score = max(best_title_score, 1000)
+            bonus = 1200 if title == _normalize_text(result.get("original_title") or result.get("original_name") or "") else 1000
+            best_title_score = max(best_title_score, bonus)
         elif title.startswith(query_normalized):
             best_title_score = max(best_title_score, 800)
         elif query_normalized in title:
-            best_title_score = max(best_title_score, 600)
+            best_title_score = max(best_title_score, 600 - word_count_diff * 80)
         elif title in query_normalized:
-            best_title_score = max(best_title_score, 700)
+            score = 700 - max(0, len(query_words) - len(title_words)) * 180
+            best_title_score = max(best_title_score, score)
         else:
-            query_words = set(query_normalized.split()) - STOP_WORDS
-            title_words = set(title.split()) - STOP_WORDS
-            overlap = len(query_words & title_words)
+            query_word_set = set(query_words)
+            title_word_set = set(title_words)
+            overlap = len(query_word_set & title_word_set)
             if overlap > 0:
-                best_title_score = max(best_title_score, 200 + overlap * 100)
+                score = 200 + overlap * 100 - word_count_diff * 30
+                best_title_score = max(best_title_score, score)
 
     popularity = result.get("popularity") or 0
     return best_title_score + min(popularity / 10, 100)
@@ -256,12 +316,14 @@ def _parse_title(result: dict, original_query: str = "") -> TmdbTitle:
         raise TmdbNotFoundError()
     poster_path = result.get("poster_path")
     poster_url = f"{TMDB_IMAGE_URL}{poster_path}" if poster_path else None
+    tmdb_id = result.get("id", 0)
     return TmdbTitle(
         title=title,
         overview=result.get("overview"),
         poster_url=poster_url,
         original_query=original_query,
         normalized_query=original_query,
+        tmdb_id=tmdb_id,
     )
 
 
@@ -299,5 +361,8 @@ __all__ = (
     "TmdbNotConfiguredError",
     "TmdbNotFoundError",
     "TmdbTitle",
+    "TmdbSeasonInfo",
+    "TmdbTvDetails",
+    "fetch_tv_details",
     "find_title_guess",
 )
