@@ -9,7 +9,8 @@ from src.database.connection import connection_scope
 
 async def get_media_by_tmdb(
     tmdb_id: int,
-    media_type: str,
+    content_format: str,
+    content_type: str,
     *,
     database_url: str | None = None,
 ) -> aiosqlite.Row | None:
@@ -18,9 +19,9 @@ async def get_media_by_tmdb(
             """
             SELECT *
             FROM media
-            WHERE tmdb_id = ? AND media_type = ?
+            WHERE tmdb_id = ? AND content_format = ? AND content_type = ?
             """,
-            (tmdb_id, media_type),
+            (tmdb_id, content_format, content_type),
         ) as cursor:
             return await cursor.fetchone()
 
@@ -28,7 +29,8 @@ async def get_media_by_tmdb(
 async def upsert_media(
     *,
     tmdb_id: int | None,
-    media_type: str,
+    content_format: str,
+    content_type: str,
     title: str,
     original_title: str | None = None,
     description: str | None = None,
@@ -44,7 +46,8 @@ async def upsert_media(
     """Insert media or refresh an existing TMDB-backed record."""
     values = (
         tmdb_id,
-        media_type,
+        content_format,
+        content_type,
         title,
         original_title,
         description,
@@ -62,10 +65,10 @@ async def upsert_media(
             async with connection.execute(
                 """
                 INSERT INTO media (
-                    tmdb_id, media_type, title, original_title, description,
+                    tmdb_id, content_format, content_type, title, original_title, description,
                     poster_path, rating, release_date, first_air_date,
                     number_of_seasons, number_of_episodes, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 values,
             ) as cursor:
@@ -74,11 +77,11 @@ async def upsert_media(
         async with connection.execute(
             """
             INSERT INTO media (
-                tmdb_id, media_type, title, original_title, description,
+                tmdb_id, content_format, content_type, title, original_title, description,
                 poster_path, rating, release_date, first_air_date,
                 number_of_seasons, number_of_episodes, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(tmdb_id, media_type) DO UPDATE SET
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tmdb_id, content_format, content_type) DO UPDATE SET
                 title = excluded.title,
                 original_title = excluded.original_title,
                 description = excluded.description,
@@ -97,9 +100,9 @@ async def upsert_media(
         async with connection.execute(
             """
             SELECT id FROM media
-            WHERE tmdb_id = ? AND media_type = ?
+            WHERE tmdb_id = ? AND content_format = ? AND content_type = ?
             """,
-            (tmdb_id, media_type),
+            (tmdb_id, content_format, content_type),
         ) as cursor:
             row = await cursor.fetchone()
         if row is None:
@@ -151,6 +154,89 @@ async def get_user_media(
             return await cursor.fetchone()
 
 
+async def get_user_season_progress(
+    user_id: int,
+    media_id: int,
+    *,
+    database_url: str | None = None,
+) -> list[aiosqlite.Row]:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT *
+            FROM user_season_progress
+            WHERE user_id = ? AND media_id = ?
+            ORDER BY season_number
+            """,
+            (user_id, media_id),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def save_user_series_progress(
+    *,
+    user_id: int,
+    media_id: int,
+    seasons: dict[int, int],
+    total_episodes: int,
+    user_rating: int | None = None,
+    database_url: str | None = None,
+) -> None:
+    """Save season details and refresh the aggregate series progress atomically."""
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            """
+            INSERT INTO user_media (
+                user_id, media_id, status, user_rating, episodes_watched
+            ) VALUES (?, ?, 'watching', ?, 0)
+            ON CONFLICT(user_id, media_id) DO UPDATE SET
+                user_rating = excluded.user_rating,
+                last_watched_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, media_id, user_rating),
+        )
+
+        if seasons:
+            await connection.executemany(
+                """
+                INSERT INTO user_season_progress (
+                    user_id, media_id, season_number, episodes_watched
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, media_id, season_number) DO UPDATE SET
+                    episodes_watched = excluded.episodes_watched,
+                    last_watched_at = CURRENT_TIMESTAMP
+                """,
+                [
+                    (user_id, media_id, season_number, episodes_watched)
+                    for season_number, episodes_watched in seasons.items()
+                ],
+            )
+
+        async with connection.execute(
+            """
+            SELECT COALESCE(SUM(episodes_watched), 0)
+            FROM user_season_progress
+            WHERE user_id = ? AND media_id = ?
+            """,
+            (user_id, media_id),
+        ) as cursor:
+            episodes_watched = int((await cursor.fetchone())[0])
+
+        status = (
+            "completed"
+            if total_episodes > 0 and episodes_watched >= total_episodes
+            else "watching"
+        )
+        await connection.execute(
+            """
+            UPDATE user_media
+            SET status = ?, episodes_watched = ?, last_watched_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND media_id = ?
+            """,
+            (status, episodes_watched, user_id, media_id),
+        )
+
+
 def _last_row_id(cursor: aiosqlite.Cursor) -> int:
     if cursor.lastrowid is None:
         raise RuntimeError("Insert did not produce a row id")
@@ -160,6 +246,8 @@ def _last_row_id(cursor: aiosqlite.Cursor) -> int:
 __all__ = (
     "get_media_by_tmdb",
     "get_user_media",
+    "get_user_season_progress",
+    "save_user_series_progress",
     "save_user_media",
     "upsert_media",
 )

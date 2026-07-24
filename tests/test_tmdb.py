@@ -2,7 +2,41 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
+
 from src import tmdb
+
+
+class ResponseStub:
+    def __init__(self, status: int, data: dict | None = None) -> None:
+        self.status = status
+        self.data = data or {}
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        pass
+
+    async def json(self, **kwargs) -> dict:
+        return self.data
+
+
+class SessionStub:
+    def __init__(self, response: ResponseStub | None = None, error=None) -> None:
+        self.response = response
+        self.error = error
+
+    def get(self, *args, **kwargs):
+        if self.error:
+            raise self.error
+        return self.response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        pass
 
 
 class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
@@ -58,7 +92,7 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
     def test_no_match(self) -> None:
         result = {"title": "Дом дракона", "popularity": 50}
         score = tmdb._relevance_score(result, "Форсаж")
-        self.assertEqual(score, 5.0)
+        self.assertEqual(score, 2.5)
 
     def test_original_title_checked(self) -> None:
         result = {"title": "Неправильное", "original_title": "Форсаж", "popularity": 50}
@@ -70,28 +104,13 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         score = tmdb._relevance_score(result, "Матрица")
         self.assertGreater(score, 200)
 
-    # --- _pick_best ---
-
-    def test_pick_best_prefers_relevant(self) -> None:
-        results = [
-            {"title": "Реинкарнация безработного", "popularity": 500, "genre_ids": [16], "original_language": "ja"},
-            {"title": "О моём перерождении в слизь", "popularity": 200, "genre_ids": [16], "original_language": "ja"},
-        ]
-        best = tmdb._pick_best(results, "о моем перерождении в сизь")
-        self.assertEqual(best.title, "О моём перерождении в слизь")
-
-    # --- _merge_search_results ---
-
-    def test_merge_deduplicates(self) -> None:
-        item = {"id": 1, "title": "Movie", "media_type": "movie"}
-        merged = tmdb._merge_search_results({"results": [item]}, {"results": [item]}, "movie")
-        self.assertEqual(len(merged), 1)
-
-    def test_merge_filters_wrong_media_type(self) -> None:
-        movie = {"id": 1, "media_type": "movie"}
-        tv = {"id": 2, "media_type": "tv"}
-        merged = tmdb._merge_search_results({"results": [movie, tv]}, {"results": []}, "movie")
-        self.assertEqual(len(merged), 1)
+    def test_one_shared_word_does_not_make_long_query_relevant(self) -> None:
+        result = {"title": "Матрица времени", "popularity": 1000}
+        score = tmdb._relevance_score(
+            result,
+            "длинное название матрица совершенно другого фильма",
+        )
+        self.assertLess(score, tmdb.MIN_RELEVANCE)
 
     # --- _filter_by_content_type ---
 
@@ -141,11 +160,6 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
     def test_is_animation_without_genre_ids(self) -> None:
         self.assertFalse(tmdb._is_animation({"original_language": "ja"}))
 
-    def test_discover_genre_filter(self) -> None:
-        self.assertEqual(tmdb._discover_genre_filter("anime")["with_original_language"], "ja")
-        self.assertEqual(tmdb._discover_genre_filter("cartoon")["with_original_language.not"], "ja")
-        self.assertEqual(tmdb._discover_genre_filter("movie")["without_genres"], "16")
-
     # --- _parse_title ---
 
     def test_parse_title_with_poster(self) -> None:
@@ -171,6 +185,59 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(tmdb, "TMDB_API", ""):
             with self.assertRaises(tmdb.TmdbNotConfiguredError):
                 await tmdb.find_title_guess("test", "full_length", "movie")
+
+    async def test_search_uses_specific_endpoint_and_original_title_score(self) -> None:
+        data = {
+            "results": [
+                {
+                    "id": 42,
+                    "title": "Локальное название",
+                    "original_title": "Original Match",
+                    "genre_ids": [18],
+                }
+            ]
+        }
+        fetch = AsyncMock(return_value=data)
+
+        with (
+            patch.object(tmdb, "TMDB_API", "token"),
+            patch.object(tmdb.aiohttp, "ClientSession", return_value=SessionStub()),
+            patch.object(tmdb, "_fetch_json", fetch),
+        ):
+            result = await tmdb.find_title_guess(
+                "Original Match",
+                "full_length",
+                "movie",
+            )
+
+        self.assertEqual(result.tmdb_id, 42)
+        self.assertEqual(fetch.await_args.args[1], f"{tmdb.TMDB_URL}/search/movie")
+        self.assertNotIn("with_genres", fetch.await_args.args[2])
+
+    async def test_fetch_json_classifies_http_errors(self) -> None:
+        cases = (
+            (401, tmdb.TmdbAuthenticationError),
+            (403, tmdb.TmdbAuthenticationError),
+            (429, tmdb.TmdbRateLimitError),
+            (500, tmdb.TmdbUnavailableError),
+            (422, tmdb.TmdbError),
+        )
+
+        for status, error_type in cases:
+            with self.subTest(status=status):
+                session = SessionStub(ResponseStub(status))
+                with self.assertRaises(error_type):
+                    await tmdb._fetch_json(session, "https://tmdb.test", {})
+
+    async def test_fetch_json_classifies_timeout_and_network_error(self) -> None:
+        for error in (asyncio.TimeoutError(), aiohttp.ClientConnectionError()):
+            with self.subTest(error=type(error).__name__):
+                with self.assertRaises(tmdb.TmdbUnavailableError):
+                    await tmdb._fetch_json(
+                        SessionStub(error=error),
+                        "https://tmdb.test",
+                        {},
+                    )
 
 
 if __name__ == "__main__":

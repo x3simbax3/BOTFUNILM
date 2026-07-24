@@ -1,8 +1,8 @@
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any
-from urllib.parse import urlencode
+from difflib import SequenceMatcher
 
 import aiohttp
 from config.config import TMDB_API, TMDB_LANG, TMDB_URL
@@ -20,7 +20,7 @@ STOP_WORDS = {
     "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can",
 }
 
-MIN_RELEVANCE = 150
+MIN_RELEVANCE = 300
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,18 @@ class TmdbNotConfiguredError(TmdbError):
     pass
 
 
+class TmdbAuthenticationError(TmdbError):
+    pass
+
+
+class TmdbRateLimitError(TmdbError):
+    pass
+
+
+class TmdbUnavailableError(TmdbError):
+    pass
+
+
 class TmdbNotFoundError(TmdbError):
     def __init__(self, query: str = "") -> None:
         super().__init__()
@@ -62,14 +74,15 @@ class TmdbNotFoundError(TmdbError):
 
 
 def _normalize_text(text: str) -> str:
-    return text.lower().replace("ё", "е")
+    normalized = text.lower().replace("ё", "е")
+    return re.sub(r"[^\w]+", " ", normalized).strip()
 
 
 def _make_queries(original: str) -> list[str]:
     """Генерирует варианты запроса для лучшего fuzzy matching."""
     queries: list[str] = []
     words = original.split()
-    meaningful = [w for w in words if w not in STOP_WORDS]
+    meaningful = [w for w in words if _normalize_text(w) not in STOP_WORDS]
 
     queries.append(original)
 
@@ -109,49 +122,33 @@ async def find_title_guess(query: str, content_format: str, content_type: str) -
         raise TmdbNotConfiguredError
 
     media_path = "tv" if content_format == "series" else "movie"
-    search_url = f"{TMDB_URL.rstrip('/')}/search"
-    multi_url = f"{search_url}/multi"
-    specific_url = f"{search_url}/{media_path}"
-    genre_filter = _discover_genre_filter(content_type)
+    search_url = f"{TMDB_URL.rstrip('/')}/search/{media_path}"
 
     queries = _make_queries(original_query)
     logger.info("Поиск '%s', варианты: %s", original_query, queries)
 
     async with aiohttp.ClientSession() as session:
         for q in queries:
-            multi_task = _fetch_json(
-                session, multi_url,
+            data = await _fetch_json(
+                session,
+                search_url,
                 {
                     "query": q,
                     "language": TMDB_LANG,
                     "include_adult": "false",
                     "page": "1",
-                    **genre_filter,
                 },
             )
-            specific_task = _fetch_json(
-                session, specific_url,
-                {
-                    "query": q,
-                    "language": TMDB_LANG,
-                    "include_adult": "false",
-                    "page": "1",
-                    **genre_filter,
-                },
-            )
-
-            multi_data, specific_data = await asyncio.gather(
-                multi_task, specific_task, return_exceptions=True
-            )
-
-            results = _merge_search_results(multi_data, specific_data, media_path)
+            results = _extract_results(data)
             results = _filter_by_content_type(results, content_type)
 
             if results:
-                best = _pick_best(results, original_query)
-                best_score = _relevance_score(
-                    {"title": best.title, "original_title": best.title}, original_query
+                best_result = max(
+                    results,
+                    key=lambda result: _relevance_score(result, original_query),
                 )
+                best_score = _relevance_score(best_result, original_query)
+                best = _parse_title(best_result, original_query)
                 logger.info(
                     "query='%s': лучший='%s', score=%.0f, results=%d",
                     q, best.title, best_score, len(results),
@@ -195,38 +192,9 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
     )
 
 
-def _merge_search_results(
-    multi_data: Any,
-    specific_data: Any,
-    media_path: str,
-) -> list[dict]:
-    seen_ids: set[int] = set()
-    merged: list[dict] = []
-
-    for data in (specific_data, multi_data):
-        if isinstance(data, BaseException):
-            continue
-        for item in _extract_results(data):
-            item_id = item.get("id")
-            if item_id in seen_ids:
-                continue
-            media_type = item.get("media_type", media_path)
-            if media_path == "movie" and media_type not in ("movie",):
-                continue
-            if media_path == "tv" and media_type not in ("tv",):
-                continue
-            seen_ids.add(item_id)
-            merged.append(item)
-
-    return merged
-
-
-def _extract_results(data: Any) -> list[dict]:
-    if isinstance(data, BaseException):
-        return []
-    if isinstance(data, dict):
-        return data.get("results") or []
-    return []
+def _extract_results(data: dict) -> list[dict]:
+    results = data.get("results")
+    return results if isinstance(results, list) else []
 
 
 def _relevance_score(result: dict, query: str) -> float:
@@ -262,24 +230,22 @@ def _relevance_score(result: dict, query: str) -> float:
             title_word_set = set(title_words)
             overlap = len(query_word_set & title_word_set)
             if overlap > 0:
-                score = 200 + overlap * 100 - word_count_diff * 30
-                best_title_score = max(best_title_score, score)
+                query_coverage = overlap / max(len(query_word_set), 1)
+                title_coverage = overlap / max(len(title_word_set), 1)
+                overlap_score = (
+                    overlap * 120
+                    + query_coverage * 180
+                    + title_coverage * 80
+                    - word_count_diff * 30
+                )
+                best_title_score = max(best_title_score, overlap_score)
+
+            similarity = SequenceMatcher(None, query_normalized, title).ratio()
+            if similarity >= 0.6:
+                best_title_score = max(best_title_score, similarity * 500)
 
     popularity = result.get("popularity") or 0
-    return best_title_score + min(popularity / 10, 100)
-
-
-def _pick_best(results: list[dict], original_query: str) -> TmdbTitle:
-    results.sort(key=lambda r: _relevance_score(r, original_query), reverse=True)
-    return _parse_title(results[0], original_query)
-
-
-def _discover_genre_filter(content_type: str) -> dict[str, str]:
-    if content_type == "anime":
-        return {"with_genres": str(ANIMATION_GENRE_ID), "with_original_language": "ja"}
-    if content_type == "cartoon":
-        return {"with_genres": str(ANIMATION_GENRE_ID), "with_original_language.not": "ja"}
-    return {"without_genres": str(ANIMATION_GENRE_ID)}
+    return best_title_score + min(popularity / 20, 30)
 
 
 async def _fetch_json(
@@ -290,19 +256,33 @@ async def _fetch_json(
     headers = {"Authorization": f"Bearer {TMDB_API}"}
     try:
         async with session.get(
-            f"{url}?{urlencode(params)}", headers=headers,
+            url,
+            params=params,
+            headers=headers,
             timeout=aiohttp.ClientTimeout(total=15),
         ) as resp:
+            if resp.status in (401, 403):
+                raise TmdbAuthenticationError
+            if resp.status == 429:
+                raise TmdbRateLimitError
+            if resp.status >= 500:
+                raise TmdbUnavailableError
             if resp.status != 200:
-                logger.warning("TMDB %s вернул %d", url.split("?")[0], resp.status)
-                return {}
-            return await resp.json(content_type=None)
+                raise TmdbError(f"TMDB вернул HTTP {resp.status}")
+
+            try:
+                return await resp.json(content_type=None)
+            except (aiohttp.ContentTypeError, ValueError) as exc:
+                raise TmdbError("TMDB вернул некорректный ответ") from exc
+    except TmdbError as exc:
+        logger.warning("TMDB %s вернул ошибку: %s", url, type(exc).__name__)
+        raise
     except asyncio.TimeoutError:
-        logger.warning("TMDB %s таймаут", url.split("?")[0])
-        return {}
-    except Exception as exc:
-        logger.warning("TMDB %s ошибка: %s", url.split("?")[0], exc)
-        return {}
+        logger.warning("TMDB %s: таймаут", url)
+        raise TmdbUnavailableError from None
+    except aiohttp.ClientError as exc:
+        logger.warning("TMDB %s: сетевая ошибка: %s", url, exc)
+        raise TmdbUnavailableError from exc
 
 
 def _parse_title(result: dict, original_query: str = "") -> TmdbTitle:
@@ -358,8 +338,11 @@ def _is_cartoon(result: dict) -> bool:
 
 __all__ = (
     "TmdbError",
+    "TmdbAuthenticationError",
     "TmdbNotConfiguredError",
     "TmdbNotFoundError",
+    "TmdbRateLimitError",
+    "TmdbUnavailableError",
     "TmdbTitle",
     "TmdbSeasonInfo",
     "TmdbTvDetails",

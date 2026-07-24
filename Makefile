@@ -2,7 +2,7 @@ PYTHON ?= venv/bin/python
 PYTEST ?= $(PYTHON) -m pytest
 ATLAS ?= atlas
 
-.PHONY: help check test start migrate migration db-check db-status db-downgrade commit
+.PHONY: help check test start migrate migration db-check db-status db-downgrade db-reset commit
 
 help:
 	@echo "Targets:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make db-check       Validate migration files and checksums"
 	@echo "  make db-status      Show applied and pending migrations"
 	@echo "  make db-downgrade   Revert the latest migration"
+	@echo "  make db-reset       DELETE the local database and recreate it"
 	@echo "  make start          Run checks, migrations, then start the bot"
 	@echo "  make commit m='...' Run checks, stage changes, and commit"
 
@@ -49,6 +50,17 @@ db-status:
 
 db-downgrade:
 	$(ATLAS) migrate down 1 --env local
+
+db-reset:
+	@printf '\nWARNING: This will permanently delete bot.db and all of its data.\n'; \
+		printf 'Recreate the database from migrations? [y/N] '; \
+		read answer; \
+		case "$$answer" in \
+			y|Y) ;; \
+			*) echo "Database reset cancelled."; exit 1 ;; \
+		esac; \
+		rm -f -- bot.db bot.db-shm bot.db-wal; \
+		$(ATLAS) migrate apply --env local
 
 commit: check
 	@if [ -z "$(m)" ]; then \

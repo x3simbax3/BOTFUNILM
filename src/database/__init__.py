@@ -4,6 +4,8 @@ from src.database.connection import connect_database, connection_scope
 from src.database.queries import (
     get_media_by_tmdb,
     get_user_media,
+    get_user_season_progress,
+    save_user_series_progress,
     save_user_media,
     upsert_media,
 )
@@ -13,6 +15,8 @@ __all__ = (
     "connection_scope",
     "get_media_by_tmdb",
     "get_user_media",
+    "get_user_season_progress",
+    "save_user_series_progress",
     "save_user_media",
     "upsert_media",
 )

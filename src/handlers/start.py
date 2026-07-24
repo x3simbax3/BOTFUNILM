@@ -1,10 +1,12 @@
 from datetime import date
 
+import aiosqlite
 from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.database import save_user_media, save_user_series_progress, upsert_media
 from src.fsm import MenuState
 from src.keyboards import (
     content_type_keyboard,
@@ -36,9 +38,12 @@ from src.texts import (
     tracking_complete_text,
 )
 from src.tmdb import (
+    TmdbAuthenticationError,
     TmdbError,
     TmdbNotConfiguredError,
     TmdbNotFoundError,
+    TmdbRateLimitError,
+    TmdbUnavailableError,
     fetch_tv_details,
     find_title_guess,
 )
@@ -178,6 +183,15 @@ async def search_title(message: Message, state: FSMContext) -> None:
     except TmdbNotConfiguredError:
         await status_msg.edit_text("TMDB_API не настроен. Добавь ключ в config/.env.")
         return
+    except TmdbAuthenticationError:
+        await status_msg.edit_text("TMDB отклонил ключ доступа. Проверь настройку TMDB_API.")
+        return
+    except TmdbRateLimitError:
+        await status_msg.edit_text("TMDB временно ограничил запросы. Попробуй через минуту.")
+        return
+    except TmdbUnavailableError:
+        await status_msg.edit_text("TMDB сейчас недоступен. Попробуй немного позже.")
+        return
     except TmdbNotFoundError:
         await status_msg.edit_text(
             tmdb_not_found_text(title_query),
@@ -306,6 +320,24 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
 async def _finish_movie(callback: CallbackQuery, state: FSMContext, average: float) -> None:
     data = await state.get_data()
     title = data.get("tmdb_title", "")
+
+    try:
+        media_id = await upsert_media(
+            tmdb_id=data.get("tmdb_id"),
+            content_format="full_length",
+            content_type=data.get("content_type", "movie"),
+            title=title,
+        )
+        await save_user_media(
+            user_id=callback.from_user.id,
+            media_id=media_id,
+            status="completed",
+            user_rating=round(average),
+        )
+    except (aiosqlite.Error, RuntimeError):
+        await callback.answer("Не удалось сохранить фильм. Попробуй ещё раз.", show_alert=True)
+        return
+
     await state.update_data(watch_date=date.today().isoformat())
     await callback.message.answer(
         movie_watched_text(title, average),
@@ -345,6 +377,7 @@ async def _start_series_tracking(callback: CallbackQuery, state: FSMContext) -> 
     await state.update_data(
         tv_details=details,
         seasons_data=seasons_data,
+        total_seasons=details.number_of_seasons,
         total_episodes=details.number_of_episodes,
         watched_by_season={},
         current_season=None,
@@ -371,20 +404,7 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
     watched = data.get("watched_by_season", {})
 
     if value == "done":
-        average = data.get("rating_average", 0)
-        total = data.get("total_episodes", 0)
-        watched_total = data.get("episodes_watched_total", 0)
-        await state.update_data(watch_date=date.today().isoformat())
-        await callback.message.edit_text(
-            tracking_complete_text(title, total, watched_total, average),
-            parse_mode="HTML",
-        )
-        await callback.message.answer(
-            "Готово!",
-            reply_markup=main_menu_keyboard(),
-        )
-        await state.set_state(MenuState.choosing_action)
-        await callback.answer()
+        await _finish_series_tracking(callback, state)
         return
 
     season_number = int(value)
@@ -422,21 +442,7 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
     parts = callback.data.split(":")
     data = await state.get_data()
     if parts[1] == "done":
-        average = data.get("rating_average", 0)
-        total = data.get("total_episodes", 0)
-        watched_total = data.get("episodes_watched_total", 0)
-        title = data.get("tmdb_title", "")
-        await state.update_data(watch_date=date.today().isoformat())
-        await callback.message.edit_text(
-            tracking_complete_text(title, total, watched_total, average),
-            parse_mode="HTML",
-        )
-        await callback.message.answer(
-            "Готово!",
-            reply_markup=main_menu_keyboard(),
-        )
-        await state.set_state(MenuState.choosing_action)
-        await callback.answer()
+        await _finish_series_tracking(callback, state)
         return
 
     season_number = int(parts[1])
@@ -458,6 +464,51 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
         parse_mode="HTML",
         reply_markup=season_list_keyboard(seasons_data, watched),
     )
+    await callback.answer()
+
+
+async def _finish_series_tracking(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+
+    data = await state.get_data()
+    title = data.get("tmdb_title", "")
+    total = data.get("total_episodes", 0)
+    watched_total = data.get("episodes_watched_total", 0)
+    average = data.get("rating_average", 0)
+    try:
+        media_id = await upsert_media(
+            tmdb_id=data.get("tmdb_id"),
+            content_format="series",
+            content_type=data.get("content_type", "movie"),
+            title=title,
+            number_of_seasons=data.get("total_seasons"),
+            number_of_episodes=total,
+        )
+        await save_user_series_progress(
+            user_id=callback.from_user.id,
+            media_id=media_id,
+            seasons=data.get("watched_by_season", {}),
+            total_episodes=total,
+            user_rating=round(average) if average else None,
+        )
+    except (aiosqlite.Error, RuntimeError):
+        await callback.answer("Не удалось сохранить прогресс. Попробуй ещё раз.", show_alert=True)
+        return
+
+    await state.update_data(watch_date=date.today().isoformat())
+    await callback.message.edit_text(
+        tracking_complete_text(title, total, watched_total, average),
+        parse_mode="HTML",
+    )
+    await callback.message.answer(
+        "Готово!",
+        reply_markup=main_menu_keyboard(),
+    )
+    await state.set_state(MenuState.choosing_action)
     await callback.answer()
 
 

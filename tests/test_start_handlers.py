@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
@@ -20,10 +21,13 @@ from src.texts import (
     tmdb_not_found_text,
 )
 from src.tmdb import (
+    TmdbAuthenticationError,
     TmdbError,
     TmdbNotConfiguredError,
     TmdbNotFoundError,
+    TmdbRateLimitError,
     TmdbTitle,
+    TmdbUnavailableError,
 )
 
 
@@ -91,6 +95,7 @@ class CallbackStub:
     ) -> None:
         self.data = data
         self.message = message
+        self.from_user = SimpleNamespace(id=123)
         self.answers = []
 
     async def answer(self, text: str | None = None, **kwargs) -> None:
@@ -289,6 +294,26 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "Не удалось получить ответ от TMDB. Попробуй позже.",
         )
 
+    async def test_search_title_explains_tmdb_errors(self) -> None:
+        cases = (
+            (
+                TmdbAuthenticationError,
+                "TMDB отклонил ключ доступа. Проверь настройку TMDB_API.",
+            ),
+            (
+                TmdbRateLimitError,
+                "TMDB временно ограничил запросы. Попробуй через минуту.",
+            ),
+            (
+                TmdbUnavailableError,
+                "TMDB сейчас недоступен. Попробуй немного позже.",
+            ),
+        )
+
+        for error_type, text in cases:
+            with self.subTest(error=error_type.__name__):
+                await self._assert_tmdb_error_answer(error_type, text)
+
     async def _assert_tmdb_error_answer(
         self,
         error_class: type[Exception],
@@ -353,6 +378,81 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
             message.edit_text_calls,
             [{"text": "Введи название ещё раз.", "parse_mode": None, "reply_markup": None}],
         )
+        self.assertEqual(callback.answers, [{"text": None}])
+
+
+class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_finish_movie_saves_completed_media_and_returns_to_menu(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:8", message)
+        state = StateStub(
+            {
+                "tmdb_id": 42,
+                "tmdb_title": "Фильм",
+                "content_type": "cartoon",
+            }
+        )
+
+        with (
+            patch.object(start, "upsert_media", AsyncMock(return_value=7)) as upsert,
+            patch.object(start, "save_user_media", AsyncMock()) as save,
+        ):
+            await start._finish_movie(callback, state, 8.6)
+
+        upsert.assert_awaited_once_with(
+            tmdb_id=42,
+            content_format="full_length",
+            content_type="cartoon",
+            title="Фильм",
+        )
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            status="completed",
+            user_rating=9,
+        )
+        self.assertEqual(state.state, MenuState.choosing_action)
+
+
+class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_finish_series_saves_progress_and_returns_to_menu(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("season:done", message)
+        state = StateStub(
+            {
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "content_type": "movie",
+                "total_seasons": 2,
+                "total_episodes": 10,
+                "watched_by_season": {1: 8, 2: 2},
+                "episodes_watched_total": 10,
+                "rating_average": 8.6,
+            }
+        )
+
+        with (
+            patch.object(start, "upsert_media", AsyncMock(return_value=7)) as upsert,
+            patch.object(start, "save_user_series_progress", AsyncMock()) as save,
+        ):
+            await start._finish_series_tracking(callback, state)
+
+        upsert.assert_awaited_once_with(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="Сериал",
+            number_of_seasons=2,
+            number_of_episodes=10,
+        )
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            seasons={1: 8, 2: 2},
+            total_episodes=10,
+            user_rating=9,
+        )
+        self.assertEqual(state.state, MenuState.choosing_action)
         self.assertEqual(callback.answers, [{"text": None}])
 
 
