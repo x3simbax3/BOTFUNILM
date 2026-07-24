@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
@@ -74,8 +75,8 @@ class TmdbNotFoundError(TmdbError):
 
 
 def _normalize_text(text: str) -> str:
-    normalized = text.lower().replace("ё", "е")
-    return re.sub(r"[^\w]+", " ", normalized).strip()
+    normalized = unicodedata.normalize("NFKC", text).casefold().replace("ё", "е")
+    return re.sub(r"[_\W]+", " ", normalized).strip()
 
 
 def _make_queries(original: str) -> list[str]:
@@ -197,8 +198,10 @@ def _extract_results(data: dict) -> list[dict]:
     return results if isinstance(results, list) else []
 
 
-def _relevance_score(result: dict, query: str) -> float:
+def title_relevance_score(result: dict, query: str) -> float:
     query_normalized = _normalize_text(query)
+    if not query_normalized:
+        return 0.0
     query_words = [w for w in query_normalized.split() if w and w not in STOP_WORDS]
     titles = [
         result.get("title") or "",
@@ -246,6 +249,10 @@ def _relevance_score(result: dict, query: str) -> float:
 
     popularity = result.get("popularity") or 0
     return best_title_score + min(popularity / 20, 30)
+
+
+# Оставлено для совместимости с существующими тестами и внутренними вызовами.
+_relevance_score = title_relevance_score
 
 
 async def _fetch_json(
@@ -348,4 +355,5 @@ __all__ = (
     "TmdbTvDetails",
     "fetch_tv_details",
     "find_title_guess",
+    "title_relevance_score",
 )

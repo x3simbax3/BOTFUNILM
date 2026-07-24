@@ -1,5 +1,6 @@
 PYTHON ?= venv/bin/python
 PYTEST ?= $(PYTHON) -m pytest
+TEST_PROCESSES ?= $(shell $(PYTHON) -c 'from config.config import TEST_PROCESSES; print(TEST_PROCESSES)')
 ATLAS ?= atlas
 
 .PHONY: help check test start migrate migration db-check db-status db-downgrade db-reset commit
@@ -7,7 +8,8 @@ ATLAS ?= atlas
 help:
 	@echo "Targets:"
 	@echo "  make check          Run project checks"
-	@echo "  make test           Run tests when test files exist"
+	@echo "  make test           Run tests in $(TEST_PROCESSES) worker processes"
+	@echo "                      Override with TEST_PROCESSES=<number>"
 	@echo "  make migrate        Apply all pending database migrations"
 	@echo "  make migration name='...'  Generate a migration from schema.sql changes"
 	@echo "  make db-check       Validate migration files and checksums"
@@ -23,7 +25,7 @@ check:
 
 test:
 	@if find tests -type f \( -name 'test_*.py' -o -name '*_test.py' \) | grep -q .; then \
-		$(PYTEST); \
+		$(PYTEST) -n $(TEST_PROCESSES); \
 	else \
 		echo "No tests found yet. Skipping pytest."; \
 	fi

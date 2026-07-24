@@ -200,6 +200,15 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        patcher = patch.object(
+            start,
+            "find_media_by_title",
+            AsyncMock(return_value=None),
+        )
+        self.local_search = patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def test_search_title_without_text_asks_for_text(self) -> None:
         message = MessageStub(text=None)
         state = StateStub({"content_format": "full_length"})
@@ -266,6 +275,50 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Матрица", status_stub.last_text)
         self.assertEqual(state.data["tmdb_guess_message_id"], 101)
         self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
+
+    async def test_search_title_uses_local_media_without_tmdb_request(self) -> None:
+        message = MessageStub(text="матрица")
+        state = StateStub(
+            {"content_format": "full_length", "content_type": "movie"}
+        )
+        self.local_search.return_value = {
+            "id": 7,
+            "tmdb_id": 42,
+            "title": "Матрица",
+            "description": "Описание",
+            "poster_path": "/poster.jpg",
+        }
+
+        with patch.object(start, "find_title_guess", AsyncMock()) as tmdb_search:
+            await start.search_title(message, state)
+
+        tmdb_search.assert_not_awaited()
+        self.assertEqual(state.data["media_id"], 7)
+        self.assertEqual(state.data["tmdb_id"], 42)
+        self.assertEqual(
+            message.photo_answers[0]["photo"],
+            f"{start.TMDB_IMAGE_URL}/poster.jpg",
+        )
+
+    async def test_search_title_falls_back_to_tmdb(self) -> None:
+        message = MessageStub(text="Матрица")
+        state = StateStub({"content_format": "full_length"})
+        guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица", 42)
+
+        with patch.object(
+            start,
+            "find_title_guess",
+            AsyncMock(return_value=guess),
+        ) as tmdb_search:
+            await start.search_title(message, state)
+
+        self.local_search.assert_awaited_once_with(
+            "Матрица",
+            "full_length",
+            "movie",
+        )
+        tmdb_search.assert_awaited_once_with("Матрица", "full_length", "movie")
+        self.assertIsNone(state.data["media_id"])
 
     async def test_search_title_handles_tmdb_not_configured(self) -> None:
         await self._assert_tmdb_error_answer(
@@ -412,6 +465,32 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             user_rating=9,
         )
         self.assertEqual(state.state, MenuState.choosing_action)
+
+    async def test_finish_movie_reuses_local_media(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:8", message)
+        state = StateStub(
+            {
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Фильм",
+                "content_type": "movie",
+            }
+        )
+
+        with (
+            patch.object(start, "upsert_media", AsyncMock()) as upsert,
+            patch.object(start, "save_user_media", AsyncMock()) as save,
+        ):
+            await start._finish_movie(callback, state, 8.0)
+
+        upsert.assert_not_awaited()
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            status="completed",
+            user_rating=8,
+        )
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):

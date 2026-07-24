@@ -6,6 +6,7 @@ from pathlib import Path
 from src.database import (
     connect_database,
     connection_scope,
+    find_media_by_title,
     get_media_by_tmdb,
     get_user_media,
     get_user_season_progress,
@@ -109,6 +110,44 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertNotEqual(first, second)
+
+    async def test_find_media_by_title_normalizes_and_matches_typos(self) -> None:
+        expected_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="anime",
+            title="О моём перерождении в слизь",
+            original_title="Tensei Shitara Slime Datta Ken",
+            database_url=self.database_url,
+        )
+
+        row = await find_media_by_title(
+            "о моем перерождении в сизь",
+            "series",
+            "anime",
+            database_url=self.database_url,
+        )
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["id"], expected_id)
+
+    async def test_find_media_by_title_respects_classification(self) -> None:
+        await upsert_media(
+            tmdb_id=42,
+            content_format="full_length",
+            content_type="movie",
+            title="Матрица",
+            database_url=self.database_url,
+        )
+
+        row = await find_media_by_title(
+            "Матрица",
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+
+        self.assertIsNone(row)
 
     async def test_user_media_is_inserted_and_updated(self) -> None:
         media_id = await upsert_media(

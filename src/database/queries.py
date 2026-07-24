@@ -5,6 +5,44 @@ from __future__ import annotations
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.tmdb import MIN_RELEVANCE, title_relevance_score
+
+
+async def find_media_by_title(
+    title: str,
+    content_format: str,
+    content_type: str,
+    *,
+    database_url: str | None = None,
+) -> aiosqlite.Row | None:
+    """Return the closest local title, using the same relevance logic as TMDB."""
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT id, title, original_title
+            FROM media
+            WHERE content_format = ? AND content_type = ?
+            """,
+            (content_format, content_type),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        best = None
+        best_score = 0.0
+        for row in rows:
+            score = title_relevance_score(dict(row), title)
+            if score > best_score:
+                best = row
+                best_score = score
+
+        if best is None or best_score < MIN_RELEVANCE:
+            return None
+
+        async with connection.execute(
+            "SELECT * FROM media WHERE id = ?",
+            (best["id"],),
+        ) as cursor:
+            return await cursor.fetchone()
 
 
 async def get_media_by_tmdb(
@@ -244,6 +282,7 @@ def _last_row_id(cursor: aiosqlite.Cursor) -> int:
 
 
 __all__ = (
+    "find_media_by_title",
     "get_media_by_tmdb",
     "get_user_media",
     "get_user_season_progress",

@@ -2,6 +2,7 @@
 
 from src.database.connection import connect_database, connection_scope
 from src.database.queries import (
+    find_media_by_title,
     get_media_by_tmdb,
     get_user_media,
     get_user_season_progress,
@@ -13,6 +14,7 @@ from src.database.queries import (
 __all__ = (
     "connect_database",
     "connection_scope",
+    "find_media_by_title",
     "get_media_by_tmdb",
     "get_user_media",
     "get_user_season_progress",

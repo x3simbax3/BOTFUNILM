@@ -103,6 +103,7 @@ BOT_TOKEN=your_telegram_bot_token
 TMDB_API=your_tmdb_bearer_token
 TMDB_LANG=ru-RU
 DATABASE_URL=sqlite:///bot.db
+TEST_PROCESSES=2
 DEBUG=false
 ```
 
@@ -146,6 +147,20 @@ Useful migration commands:
 make db-status
 make db-check      # validates migration order and checksums
 make db-downgrade  # reverts one migration; review data-loss risk first
+```
+
+Run the test suite in two worker processes:
+
+```bash
+make test
+```
+
+`TEST_PROCESSES` is read as an integer from `config/.env` and applies to every
+Make target that runs the test suite (`test`, `check`, `start`, and `commit`).
+It can also be overridden for a single invocation:
+
+```bash
+make check TEST_PROCESSES=4
 ```
 
 ## TMDB Search Helper

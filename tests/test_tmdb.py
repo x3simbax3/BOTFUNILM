@@ -66,6 +66,16 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         score = tmdb._relevance_score({"title": "Форсаж"}, "Форсаж")
         self.assertEqual(score, 1000.0)
 
+    def test_normalization_handles_case_punctuation_and_yo(self) -> None:
+        self.assertEqual(
+            tmdb._normalize_text("  МОЁ_Кино!!! "),
+            "мое кино",
+        )
+
+    def test_punctuation_only_query_does_not_match(self) -> None:
+        score = tmdb._relevance_score({"title": "Форсаж"}, "!!!")
+        self.assertEqual(score, 0.0)
+
     def test_cyrillic_variants_match(self) -> None:
         result = {"title": "О моём перерождении в слизь", "popularity": 200}
         score = tmdb._relevance_score(result, "о моем перерождении в сизь")

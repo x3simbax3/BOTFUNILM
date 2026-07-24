@@ -6,7 +6,12 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.database import save_user_media, save_user_series_progress, upsert_media
+from src.database import (
+    find_media_by_title,
+    save_user_media,
+    save_user_series_progress,
+    upsert_media,
+)
 from src.fsm import MenuState
 from src.keyboards import (
     content_type_keyboard,
@@ -38,11 +43,13 @@ from src.texts import (
     tracking_complete_text,
 )
 from src.tmdb import (
+    TMDB_IMAGE_URL,
     TmdbAuthenticationError,
     TmdbError,
     TmdbNotConfiguredError,
     TmdbNotFoundError,
     TmdbRateLimitError,
+    TmdbTitle,
     TmdbUnavailableError,
     fetch_tv_details,
     find_title_guess,
@@ -176,7 +183,36 @@ async def search_title(message: Message, state: FSMContext) -> None:
 
     try:
         content_type = data.get("content_type", "movie")
-        guess = await find_title_guess(title_query, content_format, content_type)
+        local_media = await find_media_by_title(
+            title_query,
+            content_format,
+            content_type,
+        )
+        if local_media is None:
+            await status_msg.edit_text("🔍 В каталоге не найдено, ищу в TMDB...")
+            guess = await find_title_guess(title_query, content_format, content_type)
+        else:
+            poster_path = local_media["poster_path"]
+            poster_url = (
+                poster_path
+                if poster_path and poster_path.startswith(("http://", "https://"))
+                else f"{TMDB_IMAGE_URL}{poster_path}"
+                if poster_path
+                else None
+            )
+            guess = TmdbTitle(
+                title=local_media["title"],
+                overview=local_media["description"],
+                poster_url=poster_url,
+                original_query=title_query,
+                normalized_query=title_query,
+                tmdb_id=local_media["tmdb_id"] or 0,
+            )
+    except aiosqlite.Error:
+        await status_msg.edit_text(
+            "Не удалось проверить локальный каталог. Попробуй ещё раз."
+        )
+        return
     except ValueError:
         await status_msg.edit_text("Название не может быть пустым. Введи название ещё раз.")
         return
@@ -224,6 +260,7 @@ async def search_title(message: Message, state: FSMContext) -> None:
         )
 
     await state.update_data(
+        media_id=local_media["id"] if local_media is not None else None,
         tmdb_guess_message_id=guess_message.message_id,
         tmdb_title=guess.title,
         tmdb_id=guess.tmdb_id,
@@ -322,12 +359,14 @@ async def _finish_movie(callback: CallbackQuery, state: FSMContext, average: flo
     title = data.get("tmdb_title", "")
 
     try:
-        media_id = await upsert_media(
-            tmdb_id=data.get("tmdb_id"),
-            content_format="full_length",
-            content_type=data.get("content_type", "movie"),
-            title=title,
-        )
+        media_id = data.get("media_id")
+        if media_id is None:
+            media_id = await upsert_media(
+                tmdb_id=data.get("tmdb_id"),
+                content_format="full_length",
+                content_type=data.get("content_type", "movie"),
+                title=title,
+            )
         await save_user_media(
             user_id=callback.from_user.id,
             media_id=media_id,
@@ -480,14 +519,16 @@ async def _finish_series_tracking(
     watched_total = data.get("episodes_watched_total", 0)
     average = data.get("rating_average", 0)
     try:
-        media_id = await upsert_media(
-            tmdb_id=data.get("tmdb_id"),
-            content_format="series",
-            content_type=data.get("content_type", "movie"),
-            title=title,
-            number_of_seasons=data.get("total_seasons"),
-            number_of_episodes=total,
-        )
+        media_id = data.get("media_id")
+        if media_id is None:
+            media_id = await upsert_media(
+                tmdb_id=data.get("tmdb_id"),
+                content_format="series",
+                content_type=data.get("content_type", "movie"),
+                title=title,
+                number_of_seasons=data.get("total_seasons"),
+                number_of_episodes=total,
+            )
         await save_user_series_progress(
             user_id=callback.from_user.id,
             media_id=media_id,

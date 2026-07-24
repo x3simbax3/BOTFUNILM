@@ -80,7 +80,7 @@ def selected_type_text(action: str, content_format: str, content_type: str) -> s
         "Выбор сохранён ✅\n"
         f"<blockquote>{FORMAT_TITLES[content_format]} / "
         f"{CONTENT_TYPE_TITLES[content_type]}</blockquote>\n"
-        "Введи название, а я найду самый похожий вариант в TMDB."
+        "Введи название, а я сначала проверю каталог, затем TMDB."
     )
 
 
@@ -93,7 +93,7 @@ def tmdb_guess_text(content_format: str, title: str, overview: str | None) -> st
     )
 
 
-TMDB_SEARCHING = "🔍 Ищу в TMDB..."
+TMDB_SEARCHING = "🔍 Ищу в каталоге..."
 
 TMDB_TOO_LONG = "⚠️ Слишком длинное название. Сократи и попробуй снова."
 

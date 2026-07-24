@@ -16,3 +16,4 @@ DEBUG = os.getenv("DEBUG", "false").lower() in {
 TMDB_API = os.getenv("TMDB_API", "")
 TMDB_URL = os.getenv("TMDB_URL", "https://api.themoviedb.org/3")
 TMDB_LANG = os.getenv("TMDB_LANG", "ru-RU")
+TEST_PROCESSES = int(os.getenv("TEST_PROCESSES", "2"))
