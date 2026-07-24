@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).with_name(".env"))
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///bot.db")
 DEBUG = os.getenv("DEBUG", "false").lower() in {
@@ -16,4 +18,5 @@ DEBUG = os.getenv("DEBUG", "false").lower() in {
 TMDB_API = os.getenv("TMDB_API", "")
 TMDB_URL = os.getenv("TMDB_URL", "https://api.themoviedb.org/3")
 TMDB_LANG = os.getenv("TMDB_LANG", "ru-RU")
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", PROJECT_ROOT / "media")).resolve()
 TEST_PROCESSES = int(os.getenv("TEST_PROCESSES", "2"))

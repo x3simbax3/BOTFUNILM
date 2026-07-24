@@ -9,6 +9,7 @@ from src.database.queries import (
     save_user_series_progress,
     save_user_media,
     upsert_media,
+    update_media_poster,
 )
 
 __all__ = (
@@ -21,4 +22,5 @@ __all__ = (
     "save_user_series_progress",
     "save_user_media",
     "upsert_media",
+    "update_media_poster",
 )

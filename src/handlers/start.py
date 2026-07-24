@@ -11,8 +11,10 @@ from src.database import (
     save_user_media,
     save_user_series_progress,
     upsert_media,
+    update_media_poster,
 )
 from src.fsm import MenuState
+from src.posters import download_poster, poster_input
 from src.keyboards import (
     content_type_keyboard,
     episodes_keyboard,
@@ -193,20 +195,28 @@ async def search_title(message: Message, state: FSMContext) -> None:
             guess = await find_title_guess(title_query, content_format, content_type)
         else:
             poster_path = local_media["poster_path"]
-            poster_url = (
-                poster_path
-                if poster_path and poster_path.startswith(("http://", "https://"))
-                else f"{TMDB_IMAGE_URL}{poster_path}"
-                if poster_path
-                else None
-            )
+            if poster_path and poster_path.startswith(("/", "http://", "https://")):
+                poster_url = (
+                    poster_path
+                    if poster_path.startswith(("http://", "https://"))
+                    else f"{TMDB_IMAGE_URL}{poster_path}"
+                )
+                cached_path = await download_poster(
+                    poster_url,
+                    local_media["tmdb_id"] or 0,
+                    content_format,
+                )
+                if cached_path:
+                    poster_path = cached_path
+                    await update_media_poster(local_media["id"], cached_path)
             guess = TmdbTitle(
                 title=local_media["title"],
                 overview=local_media["description"],
-                poster_url=poster_url,
+                poster_url=None,
                 original_query=title_query,
                 normalized_query=title_query,
                 tmdb_id=local_media["tmdb_id"] or 0,
+                poster_path=poster_path,
             )
     except aiosqlite.Error:
         await status_msg.edit_text(
@@ -245,9 +255,10 @@ async def search_title(message: Message, state: FSMContext) -> None:
 
     text = _tmdb_guess_caption(content_format, guess.title, guess.overview)
 
-    if guess.poster_url:
+    photo = poster_input(guess.poster_path) if local_media is not None else guess.poster_url
+    if photo:
         guess_message = await message.answer_photo(
-            photo=guess.poster_url,
+            photo=photo,
             caption=text,
             parse_mode="HTML",
             reply_markup=tmdb_guess_keyboard(),
@@ -264,6 +275,9 @@ async def search_title(message: Message, state: FSMContext) -> None:
         tmdb_guess_message_id=guess_message.message_id,
         tmdb_title=guess.title,
         tmdb_id=guess.tmdb_id,
+        tmdb_description=guess.overview,
+        tmdb_poster_url=guess.poster_url,
+        tmdb_poster_path=guess.poster_path,
     )
     await state.set_state(MenuState.confirming_tmdb_guess)
 
@@ -361,11 +375,18 @@ async def _finish_movie(callback: CallbackQuery, state: FSMContext, average: flo
     try:
         media_id = data.get("media_id")
         if media_id is None:
+            poster_path = await download_poster(
+                data.get("tmdb_poster_url"),
+                data.get("tmdb_id", 0),
+                "full_length",
+            )
             media_id = await upsert_media(
                 tmdb_id=data.get("tmdb_id"),
                 content_format="full_length",
                 content_type=data.get("content_type", "movie"),
                 title=title,
+                description=data.get("tmdb_description"),
+                poster_path=poster_path or data.get("tmdb_poster_path"),
             )
         await save_user_media(
             user_id=callback.from_user.id,
@@ -521,11 +542,18 @@ async def _finish_series_tracking(
     try:
         media_id = data.get("media_id")
         if media_id is None:
+            poster_path = await download_poster(
+                data.get("tmdb_poster_url"),
+                data.get("tmdb_id", 0),
+                "series",
+            )
             media_id = await upsert_media(
                 tmdb_id=data.get("tmdb_id"),
                 content_format="series",
                 content_type=data.get("content_type", "movie"),
                 title=title,
+                description=data.get("tmdb_description"),
+                poster_path=poster_path or data.get("tmdb_poster_path"),
                 number_of_seasons=data.get("total_seasons"),
                 number_of_episodes=total,
             )

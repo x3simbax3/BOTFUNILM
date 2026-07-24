@@ -11,7 +11,7 @@ from config.config import TMDB_API, TMDB_LANG, TMDB_URL
 
 logger = logging.getLogger(__name__)
 
-TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
+TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
 
 ANIMATION_GENRE_ID = 16
 
@@ -32,6 +32,7 @@ class TmdbTitle:
     original_query: str
     normalized_query: str
     tmdb_id: int = 0
+    poster_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -311,6 +312,7 @@ def _parse_title(result: dict, original_query: str = "") -> TmdbTitle:
         original_query=original_query,
         normalized_query=original_query,
         tmdb_id=tmdb_id,
+        poster_path=poster_path,
     )
 
 

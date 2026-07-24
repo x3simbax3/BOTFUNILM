@@ -105,7 +105,12 @@ TMDB_LANG=ru-RU
 DATABASE_URL=sqlite:///bot.db
 TEST_PROCESSES=2
 DEBUG=false
+MEDIA_ROOT=/absolute/path/to/BotFunilm/media
 ```
+
+`MEDIA_ROOT` необязателен. По умолчанию постеры сохраняются в `media/posters`
+внутри проекта и отправляются в Telegram с локального диска. Для резервного
+копирования сервера сохраняйте эту папку вместе с базой данных.
 
 Run the bot:
 

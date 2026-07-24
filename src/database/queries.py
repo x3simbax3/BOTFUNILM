@@ -148,6 +148,19 @@ async def upsert_media(
         return int(row["id"])
 
 
+async def update_media_poster(
+    media_id: int,
+    poster_path: str,
+    *,
+    database_url: str | None = None,
+) -> None:
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            "UPDATE media SET poster_path = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?",
+            (poster_path, media_id),
+        )
+
+
 async def save_user_media(
     *,
     user_id: int,
@@ -289,4 +302,5 @@ __all__ = (
     "save_user_series_progress",
     "save_user_media",
     "upsert_media",
+    "update_media_poster",
 )

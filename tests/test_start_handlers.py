@@ -208,6 +208,13 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.local_search = patcher.start()
         self.addCleanup(patcher.stop)
+        poster_patcher = patch.object(
+            start,
+            "download_poster",
+            AsyncMock(return_value=None),
+        )
+        self.poster_download = poster_patcher.start()
+        self.addCleanup(poster_patcher.stop)
 
     async def test_search_title_without_text_asks_for_text(self) -> None:
         message = MessageStub(text=None)
@@ -457,6 +464,8 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             content_format="full_length",
             content_type="cartoon",
             title="Фильм",
+            description=None,
+            poster_path=None,
         )
         save.assert_awaited_once_with(
             user_id=123,
@@ -521,6 +530,8 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             content_format="series",
             content_type="movie",
             title="Сериал",
+            description=None,
+            poster_path=None,
             number_of_seasons=2,
             number_of_episodes=10,
         )

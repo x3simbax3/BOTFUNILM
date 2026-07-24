@@ -13,6 +13,7 @@ from src.database import (
     save_user_series_progress,
     save_user_media,
     upsert_media,
+    update_media_poster,
 )
 from src.database.connection import database_path
 
@@ -74,6 +75,30 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated_id, media_id)
         self.assertEqual(row["title"], "New title")
         self.assertEqual(row["rating"], 8.5)
+
+    async def test_update_media_poster(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="full_length",
+            content_type="movie",
+            title="Movie",
+            poster_path="/old.jpg",
+            database_url=self.database_url,
+        )
+
+        await update_media_poster(
+            media_id,
+            "posters/tmdb_movie_42.jpg",
+            database_url=self.database_url,
+        )
+        row = await get_media_by_tmdb(
+            42,
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(row["poster_path"], "posters/tmdb_movie_42.jpg")
 
     async def test_same_tmdb_id_is_allowed_for_different_classifications(self) -> None:
         movie_id = await upsert_media(
