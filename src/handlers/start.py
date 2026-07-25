@@ -27,7 +27,6 @@ from src.keyboards import (
     tmdb_retry_keyboard,
 )
 from src.texts import (
-    RATING_CATEGORIES,
     START_TEXT,
     TMDB_SEARCHING,
     TMDB_TOO_LONG,
@@ -36,6 +35,7 @@ from src.texts import (
     episodes_prompt_text,
     movie_watched_text,
     rating_prompt_text,
+    rating_categories,
     rating_summary_text,
     selected_type_text,
     series_tracking_text,
@@ -295,9 +295,10 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
 
     data = await state.get_data()
     title = data.get("tmdb_title", "")
-    category_key, category_name = RATING_CATEGORIES[0]
+    categories = rating_categories(data.get("content_type", "movie"))
+    _, category_name = categories[0]
     await callback.message.answer(
-        rating_prompt_text(title, category_name, 1, len(RATING_CATEGORIES)),
+        rating_prompt_text(title, category_name, 1, len(categories)),
         parse_mode="HTML",
         reply_markup=rating_keyboard(),
     )
@@ -333,29 +334,42 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
 
-    score = int(callback.data.split(":")[1])
+    try:
+        score = int(callback.data.split(":")[1])
+    except (IndexError, ValueError):
+        await callback.answer("Некорректная оценка", show_alert=True)
+        return
+    if not 1 <= score <= 10:
+        await callback.answer("Оценка должна быть от 1 до 10", show_alert=True)
+        return
+
     data = await state.get_data()
     ratings = data.get("ratings", {})
     rating_index = data.get("rating_index", 0)
     title = data.get("tmdb_title", "")
+    categories = rating_categories(data.get("content_type", "movie"))
 
-    category_key, category_name = RATING_CATEGORIES[rating_index]
+    if not 0 <= rating_index < len(categories):
+        await callback.answer("Эта оценка уже сохранена")
+        return
+
+    category_key, _ = categories[rating_index]
     ratings[category_key] = score
     rating_index += 1
 
-    if rating_index < len(RATING_CATEGORIES):
+    if rating_index < len(categories):
         await state.update_data(ratings=ratings, rating_index=rating_index)
-        next_key, next_name = RATING_CATEGORIES[rating_index]
+        _, next_name = categories[rating_index]
         await callback.message.edit_text(
-            rating_prompt_text(title, next_name, rating_index + 1, len(RATING_CATEGORIES)),
+            rating_prompt_text(title, next_name, rating_index + 1, len(categories)),
             parse_mode="HTML",
             reply_markup=rating_keyboard(),
         )
     else:
-        average = sum(ratings.values()) / len(RATING_CATEGORIES)
+        average = sum(ratings.values()) / len(categories)
         await state.update_data(ratings=ratings, rating_average=average)
         await callback.message.edit_text(
-            rating_summary_text(title, ratings, average),
+            rating_summary_text(title, ratings, average, categories),
             parse_mode="HTML",
         )
 

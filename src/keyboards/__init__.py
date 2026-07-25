@@ -41,13 +41,13 @@ def content_type_keyboard(action: str, content_format: str) -> InlineKeyboardMar
             ],
             [
                 InlineKeyboardButton(
-                    text="🌸 Аниме",
+                    text="✨ Аниме",
                     callback_data=f"type:{action}:{content_format}:anime",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🧸 Мультфильмы",
+                    text="🧸 Мультфильм",
                     callback_data=f"type:{action}:{content_format}:cartoon",
                 ),
             ],
@@ -73,7 +73,7 @@ def tmdb_guess_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Да", callback_data="tmdb_guess:yes"),
+                InlineKeyboardButton(text="✅ Да, это он", callback_data="tmdb_guess:yes"),
                 InlineKeyboardButton(text="❌ Нет", callback_data="tmdb_guess:no"),
             ],
         ],
@@ -94,13 +94,13 @@ def tmdb_retry_keyboard(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✏️ Ввести заново",
+                    text="🔎 Другое название",
                     callback_data="title:retry",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🔁 Сменить категорию",
+                    text="🔁 Другая категория",
                     callback_data=back_callback,
                 ),
             ],
@@ -141,7 +141,7 @@ def episodes_keyboard(
         InlineKeyboardButton(text="0", callback_data=f"ep:{season_number}:0"),
     ])
     buttons.append([
-        InlineKeyboardButton(text="✅ Готово", callback_data="ep:done"),
+        InlineKeyboardButton(text="✅ Сохранить", callback_data="ep:done"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -157,7 +157,7 @@ def season_list_keyboard(
         name = s["name"]
         ep_count = s["episode_count"]
         done = watched.get(num, 0)
-        text = f"{name}: {done}/{ep_count}"
+        text = f"{name}  ·  {done}/{ep_count}"
         buttons.append([
             InlineKeyboardButton(
                 text=text,
@@ -165,7 +165,7 @@ def season_list_keyboard(
             ),
         ])
     buttons.append([
-        InlineKeyboardButton(text="✅ Завершить трекинг", callback_data="season:done"),
+        InlineKeyboardButton(text="✅ Сохранить прогресс", callback_data="season:done"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

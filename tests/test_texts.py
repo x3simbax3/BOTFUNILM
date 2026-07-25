@@ -4,6 +4,21 @@ from src import texts
 
 
 class TextsTests(unittest.TestCase):
+    def test_animation_uses_its_own_rating_categories(self) -> None:
+        for content_type in ("anime", "cartoon"):
+            with self.subTest(content_type=content_type):
+                categories = texts.rating_categories(content_type)
+
+                self.assertEqual(categories[0], ("animation", "Анимация"))
+                self.assertIn(("characters", "Персонажи"), categories)
+                self.assertNotIn(("acting", "Актёрская игра"), categories)
+
+    def test_movie_keeps_acting_rating_category(self) -> None:
+        self.assertIn(
+            ("acting", "Актёрская игра"),
+            texts.rating_categories("movie"),
+        )
+
     def test_tmdb_guess_text_escapes_title_and_overview_html(self) -> None:
         result = texts.tmdb_guess_text(
             "full_length",
