@@ -1,0 +1,220 @@
+"""Series season selection and progress persistence handlers."""
+
+from datetime import date
+
+import aiosqlite
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
+
+from src.database.media import get_media_by_tmdb
+from src.database.series import get_user_season_progress, save_user_series_progress
+from src.fsm import MenuState
+from src.keyboards import (
+    episodes_keyboard,
+    main_menu_keyboard,
+    season_list_keyboard,
+)
+from src.services import ensure_media
+from src.texts import (
+    episodes_prompt_text,
+    series_tracking_text,
+    tracking_complete_text,
+)
+from src.tmdb import TmdbError, fetch_tv_details
+
+
+router = Router(name="series")
+
+
+async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    tmdb_id = data.get("tmdb_id", 0)
+    title = data.get("tmdb_title", "")
+
+    try:
+        details = await fetch_tv_details(tmdb_id)
+    except TmdbError:
+        await _leave_tracking(
+            callback,
+            state,
+            "Не удалось получить информацию о сериале. Попробуй позже.",
+        )
+        return
+
+    seasons_data = [
+        {
+            "season_number": season.season_number,
+            "name": season.name,
+            "episode_count": season.episode_count,
+        }
+        for season in details.seasons
+        if season.episode_count > 0
+    ]
+
+    try:
+        media_id = await _existing_media_id(data, tmdb_id)
+        progress_rows = (
+            await get_user_season_progress(callback.from_user.id, media_id)
+            if media_id is not None
+            else []
+        )
+    except aiosqlite.Error:
+        await _leave_tracking(
+            callback,
+            state,
+            "Не удалось загрузить сохранённый прогресс. Попробуй позже.",
+        )
+        return
+
+    watched = {
+        int(row["season_number"]): int(row["episodes_watched"])
+        for row in progress_rows
+    }
+    await state.update_data(
+        media_id=media_id,
+        tv_details=details,
+        seasons_data=seasons_data,
+        total_seasons=details.number_of_seasons,
+        total_episodes=details.number_of_episodes,
+        watched_by_season=watched,
+        current_season=None,
+        episodes_watched_total=sum(watched.values()),
+    )
+    await callback.message.answer(
+        series_tracking_text(title, seasons_data),
+        parse_mode="HTML",
+        reply_markup=season_list_keyboard(seasons_data, watched),
+    )
+    await state.set_state(MenuState.tracking_series)
+
+
+async def _existing_media_id(data: dict, tmdb_id: int) -> int | None:
+    media_id = data.get("media_id")
+    if media_id is not None:
+        return int(media_id)
+
+    existing = await get_media_by_tmdb(
+        tmdb_id,
+        "series",
+        data.get("content_type", "movie"),
+    )
+    return int(existing["id"]) if existing is not None else None
+
+
+async def _leave_tracking(
+    callback: CallbackQuery,
+    state: FSMContext,
+    text: str,
+) -> None:
+    await callback.message.answer(text, reply_markup=main_menu_keyboard())
+    await state.set_state(MenuState.choosing_action)
+
+
+@router.callback_query(MenuState.tracking_series, F.data.startswith("season:"))
+async def handle_season_selection(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    value = callback.data.split(":")[1]
+    if value == "done":
+        await finish_series_tracking(callback, state)
+        return
+
+    data = await state.get_data()
+    season_number = int(value)
+    season_info = next(
+        (
+            season
+            for season in data.get("seasons_data", [])
+            if season["season_number"] == season_number
+        ),
+        None,
+    )
+    if not season_info:
+        await callback.answer("Сезон не найден")
+        return
+
+    watched = data.get("watched_by_season", {})
+    await state.update_data(current_season=season_number)
+    await callback.message.edit_text(
+        episodes_prompt_text(
+            data.get("tmdb_title", ""),
+            season_info["name"],
+            season_info["episode_count"],
+            watched.get(season_number, 0),
+        ),
+        parse_mode="HTML",
+        reply_markup=episodes_keyboard(season_info["episode_count"], season_number),
+    )
+    await callback.answer()
+
+
+@router.callback_query(MenuState.tracking_series, F.data.startswith("ep:"))
+async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    parts = callback.data.split(":")
+    if parts[1] == "done":
+        await finish_series_tracking(callback, state)
+        return
+
+    data = await state.get_data()
+    season_number = int(parts[1])
+    watched = data.get("watched_by_season", {})
+    watched[season_number] = int(parts[2])
+    await state.update_data(
+        watched_by_season=watched,
+        episodes_watched_total=sum(watched.values()),
+    )
+    seasons_data = data.get("seasons_data", [])
+    await callback.message.edit_text(
+        series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+        parse_mode="HTML",
+        reply_markup=season_list_keyboard(seasons_data, watched),
+    )
+    await callback.answer()
+
+
+async def finish_series_tracking(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+
+    data = await state.get_data()
+    title = data.get("tmdb_title", "")
+    total = data.get("total_episodes", 0)
+    watched_total = data.get("episodes_watched_total", 0)
+    average = data.get("rating_average", 0)
+    try:
+        media_id = await ensure_media(
+            data,
+            "series",
+            number_of_seasons=data.get("total_seasons"),
+            number_of_episodes=total,
+        )
+        await save_user_series_progress(
+            user_id=callback.from_user.id,
+            media_id=media_id,
+            seasons=data.get("watched_by_season", {}),
+            total_episodes=total,
+            user_rating=round(average) if average else None,
+        )
+    except (aiosqlite.Error, RuntimeError):
+        await callback.answer(
+            "Не удалось сохранить прогресс. Попробуй ещё раз.",
+            show_alert=True,
+        )
+        return
+
+    await state.update_data(watch_date=date.today().isoformat())
+    await callback.message.edit_text(
+        tracking_complete_text(title, total, watched_total, average),
+        parse_mode="HTML",
+    )
+    await callback.message.answer("Готово!", reply_markup=main_menu_keyboard())
+    await state.set_state(MenuState.choosing_action)
+    await callback.answer()

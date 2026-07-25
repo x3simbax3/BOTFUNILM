@@ -1,20 +1,20 @@
-"""Small raw-SQL database API."""
+"""Public facade for the domain-specific raw-SQL modules."""
 
 from src.database.connection import connect_database, connection_scope
-from src.database.queries import (
-    find_media_by_title,
-    get_media_by_tmdb,
+from src.database.library import (
     get_user_library_filters,
     get_user_library_item,
-    get_user_media,
-    get_user_season_progress,
     list_user_library,
-    save_user_series_progress,
-    save_user_media,
-    upsert_media,
     update_user_library_filter,
-    update_media_poster,
 )
+from src.database.media import (
+    find_media_by_title,
+    get_media_by_tmdb,
+    update_media_poster,
+    upsert_media,
+)
+from src.database.series import get_user_season_progress, save_user_series_progress
+from src.database.user_media import get_user_media, save_user_media
 
 __all__ = (
     "connect_database",
@@ -26,9 +26,9 @@ __all__ = (
     "get_user_media",
     "get_user_season_progress",
     "list_user_library",
-    "save_user_series_progress",
     "save_user_media",
-    "upsert_media",
-    "update_user_library_filter",
+    "save_user_series_progress",
     "update_media_poster",
+    "update_user_library_filter",
+    "upsert_media",
 )

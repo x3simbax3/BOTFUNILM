@@ -4,6 +4,10 @@ from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import start
+from src.handlers import library as library_handlers
+from src.handlers import rating as rating_handlers
+from src.handlers import search as search_handlers
+from src.handlers import series as series_handlers
 from src.keyboards import (
     content_type_keyboard,
     format_keyboard,
@@ -31,6 +35,7 @@ from src.tmdb import (
     TmdbTvDetails,
     TmdbUnavailableError,
 )
+from src.services import media as media_service
 
 
 class StateStub:
@@ -152,7 +157,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
         }
 
         with patch.object(
-            start,
+            library_handlers,
             "get_user_library_item",
             AsyncMock(return_value=item),
         ):
@@ -177,11 +182,15 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                start,
+                library_handlers,
                 "get_user_library_filters",
                 AsyncMock(return_value=filters),
             ),
-            patch.object(start, "list_user_library", AsyncMock(return_value=items)),
+            patch.object(
+                library_handlers,
+                "list_user_library",
+                AsyncMock(return_value=items),
+            ),
         ):
             await start.open_library(callback, state)
 
@@ -275,14 +284,14 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
 class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         patcher = patch.object(
-            start,
+            search_handlers,
             "find_media_by_title",
             AsyncMock(return_value=None),
         )
         self.local_search = patcher.start()
         self.addCleanup(patcher.stop)
         poster_patcher = patch.object(
-            start,
+            search_handlers,
             "download_poster",
             AsyncMock(return_value=None),
         )
@@ -332,7 +341,11 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
         guess = TmdbTitle("Матрица", "Описание", "https://image.test/poster.jpg", "Матрица", "Матрица")
 
-        with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
+        with patch.object(
+            search_handlers,
+            "find_title_guess",
+            AsyncMock(return_value=guess),
+        ):
             await start.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
@@ -347,7 +360,11 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
         guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица")
 
-        with patch.object(start, "find_title_guess", AsyncMock(return_value=guess)):
+        with patch.object(
+            search_handlers,
+            "find_title_guess",
+            AsyncMock(return_value=guess),
+        ):
             await start.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
@@ -369,7 +386,11 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "poster_path": "/poster.jpg",
         }
 
-        with patch.object(start, "find_title_guess", AsyncMock()) as tmdb_search:
+        with patch.object(
+            search_handlers,
+            "find_title_guess",
+            AsyncMock(),
+        ) as tmdb_search:
             await start.search_title(message, state)
 
         tmdb_search.assert_not_awaited()
@@ -386,7 +407,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица", 42)
 
         with patch.object(
-            start,
+            search_handlers,
             "find_title_guess",
             AsyncMock(return_value=guess),
         ) as tmdb_search:
@@ -411,7 +432,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
 
         with patch.object(
-            start,
+            search_handlers,
             "find_title_guess",
             AsyncMock(side_effect=TmdbNotFoundError),
         ):
@@ -456,7 +477,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
 
         with patch.object(
-            start,
+            search_handlers,
             "find_title_guess",
             AsyncMock(side_effect=error_class),
         ):
@@ -527,8 +548,12 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(start, "upsert_media", AsyncMock(return_value=7)) as upsert,
-            patch.object(start, "save_user_media", AsyncMock()) as save,
+            patch.object(
+                media_service,
+                "upsert_media",
+                AsyncMock(return_value=7),
+            ) as upsert,
+            patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
         ):
             await start._finish_movie(callback, state, 8.6)
 
@@ -561,8 +586,8 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(start, "upsert_media", AsyncMock()) as upsert,
-            patch.object(start, "save_user_media", AsyncMock()) as save,
+            patch.object(media_service, "upsert_media", AsyncMock()) as upsert,
+            patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
         ):
             await start._finish_movie(callback, state, 8.0)
 
@@ -601,9 +626,13 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         ]
 
         with (
-            patch.object(start, "fetch_tv_details", AsyncMock(return_value=details)),
             patch.object(
-                start,
+                series_handlers,
+                "fetch_tv_details",
+                AsyncMock(return_value=details),
+            ),
+            patch.object(
+                series_handlers,
                 "get_user_season_progress",
                 AsyncMock(return_value=saved_progress),
             ) as get_progress,
@@ -632,8 +661,16 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(start, "upsert_media", AsyncMock(return_value=7)) as upsert,
-            patch.object(start, "save_user_series_progress", AsyncMock()) as save,
+            patch.object(
+                media_service,
+                "upsert_media",
+                AsyncMock(return_value=7),
+            ) as upsert,
+            patch.object(
+                series_handlers,
+                "save_user_series_progress",
+                AsyncMock(),
+            ) as save,
         ):
             await start._finish_series_tracking(callback, state)
 

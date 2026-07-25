@@ -1,0 +1,214 @@
+"""Title search and TMDB result confirmation handlers."""
+
+import aiosqlite
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+
+from src.database.media import find_media_by_title, update_media_poster
+from src.fsm import MenuState
+from src.handlers.common import is_active_tmdb_guess, tmdb_guess_caption
+from src.keyboards import rating_keyboard, tmdb_guess_keyboard, tmdb_retry_keyboard
+from src.posters import download_poster, poster_input
+from src.texts import (
+    TMDB_SEARCHING,
+    TMDB_TOO_LONG,
+    rating_categories,
+    rating_prompt_text,
+    tmdb_found_text,
+    tmdb_not_found_text,
+)
+from src.tmdb import (
+    TMDB_IMAGE_URL,
+    TmdbAuthenticationError,
+    TmdbError,
+    TmdbNotConfiguredError,
+    TmdbNotFoundError,
+    TmdbRateLimitError,
+    TmdbTitle,
+    TmdbUnavailableError,
+    find_title_guess,
+)
+
+
+router = Router(name="search")
+
+
+@router.message(MenuState.waiting_title)
+async def search_title(message: Message, state: FSMContext) -> None:
+    title_query = _valid_title_query(message.text)
+    if title_query is None:
+        await message.answer(
+            "Введи название текстом."
+            if message.text is None
+            else "Название не может быть пустым. Введи название ещё раз."
+        )
+        return
+    if len(title_query) > 342:
+        await message.answer(TMDB_TOO_LONG)
+        return
+
+    data = await state.get_data()
+    content_format = data.get("content_format")
+    if not content_format:
+        await message.answer("Не найден выбранный формат. Начни заново через /start.")
+        return
+
+    status_msg = await message.answer(TMDB_SEARCHING, parse_mode="HTML")
+    content_type = data.get("content_type", "movie")
+    local_media = None
+    try:
+        local_media = await find_media_by_title(
+            title_query,
+            content_format,
+            content_type,
+        )
+        if local_media is None:
+            await status_msg.edit_text("🔍 В каталоге не найдено, ищу в TMDB...")
+            guess = await find_title_guess(title_query, content_format, content_type)
+        else:
+            guess = await _title_from_local_media(
+                local_media,
+                title_query,
+                content_format,
+            )
+    except aiosqlite.Error:
+        await status_msg.edit_text(
+            "Не удалось проверить локальный каталог. Попробуй ещё раз."
+        )
+        return
+    except (ValueError, TmdbError) as exc:
+        text, parse_mode = _search_error(exc, title_query)
+        await status_msg.edit_text(text, parse_mode=parse_mode)
+        return
+
+    await status_msg.edit_text(tmdb_found_text(guess.title), parse_mode="HTML")
+    await _show_guess(message, state, guess, content_format, local_media)
+
+
+async def _title_from_local_media(
+    local_media,
+    title_query: str,
+    content_format: str,
+) -> TmdbTitle:
+    poster_path = local_media["poster_path"]
+    if poster_path and poster_path.startswith(("/", "http://", "https://")):
+        poster_url = (
+            poster_path
+            if poster_path.startswith(("http://", "https://"))
+            else f"{TMDB_IMAGE_URL}{poster_path}"
+        )
+        cached_path = await download_poster(
+            poster_url,
+            local_media["tmdb_id"] or 0,
+            content_format,
+        )
+        if cached_path:
+            poster_path = cached_path
+            await update_media_poster(local_media["id"], cached_path)
+
+    return TmdbTitle(
+        title=local_media["title"],
+        overview=local_media["description"],
+        poster_url=None,
+        original_query=title_query,
+        normalized_query=title_query,
+        tmdb_id=local_media["tmdb_id"] or 0,
+        poster_path=poster_path,
+    )
+
+
+async def _show_guess(
+    message: Message,
+    state: FSMContext,
+    guess: TmdbTitle,
+    content_format: str,
+    local_media,
+) -> None:
+    text = tmdb_guess_caption(content_format, guess.title, guess.overview)
+    photo = poster_input(guess.poster_path) if local_media is not None else guess.poster_url
+    if photo:
+        guess_message = await message.answer_photo(
+            photo=photo,
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=tmdb_guess_keyboard(),
+        )
+    else:
+        guess_message = await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=tmdb_guess_keyboard(),
+        )
+
+    await state.update_data(
+        media_id=local_media["id"] if local_media is not None else None,
+        tmdb_guess_message_id=guess_message.message_id,
+        tmdb_title=guess.title,
+        tmdb_id=guess.tmdb_id,
+        tmdb_description=guess.overview,
+        tmdb_poster_url=guess.poster_url,
+        tmdb_poster_path=guess.poster_path,
+    )
+    await state.set_state(MenuState.confirming_tmdb_guess)
+
+
+@router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:yes")
+async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await is_active_tmdb_guess(callback, state):
+        await callback.answer("Это старый вариант.")
+        return
+
+    await callback.answer()
+    await state.update_data(tmdb_guess_message_id=None, ratings={}, rating_index=0)
+    data = await state.get_data()
+    categories = rating_categories(data.get("content_type", "movie"))
+    await callback.message.answer(
+        rating_prompt_text(data.get("tmdb_title", ""), categories[0][1], 1, len(categories)),
+        parse_mode="HTML",
+        reply_markup=rating_keyboard(),
+    )
+    await state.set_state(MenuState.rating_category)
+
+
+@router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:no")
+async def reject_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    if not await is_active_tmdb_guess(callback, state):
+        await callback.answer("Это старый вариант.")
+        return
+
+    await state.set_state(MenuState.choosing_tmdb_retry)
+    await state.update_data(tmdb_guess_message_id=None)
+    data = await state.get_data()
+    await callback.message.answer(
+        "Ок, не оно. Что сделать?",
+        reply_markup=tmdb_retry_keyboard(
+            data.get("action"),
+            data.get("content_format"),
+        ),
+    )
+    await callback.answer()
+
+
+def _valid_title_query(text: str | None) -> str | None:
+    if text is None or not text.strip():
+        return None
+    return text
+
+
+def _search_error(error: Exception, query: str) -> tuple[str, str | None]:
+    if isinstance(error, ValueError):
+        return "Название не может быть пустым. Введи название ещё раз.", None
+    if isinstance(error, TmdbNotConfiguredError):
+        return "TMDB_API не настроен. Добавь ключ в config/.env.", None
+    if isinstance(error, TmdbAuthenticationError):
+        return "TMDB отклонил ключ доступа. Проверь настройку TMDB_API.", None
+    if isinstance(error, TmdbRateLimitError):
+        return "TMDB временно ограничил запросы. Попробуй через минуту.", None
+    if isinstance(error, TmdbUnavailableError):
+        return "TMDB сейчас недоступен. Попробуй немного позже.", None
+    if isinstance(error, TmdbNotFoundError):
+        return tmdb_not_found_text(query), "HTML"
+    return "Не удалось получить ответ от TMDB. Попробуй позже.", None
