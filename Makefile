@@ -1,5 +1,5 @@
-PYTHON ?= venv/bin/python
-PYTEST ?= $(PYTHON) -m pytest
+PYTHON ?= uv run python
+PYTEST ?= uv run pytest
 TEST_PROCESSES ?= $(shell $(PYTHON) -c 'from config.config import TEST_PROCESSES; print(TEST_PROCESSES)')
 ATLAS ?= atlas
 

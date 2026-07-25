@@ -77,18 +77,20 @@ git clone https://github.com/x3simbax3/BOTFUNILM.git
 cd BOTFUNILM
 ```
 
-Create and activate a virtual environment:
+Install `uv`:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Install dependencies:
+Create the environment and install the locked dependencies:
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
+
+`uv` creates `.venv` automatically. The committed `uv.lock` keeps direct and
+transitive dependency versions reproducible across installations.
 
 Install the Atlas migration CLI:
 
@@ -116,6 +118,12 @@ Run the bot:
 
 ```bash
 ./run_bot.sh
+```
+
+You can also run it directly through the managed environment:
+
+```bash
+uv run python -m src.bot
 ```
 
 ## Database and migrations
@@ -159,6 +167,8 @@ Run the test suite in two worker processes:
 ```bash
 make test
 ```
+
+The equivalent direct command is `uv run pytest -n 2`.
 
 `TEST_PROCESSES` is read as an integer from `config/.env` and applies to every
 Make target that runs the test suite (`test`, `check`, `start`, and `commit`).
