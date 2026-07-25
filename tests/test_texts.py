@@ -45,6 +45,19 @@ class TextsTests(unittest.TestCase):
                 with self.assertRaises(KeyError):
                     function(*args)
 
+    def test_library_text_numbers_and_escapes_clickable_titles(self) -> None:
+        result = texts.library_text(
+            [{"id": 7, "title": "Tom & Jerry"}],
+            "BotFunilmBot",
+            offset=20,
+        )
+
+        self.assertIn("21.", result)
+        self.assertIn(
+            '<a href="https://t.me/BotFunilmBot?start=media_7">Tom &amp; Jerry</a>',
+            result,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

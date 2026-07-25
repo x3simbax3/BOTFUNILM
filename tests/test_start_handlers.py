@@ -72,6 +72,7 @@ class MessageStub:
         self.photo_answers = []
         self.edit_text_calls = []
         self.photo = []
+        self.from_user = SimpleNamespace(id=123)
 
     async def answer(self, text: str, **kwargs) -> SentMessageStub:
         stub = SentMessageStub(100 + len(self.answers) + len(self.photo_answers))
@@ -96,6 +97,9 @@ class CallbackStub:
         self.data = data
         self.message = message
         self.from_user = SimpleNamespace(id=123)
+        self.bot = SimpleNamespace(
+            get_me=AsyncMock(return_value=SimpleNamespace(username="BotFunilmBot"))
+        )
         self.answers = []
 
     async def answer(self, text: str | None = None, **kwargs) -> None:
@@ -123,6 +127,73 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
                 }
             ],
         )
+
+    async def test_start_deep_link_opens_owned_library_item(self) -> None:
+        message = MessageStub(text="/start media_7")
+        state = StateStub()
+        item = {
+            "id": 7,
+            "title": "Матрица",
+            "original_title": "The Matrix",
+            "description": "Описание",
+            "poster_path": None,
+            "content_format": "full_length",
+            "content_type": "movie",
+            "user_status": "completed",
+            "user_rating": 9,
+            "rating": 8.2,
+            "release_date": "1999-03-31",
+            "first_air_date": None,
+            "number_of_seasons": None,
+            "number_of_episodes": None,
+            "episodes_watched": None,
+        }
+
+        with patch.object(
+            start,
+            "get_user_library_item",
+            AsyncMock(return_value=item),
+        ):
+            await start.start(message, state)
+
+        self.assertEqual(state.state, MenuState.viewing_media)
+        self.assertIn("Матрица", message.answers[0]["text"])
+        self.assertIn("Описание", message.answers[0]["text"])
+
+    async def test_open_library_shows_only_first_twenty_and_more_button(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:library", message)
+        state = StateStub()
+        filters = {
+            "full_length": True,
+            "series": True,
+            "movie": True,
+            "anime": True,
+            "cartoon": True,
+        }
+        items = [{"id": index, "title": f"Title {index}"} for index in range(1, 22)]
+
+        with (
+            patch.object(
+                start,
+                "get_user_library_filters",
+                AsyncMock(return_value=filters),
+            ),
+            patch.object(start, "list_user_library", AsyncMock(return_value=items)),
+        ):
+            await start.open_library(callback, state)
+
+        rendered = message.edit_text_calls[0]
+        self.assertIn("1.", rendered["text"])
+        self.assertIn("20.", rendered["text"])
+        self.assertNotIn("Title 21", rendered["text"])
+        callbacks = [
+            button.callback_data
+            for row in rendered["reply_markup"].inline_keyboard
+            for button in row
+        ]
+        self.assertIn("library:page:1", callbacks)
+        self.assertEqual(state.state, MenuState.viewing_library)
 
     async def test_choose_action_saves_action_and_moves_to_choosing_format(self) -> None:
         message = MessageStub()

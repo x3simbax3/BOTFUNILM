@@ -8,9 +8,13 @@ from aiogram.types import CallbackQuery, Message
 
 from src.database import (
     find_media_by_title,
+    get_user_library_filters,
+    get_user_library_item,
+    list_user_library,
     save_user_media,
     save_user_series_progress,
     upsert_media,
+    update_user_library_filter,
     update_media_poster,
 )
 from src.fsm import MenuState
@@ -19,6 +23,8 @@ from src.keyboards import (
     content_type_keyboard,
     episodes_keyboard,
     format_keyboard,
+    library_item_keyboard,
+    library_keyboard,
     main_menu_keyboard,
     rating_keyboard,
     season_list_keyboard,
@@ -33,6 +39,8 @@ from src.texts import (
     action_text,
     content_type_text,
     episodes_prompt_text,
+    library_item_text,
+    library_text,
     movie_watched_text,
     rating_prompt_text,
     rating_categories,
@@ -92,11 +100,17 @@ MENU_TREE = {
 
 PHOTO_CAPTION_LIMIT = 1024
 CAPTION_ELLIPSIS = "..."
+LIBRARY_PAGE_SIZE = 20
 
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
     await state.clear()
+    media_id = _media_id_from_start(message.text)
+    if media_id is not None:
+        await _show_library_item(message, state, message.from_user.id, media_id)
+        return
+
     await state.set_state(MenuState.choosing_action)
     await message.answer(
         START_TEXT,
@@ -105,7 +119,7 @@ async def start(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.callback_query(F.data.in_({"menu:library", "menu:add"}))
+@router.callback_query(F.data == "menu:add")
 async def choose_action(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
@@ -120,6 +134,58 @@ async def choose_action(callback: CallbackQuery, state: FSMContext) -> None:
         reply_markup=format_keyboard(action),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "menu:library")
+async def open_library(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+
+    await _open_library_page(callback, state, 0)
+
+
+@router.callback_query(F.data.startswith("library:filter:"))
+async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    filter_name = callback.data.removeprefix("library:filter:")
+    try:
+        await update_user_library_filter(callback.from_user.id, filter_name)
+    except ValueError:
+        await callback.answer("Неизвестный фильтр", show_alert=True)
+        return
+    except (aiosqlite.Error, RuntimeError):
+        await callback.answer("Не удалось сохранить фильтр", show_alert=True)
+        return
+
+    await _open_library_page(callback, state, 0)
+
+
+@router.callback_query(F.data.startswith("library:page:"))
+async def change_library_page(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    try:
+        page = int(callback.data.removeprefix("library:page:"))
+    except ValueError:
+        await callback.answer("Некорректная страница", show_alert=True)
+        return
+    if not 0 <= page <= 100_000:
+        await callback.answer("Некорректная страница", show_alert=True)
+        return
+
+    await _open_library_page(callback, state, page)
+
+
+@router.callback_query(F.data == "library:back")
+async def back_to_library(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+
+    data = await state.get_data()
+    await _open_library_page(callback, state, int(data.get("library_page", 0)))
 
 
 @router.callback_query(F.data.startswith("format:"))
@@ -593,6 +659,125 @@ async def _finish_series_tracking(
     )
     await state.set_state(MenuState.choosing_action)
     await callback.answer()
+
+
+# --- Библиотека ---
+
+async def _open_library_page(
+    callback: CallbackQuery,
+    state: FSMContext,
+    page: int,
+) -> None:
+    if not callback.message:
+        return
+
+    try:
+        filters = await get_user_library_filters(callback.from_user.id)
+        items = await list_user_library(
+            callback.from_user.id,
+            filters,
+            limit=LIBRARY_PAGE_SIZE + 1,
+            offset=page * LIBRARY_PAGE_SIZE,
+        )
+        bot_user = await callback.bot.get_me()
+        if not bot_user.username:
+            raise RuntimeError("Bot username is unavailable")
+    except (aiosqlite.Error, RuntimeError):
+        await callback.answer("Не удалось открыть библиотеку", show_alert=True)
+        return
+
+    visible_items = items[:LIBRARY_PAGE_SIZE]
+    await state.update_data(library_page=page)
+    await state.set_state(MenuState.viewing_library)
+    await _replace_message(
+        callback.message,
+        library_text(
+            visible_items,
+            bot_user.username,
+            page * LIBRARY_PAGE_SIZE,
+        ),
+        parse_mode="HTML",
+        reply_markup=library_keyboard(filters, page, len(items) > LIBRARY_PAGE_SIZE),
+    )
+    await callback.answer()
+
+
+async def _show_library_item(
+    message: Message,
+    state: FSMContext,
+    user_id: int,
+    media_id: int,
+) -> None:
+    try:
+        item = await get_user_library_item(user_id, media_id)
+    except aiosqlite.Error:
+        await message.answer(
+            "Не удалось открыть тайтл. Попробуй ещё раз.",
+            reply_markup=main_menu_keyboard(),
+        )
+        await state.set_state(MenuState.choosing_action)
+        return
+
+    if item is None:
+        await message.answer(
+            "Тайтл не найден в твоей библиотеке.",
+            reply_markup=main_menu_keyboard(),
+        )
+        await state.set_state(MenuState.choosing_action)
+        return
+
+    text = _library_item_caption(item)
+    photo = poster_input(item["poster_path"])
+    if photo:
+        await message.answer_photo(
+            photo=photo,
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=library_item_keyboard(),
+        )
+    else:
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=library_item_keyboard(),
+        )
+
+    await state.update_data(media_id=media_id, library_page=0)
+    await state.set_state(MenuState.viewing_media)
+
+
+def _media_id_from_start(text: str | None) -> int | None:
+    if not text or not text.startswith("/start media_"):
+        return None
+
+    value = text.removeprefix("/start media_").strip()
+    if not value.isdigit():
+        return None
+    media_id = int(value)
+    return media_id if media_id > 0 else None
+
+
+def _library_item_caption(item) -> str:
+    text = library_item_text(item)
+    if len(text) <= PHOTO_CAPTION_LIMIT:
+        return text
+
+    description = item["description"] or "Описание не найдено."
+    low = 0
+    high = len(description)
+    best = library_item_text(item, CAPTION_ELLIPSIS)
+    while low <= high:
+        middle = (low + high) // 2
+        clipped = description[:middle].rstrip()
+        if middle < len(description):
+            clipped += CAPTION_ELLIPSIS
+        candidate = library_item_text(item, clipped)
+        if len(candidate) <= PHOTO_CAPTION_LIMIT:
+            best = candidate
+            low = middle + 1
+        else:
+            high = middle - 1
+    return best
 
 
 # --- Навигация ---

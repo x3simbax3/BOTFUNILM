@@ -12,6 +12,78 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def library_keyboard(
+    filters: dict[str, bool],
+    page: int,
+    has_more: bool,
+) -> InlineKeyboardMarkup:
+    def label(text: str, name: str) -> str:
+        return f"✅ {text}" if filters.get(name) else text
+
+    all_selected = all(filters.values())
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label("Сериалы", "series"),
+                callback_data="library:filter:series",
+            ),
+            InlineKeyboardButton(
+                text=label("Полный метр", "full_length"),
+                callback_data="library:filter:full_length",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=label("Аниме", "anime"),
+                callback_data="library:filter:anime",
+            ),
+            InlineKeyboardButton(
+                text=label("Фильмы", "movie"),
+                callback_data="library:filter:movie",
+            ),
+            InlineKeyboardButton(
+                text=label("Мультфильмы", "cartoon"),
+                callback_data="library:filter:cartoon",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="✅ Все" if all_selected else "Все",
+                callback_data="library:filter:all",
+            ),
+        ],
+    ]
+
+    pagination = []
+    if page > 0:
+        pagination.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"library:page:{page - 1}",
+            )
+        )
+    if has_more:
+        pagination.append(
+            InlineKeyboardButton(
+                text="Ещё ➡️",
+                callback_data=f"library:page:{page + 1}",
+            )
+        )
+    if pagination:
+        rows.append(pagination)
+
+    rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="back:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_item_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К библиотеке", callback_data="library:back")],
+        ],
+    )
+
+
 def format_keyboard(action: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -174,6 +246,8 @@ __all__ = (
     "content_type_keyboard",
     "episodes_keyboard",
     "format_keyboard",
+    "library_item_keyboard",
+    "library_keyboard",
     "main_menu_keyboard",
     "rating_keyboard",
     "season_list_keyboard",

@@ -19,6 +19,34 @@ class KeyboardsTests(unittest.TestCase):
             [["menu:library", "menu:add"]],
         )
 
+    def test_library_keyboard_has_filters_and_pagination(self) -> None:
+        filters = {
+            "series": True,
+            "full_length": False,
+            "anime": True,
+            "movie": True,
+            "cartoon": True,
+        }
+
+        keyboard = keyboards.library_keyboard(filters, page=1, has_more=True)
+
+        self.assertEqual(
+            callback_rows(keyboard),
+            [
+                ["library:filter:series", "library:filter:full_length"],
+                [
+                    "library:filter:anime",
+                    "library:filter:movie",
+                    "library:filter:cartoon",
+                ],
+                ["library:filter:all"],
+                ["library:page:0", "library:page:2"],
+                ["back:main"],
+            ],
+        )
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✅ Сериалы")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "Полный метр")
+
     def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
         self.assertEqual(
             callback_rows(keyboards.format_keyboard("add")),

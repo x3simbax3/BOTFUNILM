@@ -8,11 +8,15 @@ from src.database import (
     connection_scope,
     find_media_by_title,
     get_media_by_tmdb,
+    get_user_library_filters,
+    get_user_library_item,
     get_user_media,
     get_user_season_progress,
+    list_user_library,
     save_user_series_progress,
     save_user_media,
     upsert_media,
+    update_user_library_filter,
     update_media_poster,
 )
 from src.database.connection import database_path
@@ -45,6 +49,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("media", "table"), objects)
         self.assertIn(("user_media", "table"), objects)
         self.assertIn(("user_season_progress", "table"), objects)
+        self.assertIn(("user_library_filters", "table"), objects)
         self.assertIn(("ix_media_status", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
         self.assertIn(("ix_user_season_progress_media_id", "index"), objects)
@@ -202,6 +207,92 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["status"], "completed")
         self.assertEqual(row["user_rating"], 9)
         self.assertEqual(row["episodes_watched"], 12)
+
+    async def test_library_filters_are_persisted_per_user(self) -> None:
+        defaults = await get_user_library_filters(123, database_url=self.database_url)
+        changed = await update_user_library_filter(
+            123,
+            "anime",
+            database_url=self.database_url,
+        )
+        other_user = await get_user_library_filters(456, database_url=self.database_url)
+
+        self.assertTrue(all(defaults.values()))
+        self.assertFalse(changed["anime"])
+        self.assertTrue(all(other_user.values()))
+
+    async def test_library_is_filtered_and_paginated_newest_first(self) -> None:
+        for index in range(25):
+            media_id = await upsert_media(
+                tmdb_id=index + 1,
+                content_format="series" if index % 2 else "full_length",
+                content_type="anime" if index % 3 == 0 else "movie",
+                title=f"Title {index + 1}",
+                database_url=self.database_url,
+            )
+            await save_user_media(
+                user_id=123,
+                media_id=media_id,
+                status="completed",
+                database_url=self.database_url,
+            )
+
+        filters = await get_user_library_filters(123, database_url=self.database_url)
+        first_page = await list_user_library(
+            123,
+            filters,
+            limit=20,
+            database_url=self.database_url,
+        )
+        second_page = await list_user_library(
+            123,
+            filters,
+            limit=20,
+            offset=20,
+            database_url=self.database_url,
+        )
+        filters["series"] = False
+        full_length_only = await list_user_library(
+            123,
+            filters,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(len(first_page), 20)
+        self.assertEqual(first_page[0]["title"], "Title 25")
+        self.assertEqual(len(second_page), 5)
+        self.assertTrue(
+            all(row["content_format"] == "full_length" for row in full_length_only)
+        )
+
+    async def test_library_item_belongs_to_requested_user(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="full_length",
+            content_type="movie",
+            title="Private title",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="completed",
+            database_url=self.database_url,
+        )
+
+        own_item = await get_user_library_item(
+            123,
+            media_id,
+            database_url=self.database_url,
+        )
+        other_item = await get_user_library_item(
+            456,
+            media_id,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(own_item["title"], "Private title")
+        self.assertIsNone(other_item)
 
     async def test_deleting_media_cascades_to_user_progress(self) -> None:
         media_id = await upsert_media(

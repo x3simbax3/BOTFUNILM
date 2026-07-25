@@ -35,6 +35,7 @@ CREATE TABLE user_media (
     episodes_watched    INTEGER
                         CHECK (episodes_watched IS NULL OR episodes_watched >= 0),
     last_watched_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    added_at            TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (user_id, media_id),
     FOREIGN KEY (media_id) REFERENCES media (id) ON DELETE CASCADE
 );
@@ -56,3 +57,13 @@ CREATE TABLE user_season_progress (
 
 CREATE INDEX ix_user_season_progress_media_id
     ON user_season_progress (media_id);
+
+CREATE TABLE user_library_filters (
+    user_id             INTEGER,
+    full_length         INTEGER NOT NULL DEFAULT 1 CHECK (full_length IN (0, 1)),
+    series              INTEGER NOT NULL DEFAULT 1 CHECK (series IN (0, 1)),
+    movie               INTEGER NOT NULL DEFAULT 1 CHECK (movie IN (0, 1)),
+    anime               INTEGER NOT NULL DEFAULT 1 CHECK (anime IN (0, 1)),
+    cartoon             INTEGER NOT NULL DEFAULT 1 CHECK (cartoon IN (0, 1)),
+    PRIMARY KEY (user_id)
+);
