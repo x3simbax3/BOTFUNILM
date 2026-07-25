@@ -26,7 +26,9 @@ from src.tmdb import (
     TmdbNotConfiguredError,
     TmdbNotFoundError,
     TmdbRateLimitError,
+    TmdbSeasonInfo,
     TmdbTitle,
+    TmdbTvDetails,
     TmdbUnavailableError,
 )
 
@@ -574,6 +576,45 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_series_tracking_restores_saved_progress(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:8", message)
+        state = StateStub(
+            {
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "content_type": "movie",
+            }
+        )
+        details = TmdbTvDetails(
+            number_of_seasons=2,
+            number_of_episodes=10,
+            seasons=[
+                TmdbSeasonInfo(1, "Сезон 1", 8),
+                TmdbSeasonInfo(2, "Сезон 2", 2),
+            ],
+        )
+        saved_progress = [
+            {"season_number": 1, "episodes_watched": 6},
+            {"season_number": 2, "episodes_watched": 1},
+        ]
+
+        with (
+            patch.object(start, "fetch_tv_details", AsyncMock(return_value=details)),
+            patch.object(
+                start,
+                "get_user_season_progress",
+                AsyncMock(return_value=saved_progress),
+            ) as get_progress,
+        ):
+            await start._start_series_tracking(callback, state)
+
+        get_progress.assert_awaited_once_with(123, 7)
+        self.assertEqual(state.data["watched_by_season"], {1: 6, 2: 1})
+        self.assertEqual(state.data["episodes_watched_total"], 7)
+        self.assertEqual(state.state, MenuState.tracking_series)
+
     async def test_finish_series_saves_progress_and_returns_to_menu(self) -> None:
         message = MessageStub()
         callback = CallbackStub("season:done", message)

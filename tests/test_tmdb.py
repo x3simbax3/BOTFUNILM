@@ -211,7 +211,11 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(tmdb, "TMDB_API", "token"),
-            patch.object(tmdb.aiohttp, "ClientSession", return_value=SessionStub()),
+            patch.object(
+                tmdb,
+                "get_http_session",
+                AsyncMock(return_value=SessionStub()),
+            ),
             patch.object(tmdb, "_fetch_json", fetch),
         ):
             result = await tmdb.find_title_guess(

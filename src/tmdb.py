@@ -8,6 +8,8 @@ from difflib import SequenceMatcher
 import aiohttp
 from config.config import TMDB_API, TMDB_LANG, TMDB_URL
 
+from src.http_client import get_http_session
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,36 +131,36 @@ async def find_title_guess(query: str, content_format: str, content_type: str) -
     queries = _make_queries(original_query)
     logger.info("Поиск '%s', варианты: %s", original_query, queries)
 
-    async with aiohttp.ClientSession() as session:
-        for q in queries:
-            data = await _fetch_json(
-                session,
-                search_url,
-                {
-                    "query": q,
-                    "language": TMDB_LANG,
-                    "include_adult": "false",
-                    "page": "1",
-                },
+    session = await get_http_session()
+    for q in queries:
+        data = await _fetch_json(
+            session,
+            search_url,
+            {
+                "query": q,
+                "language": TMDB_LANG,
+                "include_adult": "false",
+                "page": "1",
+            },
+        )
+        results = _extract_results(data)
+        results = _filter_by_content_type(results, content_type)
+
+        if results:
+            best_result = max(
+                results,
+                key=lambda result: _relevance_score(result, original_query),
             )
-            results = _extract_results(data)
-            results = _filter_by_content_type(results, content_type)
+            best_score = _relevance_score(best_result, original_query)
+            best = _parse_title(best_result, original_query)
+            logger.info(
+                "query='%s': лучший='%s', score=%.0f, results=%d",
+                q, best.title, best_score, len(results),
+            )
+            if best_score >= MIN_RELEVANCE:
+                return best
 
-            if results:
-                best_result = max(
-                    results,
-                    key=lambda result: _relevance_score(result, original_query),
-                )
-                best_score = _relevance_score(best_result, original_query)
-                best = _parse_title(best_result, original_query)
-                logger.info(
-                    "query='%s': лучший='%s', score=%.0f, results=%d",
-                    q, best.title, best_score, len(results),
-                )
-                if best_score >= MIN_RELEVANCE:
-                    return best
-
-        raise TmdbNotFoundError(original_query)
+    raise TmdbNotFoundError(original_query)
 
 
 async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
@@ -169,8 +171,8 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
     url = f"{TMDB_URL.rstrip('/')}/tv/{tv_id}"
     params = {"language": TMDB_LANG}
 
-    async with aiohttp.ClientSession() as session:
-        data = await _fetch_json(session, url, params)
+    session = await get_http_session()
+    data = await _fetch_json(session, url, params)
 
     if not data:
         raise TmdbError("Не удалось получить информацию о сериале")

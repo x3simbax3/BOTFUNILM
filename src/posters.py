@@ -7,6 +7,7 @@ import aiohttp
 from aiogram.types import FSInputFile
 
 from config.config import MEDIA_ROOT
+from src.http_client import get_http_session
 
 
 logger = logging.getLogger(__name__)
@@ -36,29 +37,28 @@ async def download_poster(
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(poster_url) as response:
-                if response.status != 200:
-                    logger.warning(
-                        "Не удалось скачать постер TMDB %s: HTTP %s",
-                        tmdb_id,
-                        response.status,
-                    )
-                    return None
+        session = await get_http_session()
+        async with session.get(poster_url) as response:
+            if response.status != 200:
+                logger.warning(
+                    "Не удалось скачать постер TMDB %s: HTTP %s",
+                    tmdb_id,
+                    response.status,
+                )
+                return None
 
-                content_type = response.headers.get("Content-Type", "")
-                if not content_type.startswith("image/"):
-                    logger.warning("TMDB %s вернул не изображение", tmdb_id)
-                    return None
+            content_type = response.headers.get("Content-Type", "")
+            if not content_type.startswith("image/"):
+                logger.warning("TMDB %s вернул не изображение", tmdb_id)
+                return None
 
-                size = 0
-                with temporary.open("wb") as poster_file:
-                    async for chunk in response.content.iter_chunked(64 * 1024):
-                        size += len(chunk)
-                        if size > MAX_POSTER_SIZE:
-                            raise ValueError("постер превышает 10 МБ")
-                        poster_file.write(chunk)
+            size = 0
+            with temporary.open("wb") as poster_file:
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    size += len(chunk)
+                    if size > MAX_POSTER_SIZE:
+                        raise ValueError("постер превышает 10 МБ")
+                    poster_file.write(chunk)
 
         temporary.replace(destination)
         return relative_path.as_posix()

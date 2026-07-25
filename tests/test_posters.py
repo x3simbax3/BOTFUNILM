@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from aiogram.types import FSInputFile
 
@@ -78,7 +78,11 @@ class PosterDownloadTests(unittest.IsolatedAsyncioTestCase):
         with (
             tempfile.TemporaryDirectory() as temporary_directory,
             patch.object(posters, "MEDIA_ROOT", Path(temporary_directory)),
-            patch.object(posters.aiohttp, "ClientSession", return_value=SessionStub()),
+            patch.object(
+                posters,
+                "get_http_session",
+                AsyncMock(return_value=SessionStub()),
+            ),
         ):
             result = await posters.download_poster(
                 "https://image.test/poster.jpg",

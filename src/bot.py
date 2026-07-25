@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from config.config import BOT_TOKEN, DEBUG
+from src.http_client import close_http_session
 from src.routers import router
 
 
@@ -23,6 +24,7 @@ async def main() -> None:
     try:
         await dp.start_polling(bot)
     finally:
+        await close_http_session()
         await bot.session.close()
 
 

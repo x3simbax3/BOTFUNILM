@@ -8,8 +8,10 @@ from aiogram.types import CallbackQuery, Message
 
 from src.database import (
     find_media_by_title,
+    get_media_by_tmdb,
     get_user_library_filters,
     get_user_library_item,
+    get_user_season_progress,
     list_user_library,
     save_user_media,
     save_user_series_progress,
@@ -514,20 +516,51 @@ async def _start_series_tracking(callback: CallbackQuery, state: FSMContext) -> 
         if s.episode_count > 0
     ]
 
+    try:
+        media_id = data.get("media_id")
+        if media_id is None:
+            existing_media = await get_media_by_tmdb(
+                tmdb_id,
+                "series",
+                data.get("content_type", "movie"),
+            )
+            if existing_media is not None:
+                media_id = int(existing_media["id"])
+
+        progress_rows = (
+            await get_user_season_progress(callback.from_user.id, media_id)
+            if media_id is not None
+            else []
+        )
+    except aiosqlite.Error:
+        await callback.message.answer(
+            "Не удалось загрузить сохранённый прогресс. Попробуй позже.",
+            reply_markup=main_menu_keyboard(),
+        )
+        await state.set_state(MenuState.choosing_action)
+        return
+
+    watched_by_season = {
+        int(row["season_number"]): int(row["episodes_watched"])
+        for row in progress_rows
+    }
+    episodes_watched_total = sum(watched_by_season.values())
+
     await state.update_data(
+        media_id=media_id,
         tv_details=details,
         seasons_data=seasons_data,
         total_seasons=details.number_of_seasons,
         total_episodes=details.number_of_episodes,
-        watched_by_season={},
+        watched_by_season=watched_by_season,
         current_season=None,
-        episodes_watched_total=0,
+        episodes_watched_total=episodes_watched_total,
     )
 
     await callback.message.answer(
         series_tracking_text(title, seasons_data),
         parse_mode="HTML",
-        reply_markup=season_list_keyboard(seasons_data, {}),
+        reply_markup=season_list_keyboard(seasons_data, watched_by_season),
     )
     await state.set_state(MenuState.tracking_series)
 
