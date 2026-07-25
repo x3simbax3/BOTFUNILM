@@ -654,6 +654,10 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "content_type": "movie",
                 "total_seasons": 2,
                 "total_episodes": 10,
+                "seasons_data": [
+                    {"season_number": 1, "name": "Сезон 1", "episode_count": 8},
+                    {"season_number": 2, "name": "Сезон 2", "episode_count": 2},
+                ],
                 "watched_by_season": {1: 8, 2: 2},
                 "episodes_watched_total": 10,
                 "rating_average": 8.6,
@@ -693,6 +697,52 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_episode_selection_rejects_stale_season_callback(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("ep:1:5", message)
+        state = StateStub(
+            {
+                "current_season": 2,
+                "total_episodes": 10,
+                "seasons_data": [
+                    {"season_number": 1, "name": "Сезон 1", "episode_count": 8},
+                    {"season_number": 2, "name": "Сезон 2", "episode_count": 2},
+                ],
+                "watched_by_season": {1: 3},
+            }
+        )
+
+        await start.handle_episode_selection(callback, state)
+
+        self.assertEqual(state.data["watched_by_season"], {1: 3})
+        self.assertEqual(
+            callback.answers,
+            [{"text": "Некорректный переход прогресса", "show_alert": True}],
+        )
+        self.assertEqual(message.edit_text_calls, [])
+
+    async def test_episode_selection_rejects_count_above_season_limit(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("ep:1:9", message)
+        state = StateStub(
+            {
+                "current_season": 1,
+                "total_episodes": 8,
+                "seasons_data": [
+                    {"season_number": 1, "name": "Сезон 1", "episode_count": 8},
+                ],
+                "watched_by_season": {},
+            }
+        )
+
+        await start.handle_episode_selection(callback, state)
+
+        self.assertEqual(state.data["watched_by_season"], {})
+        self.assertEqual(
+            callback.answers,
+            [{"text": "Некорректный переход прогресса", "show_alert": True}],
+        )
 
 
 if __name__ == "__main__":

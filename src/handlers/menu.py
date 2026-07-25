@@ -5,6 +5,11 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.callback_data import (
+    parse_back_callback,
+    parse_format_callback,
+    parse_type_callback,
+)
 from src.fsm import MenuState
 from src.handlers.common import replace_message
 from src.handlers.library import media_id_from_start, show_library_item
@@ -71,7 +76,7 @@ async def choose_action(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
 
-    action = callback.data.split(":")[1]
+    action = "add"
     await state.update_data(action=action)
     await state.set_state(MenuState.choosing_format)
     await callback.message.edit_text(
@@ -87,7 +92,11 @@ async def choose_format(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
 
-    _, action, content_format = callback.data.split(":")
+    parsed = parse_format_callback(callback.data)
+    if parsed is None:
+        await callback.answer("Некорректный выбор", show_alert=True)
+        return
+    action, content_format = parsed.action, parsed.content_format
     await state.update_data(action=action, content_format=content_format)
     await state.set_state(MenuState.choosing_content_type)
     await callback.message.edit_text(
@@ -103,7 +112,13 @@ async def choose_content_type(callback: CallbackQuery, state: FSMContext) -> Non
     if not callback.data or not callback.message:
         return
 
-    _, action, content_format, content_type = callback.data.split(":")
+    parsed = parse_type_callback(callback.data)
+    if parsed is None:
+        await callback.answer("Некорректный выбор", show_alert=True)
+        return
+    action = parsed.action
+    content_format = parsed.content_format
+    content_type = parsed.content_type
     await state.update_data(
         action=action,
         content_format=content_format,
@@ -133,7 +148,11 @@ async def go_back(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
 
-    _, target_step, *params = callback.data.split(":")
+    parsed = parse_back_callback(callback.data)
+    if parsed is None:
+        await callback.answer("Неизвестный шаг", show_alert=True)
+        return
+    target_step, params = parsed.target_step, parsed.params
     step = MENU_TREE.get(target_step)
     if not step:
         await callback.answer("Неизвестный шаг", show_alert=True)

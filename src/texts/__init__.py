@@ -2,6 +2,10 @@ from html import escape
 
 BOT_NAME = "BotFunilm"
 
+UNEXPECTED_ERROR_TEXT = (
+    "Что-то пошло не так. Попробуй повторить действие чуть позже."
+)
+
 START_TEXT = f"""<b>{BOT_NAME} 🍿</b>
 
 <blockquote>Твоя личная коллекция фильмов, сериалов, аниме и мультфильмов.</blockquote>
@@ -207,7 +211,7 @@ def series_tracking_text(title: str, seasons: list[dict]) -> str:
 
 
 def episodes_prompt_text(title: str, season_name: str, total_episodes: int, already_watched: int) -> str:
-    remaining = total_episodes - already_watched
+    remaining = _remaining_episodes(total_episodes, already_watched)
     return (
         f"<b>{escape(title)}</b>\n"
         f"<blockquote>{escape(season_name)}</blockquote>\n"
@@ -223,7 +227,7 @@ def tracking_complete_text(
     watched_episodes: int,
     average: float,
 ) -> str:
-    remaining = total_episodes - watched_episodes
+    remaining = _remaining_episodes(total_episodes, watched_episodes)
     status = "досмотрен" if remaining == 0 else f"осталось {remaining} серий"
     return (
         "<b>Прогресс сохранён ✅</b>\n\n"
@@ -233,6 +237,17 @@ def tracking_complete_text(
         f"⭐ Оценка: <b>{average:.1f}/10</b>\n"
         f"📅 {_today()}"
     )
+
+
+def _remaining_episodes(total_episodes: int, watched_episodes: int) -> int:
+    if (
+        type(total_episodes) is not int
+        or type(watched_episodes) is not int
+        or total_episodes < 0
+        or not 0 <= watched_episodes <= total_episodes
+    ):
+        raise ValueError("Episode progress must stay between zero and the total")
+    return total_episodes - watched_episodes
 
 
 def movie_watched_text(title: str, average: float) -> str:
@@ -260,6 +275,7 @@ __all__ = (
     "START_TEXT",
     "TMDB_SEARCHING",
     "TMDB_TOO_LONG",
+    "UNEXPECTED_ERROR_TEXT",
     "action_text",
     "content_type_text",
     "episodes_prompt_text",

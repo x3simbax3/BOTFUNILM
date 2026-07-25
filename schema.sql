@@ -58,6 +58,10 @@ CREATE TABLE user_season_progress (
 CREATE INDEX ix_user_season_progress_media_id
     ON user_season_progress (media_id);
 
+-- Series progress triggers are installed by
+-- migrations/20260725130000_validate_series_progress.sql. Atlas Community
+-- cannot currently represent SQLite triggers in a declarative schema.
+
 CREATE TABLE user_library_filters (
     user_id             INTEGER,
     full_length         INTEGER NOT NULL DEFAULT 1 CHECK (full_length IN (0, 1)),

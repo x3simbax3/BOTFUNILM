@@ -7,6 +7,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from src.callback_data import parse_rating_callback
 from src.database.user_media import save_user_media
 from src.fsm import MenuState
 from src.handlers.series import start_series_tracking
@@ -28,7 +29,7 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return
 
-    score = _rating_from_callback(callback.data)
+    score = parse_rating_callback(callback.data)
     if score is None:
         await callback.answer("Некорректная оценка", show_alert=True)
         return
@@ -73,14 +74,6 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
             await finish_movie(callback, state, average)
 
     await callback.answer()
-
-
-def _rating_from_callback(callback_data: str) -> int | None:
-    try:
-        score = int(callback_data.split(":")[1])
-    except (IndexError, ValueError):
-        return None
-    return score if 1 <= score <= 10 else None
 
 
 async def finish_movie(

@@ -5,6 +5,10 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.callback_data import (
+    parse_library_filter_callback,
+    parse_library_page_callback,
+)
 from src.database.library import (
     get_user_library_filters,
     get_user_library_item,
@@ -37,7 +41,10 @@ async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> N
     if not callback.data or not callback.message:
         return
 
-    filter_name = callback.data.removeprefix("library:filter:")
+    filter_name = parse_library_filter_callback(callback.data)
+    if filter_name is None:
+        await callback.answer("Неизвестный фильтр", show_alert=True)
+        return
     try:
         await update_user_library_filter(callback.from_user.id, filter_name)
     except ValueError:
@@ -55,12 +62,8 @@ async def change_library_page(callback: CallbackQuery, state: FSMContext) -> Non
     if not callback.data or not callback.message:
         return
 
-    try:
-        page = int(callback.data.removeprefix("library:page:"))
-    except ValueError:
-        await callback.answer("Некорректная страница", show_alert=True)
-        return
-    if not 0 <= page <= 100_000:
+    page = parse_library_page_callback(callback.data)
+    if page is None:
         await callback.answer("Некорректная страница", show_alert=True)
         return
 

@@ -58,6 +58,13 @@ class TextsTests(unittest.TestCase):
             result,
         )
 
+    def test_series_text_rejects_progress_above_total(self) -> None:
+        with self.assertRaises(ValueError):
+            texts.tracking_complete_text("Series", 10, 11, 8.0)
+
+        with self.assertRaises(ValueError):
+            texts.episodes_prompt_text("Series", "Season 1", 10, -1)
+
 
 if __name__ == "__main__":
     unittest.main()

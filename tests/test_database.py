@@ -404,6 +404,87 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["status"], "completed")
         self.assertEqual(row["user_rating"], 9)
 
+    async def test_series_progress_rejects_invalid_values_before_writing(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="TV",
+            database_url=self.database_url,
+        )
+        invalid_progress = (
+            ({-1: 1}, 10),
+            ({1: -1}, 10),
+            ({1: 11}, 10),
+        )
+
+        for seasons, total in invalid_progress:
+            with self.subTest(seasons=seasons):
+                with self.assertRaises(ValueError):
+                    await save_user_series_progress(
+                        user_id=123,
+                        media_id=media_id,
+                        seasons=seasons,
+                        total_episodes=total,
+                        database_url=self.database_url,
+                    )
+
+        self.assertEqual(
+            await get_user_season_progress(
+                123,
+                media_id,
+                database_url=self.database_url,
+            ),
+            [],
+        )
+
+    async def test_database_trigger_rejects_aggregate_above_series_total(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="TV",
+            number_of_seasons=2,
+            number_of_episodes=10,
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="watching",
+            episodes_watched=0,
+            database_url=self.database_url,
+        )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            async with connection_scope(self.database_url) as connection:
+                await connection.execute(
+                    """
+                    INSERT INTO user_season_progress (
+                        user_id, media_id, season_number, episodes_watched
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (123, media_id, 1, 11),
+                )
+
+    async def test_series_progress_cannot_be_saved_for_movie(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="full_length",
+            content_type="movie",
+            title="Movie",
+            database_url=self.database_url,
+        )
+
+        with self.assertRaises(ValueError):
+            await save_user_series_progress(
+                user_id=123,
+                media_id=media_id,
+                seasons={1: 1},
+                total_episodes=10,
+                database_url=self.database_url,
+            )
+
     async def test_transaction_rolls_back_on_error(self) -> None:
         with self.assertRaises(RuntimeError):
             async with connection_scope(self.database_url) as connection:

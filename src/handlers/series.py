@@ -7,6 +7,11 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from src.callback_data import (
+    EpisodeCallback,
+    parse_episode_callback,
+    parse_season_callback,
+)
 from src.database.media import get_media_by_tmdb
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.fsm import MenuState
@@ -15,7 +20,13 @@ from src.keyboards import (
     main_menu_keyboard,
     season_list_keyboard,
 )
-from src.services import ensure_media
+from src.services import (
+    SeriesProgressError,
+    apply_episode_selection,
+    ensure_media,
+    season_episode_limits,
+    validate_series_progress,
+)
 from src.texts import (
     episodes_prompt_text,
     series_tracking_text,
@@ -67,16 +78,27 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         )
         return
 
-    watched = {
-        int(row["season_number"]): int(row["episodes_watched"])
-        for row in progress_rows
-    }
+    try:
+        watched = {
+            int(row["season_number"]): int(row["episodes_watched"])
+            for row in progress_rows
+        }
+        total_episodes = sum(season_episode_limits(seasons_data).values())
+        watched = validate_series_progress(watched, seasons_data, total_episodes)
+    except SeriesProgressError:
+        await _leave_tracking(
+            callback,
+            state,
+            "Сохранённый прогресс сериала некорректен. Попробуй позже.",
+        )
+        return
+
     await state.update_data(
         media_id=media_id,
         tv_details=details,
         seasons_data=seasons_data,
         total_seasons=details.number_of_seasons,
-        total_episodes=details.number_of_episodes,
+        total_episodes=total_episodes,
         watched_by_season=watched,
         current_season=None,
         episodes_watched_total=sum(watched.values()),
@@ -116,13 +138,16 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
     if not callback.data or not callback.message:
         return
 
-    value = callback.data.split(":")[1]
-    if value == "done":
+    selection = parse_season_callback(callback.data)
+    if selection is None:
+        await callback.answer("Некорректный сезон", show_alert=True)
+        return
+    if selection == "done":
         await finish_series_tracking(callback, state)
         return
 
     data = await state.get_data()
-    season_number = int(value)
+    season_number = selection
     season_info = next(
         (
             season
@@ -155,18 +180,33 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
     if not callback.data or not callback.message:
         return
 
-    parts = callback.data.split(":")
-    if parts[1] == "done":
+    selection = parse_episode_callback(callback.data)
+    if selection is None:
+        await callback.answer("Некорректный эпизод", show_alert=True)
+        return
+    if selection == "done":
         await finish_series_tracking(callback, state)
         return
 
     data = await state.get_data()
-    season_number = int(parts[1])
-    watched = data.get("watched_by_season", {})
-    watched[season_number] = int(parts[2])
+    assert isinstance(selection, EpisodeCallback)
+    season_number = selection.season_number
+    try:
+        watched = apply_episode_selection(
+            data.get("watched_by_season", {}),
+            data.get("seasons_data", []),
+            data.get("total_episodes", 0),
+            current_season=data.get("current_season"),
+            season_number=season_number,
+            episodes_watched=selection.episodes_watched,
+        )
+    except SeriesProgressError:
+        await callback.answer("Некорректный переход прогресса", show_alert=True)
+        return
     await state.update_data(
         watched_by_season=watched,
         episodes_watched_total=sum(watched.values()),
+        current_season=None,
     )
     seasons_data = data.get("seasons_data", [])
     await callback.message.edit_text(
@@ -187,8 +227,21 @@ async def finish_series_tracking(
     data = await state.get_data()
     title = data.get("tmdb_title", "")
     total = data.get("total_episodes", 0)
-    watched_total = data.get("episodes_watched_total", 0)
     average = data.get("rating_average", 0)
+    try:
+        watched = validate_series_progress(
+            data.get("watched_by_season", {}),
+            data.get("seasons_data", []),
+            total,
+        )
+    except SeriesProgressError:
+        await callback.answer(
+            "Некорректный прогресс сериала. Выбери эпизоды заново.",
+            show_alert=True,
+        )
+        return
+
+    watched_total = sum(watched.values())
     try:
         media_id = await ensure_media(
             data,
@@ -199,11 +252,11 @@ async def finish_series_tracking(
         await save_user_series_progress(
             user_id=callback.from_user.id,
             media_id=media_id,
-            seasons=data.get("watched_by_season", {}),
+            seasons=watched,
             total_episodes=total,
             user_rating=round(average) if average else None,
         )
-    except (aiosqlite.Error, RuntimeError):
+    except (aiosqlite.Error, RuntimeError, ValueError):
         await callback.answer(
             "Не удалось сохранить прогресс. Попробуй ещё раз.",
             show_alert=True,
