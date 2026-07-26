@@ -27,7 +27,17 @@ from src.services import (
     season_episode_limits,
     validate_series_progress,
 )
-from src.texts import (
+from src.lang import (
+    DETAILS_LOAD_FAILED,
+    DONE,
+    INVALID_EPISODE,
+    INVALID_PROGRESS,
+    INVALID_PROGRESS_TRANSITION,
+    INVALID_SEASON,
+    PROGRESS_LOAD_FAILED,
+    PROGRESS_SAVE_FAILED,
+    SAVED_PROGRESS_INVALID,
+    SEASON_NOT_FOUND,
     episodes_prompt_text,
     series_tracking_text,
     tracking_complete_text,
@@ -49,7 +59,7 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         await _leave_tracking(
             callback,
             state,
-            "Не удалось получить информацию о сериале. Попробуй позже.",
+            DETAILS_LOAD_FAILED,
         )
         return
 
@@ -74,7 +84,7 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         await _leave_tracking(
             callback,
             state,
-            "Не удалось загрузить сохранённый прогресс. Попробуй позже.",
+            PROGRESS_LOAD_FAILED,
         )
         return
 
@@ -89,7 +99,7 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         await _leave_tracking(
             callback,
             state,
-            "Сохранённый прогресс сериала некорректен. Попробуй позже.",
+            SAVED_PROGRESS_INVALID,
         )
         return
 
@@ -140,7 +150,7 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
 
     selection = parse_season_callback(callback.data)
     if selection is None:
-        await callback.answer("Некорректный сезон", show_alert=True)
+        await callback.answer(INVALID_SEASON, show_alert=True)
         return
     if selection == "done":
         await finish_series_tracking(callback, state)
@@ -157,7 +167,7 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
         None,
     )
     if not season_info:
-        await callback.answer("Сезон не найден")
+        await callback.answer(SEASON_NOT_FOUND)
         return
 
     watched = data.get("watched_by_season", {})
@@ -182,7 +192,7 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
 
     selection = parse_episode_callback(callback.data)
     if selection is None:
-        await callback.answer("Некорректный эпизод", show_alert=True)
+        await callback.answer(INVALID_EPISODE, show_alert=True)
         return
     if selection == "done":
         await finish_series_tracking(callback, state)
@@ -201,7 +211,7 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
             episodes_watched=selection.episodes_watched,
         )
     except SeriesProgressError:
-        await callback.answer("Некорректный переход прогресса", show_alert=True)
+        await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
         return
     await state.update_data(
         watched_by_season=watched,
@@ -236,7 +246,7 @@ async def finish_series_tracking(
         )
     except SeriesProgressError:
         await callback.answer(
-            "Некорректный прогресс сериала. Выбери эпизоды заново.",
+            INVALID_PROGRESS,
             show_alert=True,
         )
         return
@@ -258,7 +268,7 @@ async def finish_series_tracking(
         )
     except (aiosqlite.Error, RuntimeError, ValueError):
         await callback.answer(
-            "Не удалось сохранить прогресс. Попробуй ещё раз.",
+            PROGRESS_SAVE_FAILED,
             show_alert=True,
         )
         return
@@ -268,6 +278,6 @@ async def finish_series_tracking(
         tracking_complete_text(title, total, watched_total, average),
         parse_mode="HTML",
     )
-    await callback.message.answer("Готово!", reply_markup=main_menu_keyboard())
+    await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
     await state.set_state(MenuState.choosing_action)
     await callback.answer()

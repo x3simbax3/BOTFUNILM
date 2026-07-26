@@ -19,7 +19,17 @@ from src.keyboards import (
     main_menu_keyboard,
     selected_type_keyboard,
 )
-from src.texts import START_TEXT, action_text, content_type_text, selected_type_text
+from src.lang import (
+    BACK_FAILED,
+    ENTER_TITLE_AGAIN,
+    INVALID_SELECTION,
+    SELECTION_SAVED,
+    START_TEXT,
+    UNKNOWN_STEP,
+    action_text,
+    content_type_text,
+    selected_type_text,
+)
 
 
 router = Router(name="menu")
@@ -94,7 +104,7 @@ async def choose_format(callback: CallbackQuery, state: FSMContext) -> None:
 
     parsed = parse_format_callback(callback.data)
     if parsed is None:
-        await callback.answer("Некорректный выбор", show_alert=True)
+        await callback.answer(INVALID_SELECTION, show_alert=True)
         return
     action, content_format = parsed.action, parsed.content_format
     await state.update_data(action=action, content_format=content_format)
@@ -114,7 +124,7 @@ async def choose_content_type(callback: CallbackQuery, state: FSMContext) -> Non
 
     parsed = parse_type_callback(callback.data)
     if parsed is None:
-        await callback.answer("Некорректный выбор", show_alert=True)
+        await callback.answer(INVALID_SELECTION, show_alert=True)
         return
     action = parsed.action
     content_format = parsed.content_format
@@ -130,7 +140,7 @@ async def choose_content_type(callback: CallbackQuery, state: FSMContext) -> Non
         parse_mode="HTML",
         reply_markup=selected_type_keyboard(action, content_format),
     )
-    await callback.answer("Выбор сохранен")
+    await callback.answer(SELECTION_SAVED)
 
 
 @router.callback_query(MenuState.choosing_tmdb_retry, F.data == "title:retry")
@@ -139,7 +149,7 @@ async def retry_title(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     await state.set_state(MenuState.waiting_title)
-    await replace_message(callback.message, "Введи название ещё раз.")
+    await replace_message(callback.message, ENTER_TITLE_AGAIN)
     await callback.answer()
 
 
@@ -150,19 +160,19 @@ async def go_back(callback: CallbackQuery, state: FSMContext) -> None:
 
     parsed = parse_back_callback(callback.data)
     if parsed is None:
-        await callback.answer("Неизвестный шаг", show_alert=True)
+        await callback.answer(UNKNOWN_STEP, show_alert=True)
         return
     target_step, params = parsed.target_step, parsed.params
     step = MENU_TREE.get(target_step)
     if not step:
-        await callback.answer("Неизвестный шаг", show_alert=True)
+        await callback.answer(UNKNOWN_STEP, show_alert=True)
         return
 
     data = await state.get_data()
     data.update(zip(step["param_fields"], params))
     clear_step_data(data, target_step)
     if any(not data.get(field) for field in step["required_fields"]):
-        await callback.answer("Не удалось вернуться назад", show_alert=True)
+        await callback.answer(BACK_FAILED, show_alert=True)
         return
 
     await state.set_data(data)

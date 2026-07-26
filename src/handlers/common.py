@@ -3,7 +3,7 @@
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.texts import tmdb_guess_text
+from src.lang import DESCRIPTION_NOT_FOUND, tmdb_guess_text
 
 
 PHOTO_CAPTION_LIMIT = 1024
@@ -65,7 +65,7 @@ def tmdb_guess_caption(
     title: str,
     overview: str | None,
 ) -> str:
-    description = overview or "Описание не найдено."
+    description = overview or DESCRIPTION_NOT_FOUND
     caption_without_description = tmdb_guess_text(content_format, title, "")
     description_limit = PHOTO_CAPTION_LIMIT - len(caption_without_description)
     return tmdb_guess_text(

@@ -13,7 +13,10 @@ from src.fsm import MenuState
 from src.handlers.series import start_series_tracking
 from src.keyboards import main_menu_keyboard, rating_keyboard
 from src.services import ensure_media
-from src.texts import (
+from src.lang import (
+    INVALID_RATING,
+    MOVIE_SAVE_FAILED,
+    RATING_ALREADY_SAVED,
     movie_watched_text,
     rating_categories,
     rating_prompt_text,
@@ -31,7 +34,7 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
 
     score = parse_rating_callback(callback.data)
     if score is None:
-        await callback.answer("Некорректная оценка", show_alert=True)
+        await callback.answer(INVALID_RATING, show_alert=True)
         return
 
     data = await state.get_data()
@@ -39,7 +42,7 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
     rating_index = data.get("rating_index", 0)
     categories = rating_categories(data.get("content_type", "movie"))
     if not 0 <= rating_index < len(categories):
-        await callback.answer("Эта оценка уже сохранена")
+        await callback.answer(RATING_ALREADY_SAVED)
         return
 
     ratings[categories[rating_index][0]] = score
@@ -92,7 +95,7 @@ async def finish_movie(
         )
     except (aiosqlite.Error, RuntimeError):
         await callback.answer(
-            "Не удалось сохранить фильм. Попробуй ещё раз.",
+            MOVIE_SAVE_FAILED,
             show_alert=True,
         )
         return

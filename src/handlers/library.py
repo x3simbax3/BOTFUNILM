@@ -23,7 +23,17 @@ from src.keyboards import (
     main_menu_keyboard,
 )
 from src.posters import poster_input
-from src.texts import library_item_text, library_text
+from src.lang import (
+    DESCRIPTION_NOT_FOUND,
+    FILTER_SAVE_FAILED,
+    INVALID_PAGE,
+    ITEM_NOT_FOUND,
+    ITEM_OPEN_FAILED,
+    LIBRARY_OPEN_FAILED,
+    UNKNOWN_FILTER,
+    library_item_text,
+    library_text,
+)
 
 
 router = Router(name="library")
@@ -43,15 +53,15 @@ async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> N
 
     filter_name = parse_library_filter_callback(callback.data)
     if filter_name is None:
-        await callback.answer("Неизвестный фильтр", show_alert=True)
+        await callback.answer(UNKNOWN_FILTER, show_alert=True)
         return
     try:
         await update_user_library_filter(callback.from_user.id, filter_name)
     except ValueError:
-        await callback.answer("Неизвестный фильтр", show_alert=True)
+        await callback.answer(UNKNOWN_FILTER, show_alert=True)
         return
     except (aiosqlite.Error, RuntimeError):
-        await callback.answer("Не удалось сохранить фильтр", show_alert=True)
+        await callback.answer(FILTER_SAVE_FAILED, show_alert=True)
         return
 
     await open_library_page(callback, state, 0)
@@ -64,7 +74,7 @@ async def change_library_page(callback: CallbackQuery, state: FSMContext) -> Non
 
     page = parse_library_page_callback(callback.data)
     if page is None:
-        await callback.answer("Некорректная страница", show_alert=True)
+        await callback.answer(INVALID_PAGE, show_alert=True)
         return
 
     await open_library_page(callback, state, page)
@@ -99,7 +109,7 @@ async def open_library_page(
         if not bot_user.username:
             raise RuntimeError("Bot username is unavailable")
     except (aiosqlite.Error, RuntimeError):
-        await callback.answer("Не удалось открыть библиотеку", show_alert=True)
+        await callback.answer(LIBRARY_OPEN_FAILED, show_alert=True)
         return
 
     visible_items = items[:LIBRARY_PAGE_SIZE]
@@ -127,11 +137,11 @@ async def show_library_item(
     try:
         item = await get_user_library_item(user_id, media_id)
     except aiosqlite.Error:
-        await _show_library_error(message, state, "Не удалось открыть тайтл. Попробуй ещё раз.")
+        await _show_library_error(message, state, ITEM_OPEN_FAILED)
         return
 
     if item is None:
-        await _show_library_error(message, state, "Тайтл не найден в твоей библиотеке.")
+        await _show_library_error(message, state, ITEM_NOT_FOUND)
         return
 
     text = library_item_caption(item)
@@ -172,7 +182,7 @@ def library_item_caption(item) -> str:
     if len(text) <= PHOTO_CAPTION_LIMIT:
         return text
 
-    description = item["description"] or "Описание не найдено."
+    description = item["description"] or DESCRIPTION_NOT_FOUND
     low, high = 0, len(description)
     best = library_item_text(item, CAPTION_ELLIPSIS)
     while low <= high:

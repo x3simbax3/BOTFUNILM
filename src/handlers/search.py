@@ -10,9 +10,21 @@ from src.fsm import MenuState
 from src.handlers.common import is_active_tmdb_guess, tmdb_guess_caption
 from src.keyboards import rating_keyboard, tmdb_guess_keyboard, tmdb_retry_keyboard
 from src.posters import download_poster, poster_input
-from src.texts import (
+from src.lang import (
+    FORMAT_MISSING,
+    LOCAL_SEARCH_FAILED,
+    REJECTED_GUESS,
+    STALE_GUESS,
+    TITLE_AS_TEXT,
+    TITLE_EMPTY,
+    TMDB_AUTH_FAILED,
+    TMDB_FAILED,
+    TMDB_NOT_CONFIGURED,
+    TMDB_RATE_LIMITED,
     TMDB_SEARCHING,
+    TMDB_SEARCHING_REMOTE,
     TMDB_TOO_LONG,
+    TMDB_UNAVAILABLE,
     rating_categories,
     rating_prompt_text,
     tmdb_found_text,
@@ -39,9 +51,9 @@ async def search_title(message: Message, state: FSMContext) -> None:
     title_query = _valid_title_query(message.text)
     if title_query is None:
         await message.answer(
-            "Введи название текстом."
+            TITLE_AS_TEXT
             if message.text is None
-            else "Название не может быть пустым. Введи название ещё раз."
+            else TITLE_EMPTY
         )
         return
     if len(title_query) > 342:
@@ -51,7 +63,7 @@ async def search_title(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     content_format = data.get("content_format")
     if not content_format:
-        await message.answer("Не найден выбранный формат. Начни заново через /start.")
+        await message.answer(FORMAT_MISSING)
         return
 
     status_msg = await message.answer(TMDB_SEARCHING, parse_mode="HTML")
@@ -64,7 +76,7 @@ async def search_title(message: Message, state: FSMContext) -> None:
             content_type,
         )
         if local_media is None:
-            await status_msg.edit_text("🔍 В каталоге не найдено, ищу в TMDB...")
+            await status_msg.edit_text(TMDB_SEARCHING_REMOTE)
             guess = await find_title_guess(title_query, content_format, content_type)
         else:
             guess = await _title_from_local_media(
@@ -73,9 +85,7 @@ async def search_title(message: Message, state: FSMContext) -> None:
                 content_format,
             )
     except aiosqlite.Error:
-        await status_msg.edit_text(
-            "Не удалось проверить локальный каталог. Попробуй ещё раз."
-        )
+        await status_msg.edit_text(LOCAL_SEARCH_FAILED)
         return
     except (ValueError, TmdbError) as exc:
         text, parse_mode = _search_error(exc, title_query)
@@ -156,7 +166,7 @@ async def _show_guess(
 @router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:yes")
 async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
     if not await is_active_tmdb_guess(callback, state):
-        await callback.answer("Это старый вариант.")
+        await callback.answer(STALE_GUESS)
         return
 
     await callback.answer()
@@ -176,14 +186,14 @@ async def reject_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         return
     if not await is_active_tmdb_guess(callback, state):
-        await callback.answer("Это старый вариант.")
+        await callback.answer(STALE_GUESS)
         return
 
     await state.set_state(MenuState.choosing_tmdb_retry)
     await state.update_data(tmdb_guess_message_id=None)
     data = await state.get_data()
     await callback.message.answer(
-        "Ок, не оно. Что сделать?",
+        REJECTED_GUESS,
         reply_markup=tmdb_retry_keyboard(
             data.get("action"),
             data.get("content_format"),
@@ -200,15 +210,15 @@ def _valid_title_query(text: str | None) -> str | None:
 
 def _search_error(error: Exception, query: str) -> tuple[str, str | None]:
     if isinstance(error, ValueError):
-        return "Название не может быть пустым. Введи название ещё раз.", None
+        return TITLE_EMPTY, None
     if isinstance(error, TmdbNotConfiguredError):
-        return "TMDB_API не настроен. Добавь ключ в config/.env.", None
+        return TMDB_NOT_CONFIGURED, None
     if isinstance(error, TmdbAuthenticationError):
-        return "TMDB отклонил ключ доступа. Проверь настройку TMDB_API.", None
+        return TMDB_AUTH_FAILED, None
     if isinstance(error, TmdbRateLimitError):
-        return "TMDB временно ограничил запросы. Попробуй через минуту.", None
+        return TMDB_RATE_LIMITED, None
     if isinstance(error, TmdbUnavailableError):
-        return "TMDB сейчас недоступен. Попробуй немного позже.", None
+        return TMDB_UNAVAILABLE, None
     if isinstance(error, TmdbNotFoundError):
         return tmdb_not_found_text(query), "HTML"
-    return "Не удалось получить ответ от TMDB. Попробуй позже.", None
+    return TMDB_FAILED, None

@@ -1,12 +1,17 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from src.lang import get_locale
+
+
+text = get_locale().keyboards
+
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📚 Библиотека", callback_data="menu:library"),
-                InlineKeyboardButton(text="➕ Добавить", callback_data="menu:add"),
+                InlineKeyboardButton(text=text.MAIN_LIBRARY, callback_data="menu:library"),
+                InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add"),
             ],
         ],
     )
@@ -17,38 +22,41 @@ def library_keyboard(
     page: int,
     has_more: bool,
 ) -> InlineKeyboardMarkup:
-    def label(text: str, name: str) -> str:
-        return f"✅ {text}" if filters.get(name) else text
-
     all_selected = all(filters.values())
     rows = [
         [
             InlineKeyboardButton(
-                text=label("Сериалы", "series"),
+                text=text.selected(text.FILTER_SERIES, filters.get("series", False)),
                 callback_data="library:filter:series",
             ),
             InlineKeyboardButton(
-                text=label("Полный метр", "full_length"),
+                text=text.selected(
+                    text.FILTER_FULL_LENGTH,
+                    filters.get("full_length", False),
+                ),
                 callback_data="library:filter:full_length",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=label("Аниме", "anime"),
+                text=text.selected(text.FILTER_ANIME, filters.get("anime", False)),
                 callback_data="library:filter:anime",
             ),
             InlineKeyboardButton(
-                text=label("Фильмы", "movie"),
+                text=text.selected(text.FILTER_MOVIES, filters.get("movie", False)),
                 callback_data="library:filter:movie",
             ),
             InlineKeyboardButton(
-                text=label("Мультфильмы", "cartoon"),
+                text=text.selected(
+                    text.FILTER_CARTOONS,
+                    filters.get("cartoon", False),
+                ),
                 callback_data="library:filter:cartoon",
             ),
         ],
         [
             InlineKeyboardButton(
-                text="✅ Все" if all_selected else "Все",
+                text=text.selected(text.FILTER_ALL, all_selected),
                 callback_data="library:filter:all",
             ),
         ],
@@ -58,28 +66,33 @@ def library_keyboard(
     if page > 0:
         pagination.append(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text=text.BACK,
                 callback_data=f"library:page:{page - 1}",
             )
         )
     if has_more:
         pagination.append(
             InlineKeyboardButton(
-                text="Ещё ➡️",
+                text=text.MORE,
                 callback_data=f"library:page:{page + 1}",
             )
         )
     if pagination:
         rows.append(pagination)
 
-    rows.append([InlineKeyboardButton(text="🏠 В меню", callback_data="back:main")])
+    rows.append([InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def library_item_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К библиотеке", callback_data="library:back")],
+            [
+                InlineKeyboardButton(
+                    text=text.TO_LIBRARY,
+                    callback_data="library:back",
+                )
+            ],
         ],
     )
 
@@ -89,15 +102,15 @@ def format_keyboard(action: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎬 Полный метр",
+                    text=text.FORMAT_FULL_LENGTH,
                     callback_data=f"format:{action}:full_length",
                 ),
                 InlineKeyboardButton(
-                    text="📺 Сериалы",
+                    text=text.FORMAT_SERIES,
                     callback_data=f"format:{action}:series",
                 ),
             ],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main")],
+            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
         ],
     )
 
@@ -107,23 +120,28 @@ def content_type_keyboard(action: str, content_format: str) -> InlineKeyboardMar
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎥 Фильм",
+                    text=text.TYPE_MOVIE,
                     callback_data=f"type:{action}:{content_format}:movie",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="✨ Аниме",
+                    text=text.TYPE_ANIME,
                     callback_data=f"type:{action}:{content_format}:anime",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🧸 Мультфильм",
+                    text=text.TYPE_CARTOON,
                     callback_data=f"type:{action}:{content_format}:cartoon",
                 ),
             ],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back:format:{action}")],
+            [
+                InlineKeyboardButton(
+                    text=text.BACK,
+                    callback_data=f"back:format:{action}",
+                )
+            ],
         ],
     )
 
@@ -133,7 +151,7 @@ def selected_type_keyboard(action: str, content_format: str) -> InlineKeyboardMa
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад",
+                    text=text.BACK,
                     callback_data=f"back:content_type:{action}:{content_format}",
                 ),
             ],
@@ -145,8 +163,11 @@ def tmdb_guess_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Да, это он", callback_data="tmdb_guess:yes"),
-                InlineKeyboardButton(text="❌ Нет", callback_data="tmdb_guess:no"),
+                InlineKeyboardButton(
+                    text=text.GUESS_YES,
+                    callback_data="tmdb_guess:yes",
+                ),
+                InlineKeyboardButton(text=text.GUESS_NO, callback_data="tmdb_guess:no"),
             ],
         ],
     )
@@ -166,13 +187,13 @@ def tmdb_retry_keyboard(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔎 Другое название",
+                    text=text.ANOTHER_TITLE,
                     callback_data="title:retry",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🔁 Другая категория",
+                    text=text.ANOTHER_CATEGORY,
                     callback_data=back_callback,
                 ),
             ],
@@ -181,7 +202,7 @@ def tmdb_retry_keyboard(
 
 
 def rating_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для оценки от 1 до 10 по одной категории."""
+    """Build a keyboard for rating one category from 1 to 10."""
     buttons = [
         InlineKeyboardButton(text=str(n), callback_data=f"rate:{n}")
         for n in range(1, 11)
@@ -198,7 +219,7 @@ def episodes_keyboard(
     total_episodes: int,
     season_number: int,
 ) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора количества просмотренных серий в сезоне."""
+    """Build a keyboard for selecting watched episodes in a season."""
     buttons: list[list[InlineKeyboardButton]] = []
     for i in range(0, total_episodes, 5):
         row = [
@@ -213,7 +234,7 @@ def episodes_keyboard(
         InlineKeyboardButton(text="0", callback_data=f"ep:{season_number}:0"),
     ])
     buttons.append([
-        InlineKeyboardButton(text="✅ Сохранить", callback_data="ep:done"),
+        InlineKeyboardButton(text=text.SAVE, callback_data="ep:done"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -222,22 +243,22 @@ def season_list_keyboard(
     seasons: list[dict],
     watched: dict[int, int],
 ) -> InlineKeyboardMarkup:
-    """Клавиатура со списком сезонов для выбора."""
+    """Build a keyboard containing seasons and their progress."""
     buttons: list[list[InlineKeyboardButton]] = []
     for s in seasons:
         num = s["season_number"]
         name = s["name"]
         ep_count = s["episode_count"]
         done = watched.get(num, 0)
-        text = f"{name}  ·  {done}/{ep_count}"
+        button_text = text.season_progress(name, done, ep_count)
         buttons.append([
             InlineKeyboardButton(
-                text=text,
+                text=button_text,
                 callback_data=f"season:{num}",
             ),
         ])
     buttons.append([
-        InlineKeyboardButton(text="✅ Сохранить прогресс", callback_data="season:done"),
+        InlineKeyboardButton(text=text.SAVE_PROGRESS, callback_data="season:done"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
