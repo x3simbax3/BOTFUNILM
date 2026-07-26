@@ -40,7 +40,7 @@ BOTFUNILM помогает вести личную медиатеку прямо
 - SQLite + aiosqlite;
 - Redis 7.4 для FSM;
 - Atlas для миграций;
-- pytest и pytest-xdist;
+- Ruff, pytest и pytest-xdist;
 - uv, Docker и Docker Compose.
 
 ## Быстрый запуск через Docker Compose
@@ -136,8 +136,8 @@ SQLite-база и постеры находятся в именованном v
 Dockerfile: base -> test
                     |
                     +-- исходный код, миграции и tests/
-                    +-- dev-зависимости pytest и pytest-xdist
-                    +-- одноразовый запуск pytest
+                    +-- dev-зависимости Ruff, pytest и pytest-xdist
+                    +-- одноразовые проверки качества и тесты
 ```
 
 Production-stage `runtime`, напротив, не содержит `tests/` и dev-зависимостей.
@@ -168,6 +168,25 @@ Makefile сначала выполняет `docker compose --profile test build 
 ```bash
 docker compose --profile test ps --all
 ```
+
+Форматтер и линтер используют тот же test-образ и запускаются раньше тестов:
+
+```bash
+make lint                         # только проверить форматирование и правила
+make format                       # исправить код через точечные bind-mount
+make check TEST_PROCESSES=1       # lint, затем pytest с одним worker
+```
+
+`make check` сначала проверяет Compose-конфигурацию и миграции, собирает
+test-образ один раз, затем последовательно запускает `ruff format --check`,
+`ruff check` и только после их успеха — pytest. Каждый контейнерный этап
+одноразовый; одновременно они не работают. Если предварительная проверка или
+Ruff находят проблему, тесты не запускаются.
+
+Для `make format` контейнеру на запись монтируются только `src/`, `tests/` и
+`config/config.py`. `config/.env` и production-volume внутрь него не попадают,
+а процессы запускаются с UID/GID текущего пользователя, поэтому исправленные
+файлы не становятся собственностью root.
 
 ## Локальная разработка
 
@@ -248,10 +267,12 @@ src/
 ```bash
 make help       # список основных целей
 make build      # пересобрать production-образ
+make lint       # проверить Ruff без изменения файлов
+make format     # исправить и отформатировать Python-код
 make restart    # перезапустить только bot
 make logs       # следить за логами bot и redis
 make ps         # состояние Compose-сервисов
-make test TEST_PROCESSES=1
+make check TEST_PROCESSES=1
 ```
 
 Для быстрой ручной проверки TMDB можно запустить `./tmdb_search.sh`: скрипт
@@ -261,7 +282,7 @@ make test TEST_PROCESSES=1
 
 Приветствуются issue и pull request с исправлениями, улучшением Telegram UX,
 поиска TMDB, слоя хранения, тестов и документации. Перед отправкой изменений
-проверьте миграции и запустите тестовый контейнер с одним worker.
+проверьте миграции и выполните `make check TEST_PROCESSES=1`.
 
 ## Лицензия
 

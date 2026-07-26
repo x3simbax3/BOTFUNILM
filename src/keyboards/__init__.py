@@ -2,7 +2,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.lang import get_locale
 
-
 text = get_locale().keyboards
 
 
@@ -10,7 +9,9 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=text.MAIN_LIBRARY, callback_data="menu:library"),
+                InlineKeyboardButton(
+                    text=text.MAIN_LIBRARY, callback_data="menu:library"
+                ),
                 InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add"),
             ],
         ],
@@ -230,12 +231,16 @@ def episodes_keyboard(
             for n in range(i + 1, min(i + 6, total_episodes + 1))
         ]
         buttons.append(row)
-    buttons.append([
-        InlineKeyboardButton(text="0", callback_data=f"ep:{season_number}:0"),
-    ])
-    buttons.append([
-        InlineKeyboardButton(text=text.SAVE, callback_data="ep:done"),
-    ])
+    buttons.append(
+        [
+            InlineKeyboardButton(text="0", callback_data=f"ep:{season_number}:0"),
+        ]
+    )
+    buttons.append(
+        [
+            InlineKeyboardButton(text=text.SAVE, callback_data="ep:done"),
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -251,15 +256,19 @@ def season_list_keyboard(
         ep_count = s["episode_count"]
         done = watched.get(num, 0)
         button_text = text.season_progress(name, done, ep_count)
-        buttons.append([
-            InlineKeyboardButton(
-                text=button_text,
-                callback_data=f"season:{num}",
-            ),
-        ])
-    buttons.append([
-        InlineKeyboardButton(text=text.SAVE_PROGRESS, callback_data="season:done"),
-    ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"season:{num}",
+                ),
+            ]
+        )
+    buttons.append(
+        [
+            InlineKeyboardButton(text=text.SAVE_PROGRESS, callback_data="season:done"),
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

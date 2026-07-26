@@ -1,7 +1,6 @@
 from datetime import date
 from html import escape
 
-
 DETAILS_LOAD_FAILED = "Не удалось получить информацию о сериале. Попробуй позже."
 PROGRESS_LOAD_FAILED = "Не удалось загрузить сохранённый прогресс. Попробуй позже."
 SAVED_PROGRESS_INVALID = "Сохранённый прогресс сериала некорректен. Попробуй позже."
@@ -20,9 +19,7 @@ def default_season_name(season_number: int) -> str:
 def series_tracking_text(title: str, seasons: list[dict]) -> str:
     lines = [f"📺 <b>{escape(title)}</b>\n"]
     for season in seasons:
-        lines.append(
-            f"• {escape(season['name'])} — {season['episode_count']} серий"
-        )
+        lines.append(f"• {escape(season['name'])} — {season['episode_count']} серий")
     lines.append("\n<b>Выбери сезон</b>, чтобы отметить прогресс:")
     return "\n".join(lines)
 

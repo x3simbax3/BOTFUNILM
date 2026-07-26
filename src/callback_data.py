@@ -3,7 +3,6 @@
 import re
 from dataclasses import dataclass
 
-
 Action = str
 ContentFormat = str
 ContentType = str
@@ -90,7 +89,8 @@ def parse_back_callback(data: str) -> BackCallback | None:
     valid_params = {
         "main": {()},
         "format": {(action,) for action in VALID_ACTIONS},
-        "content_type": {()} | {
+        "content_type": {()}
+        | {
             (action, content_format)
             for action in VALID_ACTIONS
             for content_format in VALID_CONTENT_FORMATS
@@ -139,9 +139,6 @@ def parse_episode_callback(data: str) -> EpisodeCallback | str | None:
     if data == "ep:done":
         return "done"
     season_number, episodes_watched = (int(value) for value in match.groups())
-    if (
-        season_number > MAX_SEASON_NUMBER
-        or episodes_watched > MAX_EPISODE_COUNT
-    ):
+    if season_number > MAX_SEASON_NUMBER or episodes_watched > MAX_EPISODE_COUNT:
         return None
     return EpisodeCallback(season_number, episodes_watched)

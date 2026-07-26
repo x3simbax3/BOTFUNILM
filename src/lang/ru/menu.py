@@ -1,6 +1,5 @@
 from .common import BOT_NAME
 
-
 START_TEXT = f"""<b>{BOT_NAME} 🍿</b>
 
 <blockquote>Твоя личная коллекция фильмов, сериалов, аниме и мультфильмов.</blockquote>

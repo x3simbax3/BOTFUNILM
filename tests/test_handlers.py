@@ -21,9 +21,8 @@ from src.lang import (
     action_text,
     content_type_text,
     selected_type_text,
-    tmdb_found_text,
-    tmdb_not_found_text,
 )
+from src.services import media as media_service
 from src.tmdb import (
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
@@ -36,7 +35,6 @@ from src.tmdb import (
     TmdbTvDetails,
     TmdbUnavailableError,
 )
-from src.services import media as media_service
 
 
 class StateStub:
@@ -207,7 +205,9 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("library:page:1", callbacks)
         self.assertEqual(state.state, MenuState.viewing_library)
 
-    async def test_choose_action_saves_action_and_moves_to_choosing_format(self) -> None:
+    async def test_choose_action_saves_action_and_moves_to_choosing_format(
+        self,
+    ) -> None:
         message = MessageStub()
         callback = CallbackStub("menu:add", message)
         state = StateStub()
@@ -340,7 +340,9 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_search_title_found_with_poster_sends_photo_guess(self) -> None:
         message = MessageStub(text="Матрица")
         state = StateStub({"content_format": "full_length"})
-        guess = TmdbTitle("Матрица", "Описание", "https://image.test/poster.jpg", "Матрица", "Матрица")
+        guess = TmdbTitle(
+            "Матрица", "Описание", "https://image.test/poster.jpg", "Матрица", "Матрица"
+        )
 
         with patch.object(
             search_handlers,
@@ -376,9 +378,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_title_uses_local_media_without_tmdb_request(self) -> None:
         message = MessageStub(text="матрица")
-        state = StateStub(
-            {"content_format": "full_length", "content_type": "movie"}
-        )
+        state = StateStub({"content_format": "full_length", "content_type": "movie"})
         self.local_search.return_value = {
             "id": 7,
             "tmdb_id": 42,
@@ -531,7 +531,13 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.state, MenuState.waiting_title)
         self.assertEqual(
             message.edit_text_calls,
-            [{"text": "Введи название ещё раз.", "parse_mode": None, "reply_markup": None}],
+            [
+                {
+                    "text": "Введи название ещё раз.",
+                    "parse_mode": None,
+                    "reply_markup": None,
+                }
+            ],
         )
         self.assertEqual(callback.answers, [{"text": None}])
 
@@ -602,7 +608,9 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_start_series_tracking_ignores_specials_and_legacy_progress(self) -> None:
+    async def test_start_series_tracking_ignores_specials_and_legacy_progress(
+        self,
+    ) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
         state = StateStub(

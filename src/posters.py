@@ -9,7 +9,6 @@ from aiogram.types import FSInputFile
 from config.config import MEDIA_ROOT
 from src.http_client import get_http_session
 
-
 logger = logging.getLogger(__name__)
 
 POSTERS_DIR = "posters"

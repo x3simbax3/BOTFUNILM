@@ -6,10 +6,7 @@ from src import keyboards
 
 
 def callback_rows(markup: InlineKeyboardMarkup) -> list[list[str]]:
-    return [
-        [button.callback_data for button in row]
-        for row in markup.inline_keyboard
-    ]
+    return [[button.callback_data for button in row] for row in markup.inline_keyboard]
 
 
 class KeyboardsTests(unittest.TestCase):
@@ -56,7 +53,9 @@ class KeyboardsTests(unittest.TestCase):
             ],
         )
 
-    def test_content_type_buttons_have_expected_callbacks_and_back_to_format(self) -> None:
+    def test_content_type_buttons_have_expected_callbacks_and_back_to_format(
+        self,
+    ) -> None:
         self.assertEqual(
             callback_rows(keyboards.content_type_keyboard("add", "series")),
             [

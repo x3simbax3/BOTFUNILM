@@ -4,7 +4,6 @@ import asyncio
 
 import aiohttp
 
-
 _session: aiohttp.ClientSession | None = None
 _session_lock = asyncio.Lock()
 

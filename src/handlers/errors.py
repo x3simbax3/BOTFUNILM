@@ -7,7 +7,6 @@ from aiogram.types import ErrorEvent
 
 from src.lang import UNEXPECTED_ERROR_TEXT
 
-
 logger = logging.getLogger(__name__)
 router = Router(name="errors")
 

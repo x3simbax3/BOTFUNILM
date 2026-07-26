@@ -31,7 +31,6 @@ from src.lang import (
     selected_type_text,
 )
 
-
 router = Router(name="menu")
 
 MENU_TREE = {
@@ -169,7 +168,7 @@ async def go_back(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    data.update(zip(step["param_fields"], params))
+    data.update(zip(step["param_fields"], params, strict=False))
     clear_step_data(data, target_step)
     if any(not data.get(field) for field in step["required_fields"]):
         await callback.answer(BACK_FAILED, show_alert=True)

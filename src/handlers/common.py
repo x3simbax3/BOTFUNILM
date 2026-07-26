@@ -5,7 +5,6 @@ from aiogram.types import CallbackQuery, Message
 
 from src.lang import DESCRIPTION_NOT_FOUND, tmdb_guess_text
 
-
 PHOTO_CAPTION_LIMIT = 1024
 CAPTION_ELLIPSIS = "..."
 

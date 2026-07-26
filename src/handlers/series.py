@@ -20,13 +20,6 @@ from src.keyboards import (
     main_menu_keyboard,
     season_list_keyboard,
 )
-from src.services import (
-    SeriesProgressError,
-    apply_episode_selection,
-    ensure_media,
-    season_episode_limits,
-    validate_series_progress,
-)
 from src.lang import (
     DETAILS_LOAD_FAILED,
     DONE,
@@ -42,8 +35,14 @@ from src.lang import (
     series_tracking_text,
     tracking_complete_text,
 )
+from src.services import (
+    SeriesProgressError,
+    apply_episode_selection,
+    ensure_media,
+    season_episode_limits,
+    validate_series_progress,
+)
 from src.tmdb import TmdbError, fetch_tv_details
-
 
 router = Router(name="series")
 

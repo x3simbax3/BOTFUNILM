@@ -22,7 +22,6 @@ from src.keyboards import (
     library_keyboard,
     main_menu_keyboard,
 )
-from src.posters import poster_input
 from src.lang import (
     DESCRIPTION_NOT_FOUND,
     FILTER_SAVE_FAILED,
@@ -34,7 +33,7 @@ from src.lang import (
     library_item_text,
     library_text,
 )
-
+from src.posters import poster_input
 
 router = Router(name="library")
 LIBRARY_PAGE_SIZE = 20

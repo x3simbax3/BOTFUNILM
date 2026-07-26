@@ -12,7 +12,6 @@ from src.tmdb_models import (
     TmdbUnavailableError,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

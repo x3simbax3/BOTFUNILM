@@ -8,7 +8,6 @@ from functools import lru_cache
 from importlib import import_module
 from types import ModuleType
 
-
 DEFAULT_LOCALE = "ru"
 SUPPORTED_LOCALES = frozenset({DEFAULT_LOCALE})
 
@@ -27,7 +26,6 @@ def get_locale(language_code: str | None = None) -> ModuleType:
 
 from .ru import *  # noqa: E402,F403
 from .ru import __all__ as _ru_all
-
 
 __all__ = (
     "DEFAULT_LOCALE",

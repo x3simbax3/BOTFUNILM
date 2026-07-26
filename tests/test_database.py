@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.database.connection import connect_database, connection_scope
+from src.database.connection import connect_database, connection_scope, database_path
 from src.database.library import (
     get_user_library_filters,
     get_user_library_item,
@@ -13,22 +13,20 @@ from src.database.library import (
 from src.database.media import (
     find_media_by_title,
     get_media_by_tmdb,
-    upsert_media,
     update_media_poster,
+    upsert_media,
 )
 from src.database.series import (
     get_user_season_progress,
     save_user_series_progress,
 )
 from src.database.user_media import get_user_media, save_user_media
-from src.database.connection import database_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = sorted((PROJECT_ROOT / "migrations").glob("*.sql"))
 
 
 class DatabaseTests(unittest.IsolatedAsyncioTestCase):
-
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
         database_file = Path(self._temporary_directory.name) / "test.db"
@@ -46,7 +44,9 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             async with connection.execute(
                 "SELECT name, type FROM sqlite_master"
             ) as cursor:
-                objects = {(row["name"], row["type"]) for row in await cursor.fetchall()}
+                objects = {
+                    (row["name"], row["type"]) for row in await cursor.fetchall()
+                }
 
         self.assertIn(("media", "table"), objects)
         self.assertIn(("user_media", "table"), objects)

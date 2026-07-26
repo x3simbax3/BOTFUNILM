@@ -1,7 +1,6 @@
 from datetime import date
 from html import escape
 
-
 RATING_CATEGORIES = [
     ("acting", "Актёрская игра"),
     ("story", "Сюжет"),

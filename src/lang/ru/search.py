@@ -3,7 +3,6 @@ from html import escape
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import FORMAT_RESULT_TITLES
 
-
 TMDB_SEARCHING = "🔍 Ищу в каталоге..."
 TMDB_SEARCHING_REMOTE = "🔍 В каталоге не найдено, ищу в TMDB..."
 TMDB_TOO_LONG = "⚠️ Слишком длинное название. Сократи и попробуй снова."

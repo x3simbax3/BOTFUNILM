@@ -7,8 +7,8 @@ the established ``src.tmdb`` API stable for handlers and other callers.
 import logging
 
 import aiohttp
-from config.config import TMDB_API, TMDB_LANG, TMDB_URL
 
+from config.config import TMDB_API, TMDB_LANG, TMDB_URL
 from src.http_client import get_http_session
 from src.lang import default_season_name
 from src.tmdb_client import fetch_json as _client_fetch_json
@@ -35,7 +35,6 @@ from src.tmdb_models import (
     TmdbTvDetails,
     TmdbUnavailableError,
 )
-
 
 logger = logging.getLogger(__name__)
 

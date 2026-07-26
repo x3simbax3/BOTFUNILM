@@ -173,7 +173,9 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
     # --- _parse_title ---
 
     def test_parse_title_with_poster(self) -> None:
-        result = tmdb._parse_title({"title": "Форсаж", "overview": "desc", "poster_path": "/p.jpg"}, "Форсаж")
+        result = tmdb._parse_title(
+            {"title": "Форсаж", "overview": "desc", "poster_path": "/p.jpg"}, "Форсаж"
+        )
         self.assertEqual(result.title, "Форсаж")
         self.assertEqual(result.poster_url, f"{tmdb.TMDB_IMAGE_URL}/p.jpg")
 
@@ -253,7 +255,10 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(details.number_of_seasons, 2)
         self.assertEqual(details.number_of_episodes, 10)
         self.assertEqual(
-            [(season.season_number, season.episode_count) for season in details.seasons],
+            [
+                (season.season_number, season.episode_count)
+                for season in details.seasons
+            ],
             [(1, 6), (2, 4)],
         )
 

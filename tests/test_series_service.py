@@ -6,7 +6,6 @@ from src.services.series import (
     validate_series_progress,
 )
 
-
 SEASONS = [
     {"season_number": 1, "episode_count": 8},
     {"season_number": 2, "episode_count": 2},

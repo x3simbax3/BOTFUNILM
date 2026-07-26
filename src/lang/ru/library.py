@@ -3,7 +3,6 @@ from html import escape
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import CONTENT_TYPE_TITLES, FORMAT_TITLES
 
-
 USER_STATUS_TITLES = {
     "planned": "Запланировано",
     "watching": "Смотрю",
@@ -22,10 +21,7 @@ ITEM_NOT_FOUND = "Тайтл не найден в твоей библиотек�
 
 def library_text(items: list, bot_username: str, offset: int = 0) -> str:
     if not items:
-        return (
-            "<b>Моя библиотека 📚</b>\n\n"
-            "По выбранным фильтрам ничего не найдено."
-        )
+        return "<b>Моя библиотека 📚</b>\n\nПо выбранным фильтрам ничего не найдено."
 
     lines = ["<b>Моя библиотека 📚</b>", "", "Последние добавленные тайтлы:"]
     for index, item in enumerate(items, start=offset + 1):
@@ -41,24 +37,26 @@ def library_item_text(item, description: str | None = None) -> str:
     date_value = item["release_date"] or item["first_air_date"]
 
     lines = [
-        f'🎬 <b>{escape(item["title"])}</b>',
+        f"🎬 <b>{escape(item['title'])}</b>",
         f"<i>{escape(content_format)} · {escape(content_type)}</i>",
     ]
     if item["original_title"] and item["original_title"] != item["title"]:
-        lines.append(f'Оригинал: <i>{escape(item["original_title"])}</i>')
+        lines.append(f"Оригинал: <i>{escape(item['original_title'])}</i>")
 
     lines.extend(["", f"Статус: <b>{escape(user_status)}</b>"])
     if item["user_rating"] is not None:
-        lines.append(f'Моя оценка: <b>{item["user_rating"]}/10</b>')
+        lines.append(f"Моя оценка: <b>{item['user_rating']}/10</b>")
     if item["rating"] is not None:
-        lines.append(f'Рейтинг TMDB: <b>{item["rating"]:.1f}/10</b>')
+        lines.append(f"Рейтинг TMDB: <b>{item['rating']:.1f}/10</b>")
     if date_value:
-        lines.append(f'Дата выхода: <b>{escape(date_value)}</b>')
+        lines.append(f"Дата выхода: <b>{escape(date_value)}</b>")
     if item["number_of_seasons"] is not None:
-        lines.append(f'Сезонов: <b>{item["number_of_seasons"]}</b>')
+        lines.append(f"Сезонов: <b>{item['number_of_seasons']}</b>")
     if item["number_of_episodes"] is not None:
         watched = item["episodes_watched"] or 0
-        lines.append(f'Серий просмотрено: <b>{watched}/{item["number_of_episodes"]}</b>')
+        lines.append(
+            f"Серий просмотрено: <b>{watched}/{item['number_of_episodes']}</b>"
+        )
 
     description_text = (
         item["description"] or DESCRIPTION_NOT_FOUND

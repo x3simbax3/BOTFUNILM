@@ -12,7 +12,6 @@ from src.database.user_media import save_user_media
 from src.fsm import MenuState
 from src.handlers.series import start_series_tracking
 from src.keyboards import main_menu_keyboard, rating_keyboard
-from src.services import ensure_media
 from src.lang import (
     INVALID_RATING,
     MOVIE_SAVE_FAILED,
@@ -22,7 +21,7 @@ from src.lang import (
     rating_prompt_text,
     rating_summary_text,
 )
-
+from src.services import ensure_media
 
 router = Router(name="rating")
 

@@ -4,16 +4,63 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
-
 ANIMATION_GENRE_ID = 16
 MIN_RELEVANCE = 300
 
 STOP_WORDS = {
-    "в", "во", "и", "а", "о", "об", "от", "до", "на", "не", "ни", "но",
-    "ну", "по", "со", "то", "у", "же", "бы", "ли", "за", "из", "the", "a",
-    "an", "of", "to", "in", "on", "at", "and", "or", "is", "are", "was",
-    "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
-    "will", "would", "could", "should", "may", "might", "must", "can",
+    "в",
+    "во",
+    "и",
+    "а",
+    "о",
+    "об",
+    "от",
+    "до",
+    "на",
+    "не",
+    "ни",
+    "но",
+    "ну",
+    "по",
+    "со",
+    "то",
+    "у",
+    "же",
+    "бы",
+    "ли",
+    "за",
+    "из",
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "in",
+    "on",
+    "at",
+    "and",
+    "or",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
+    "can",
 }
 
 
@@ -60,9 +107,7 @@ def title_relevance_score(result: dict, query: str) -> float:
     if not query_normalized:
         return 0.0
     query_words = [
-        word
-        for word in query_normalized.split()
-        if word and word not in STOP_WORDS
+        word for word in query_normalized.split() if word and word not in STOP_WORDS
     ]
     titles = [
         result.get("title") or "",
@@ -81,7 +126,9 @@ def title_relevance_score(result: dict, query: str) -> float:
             word for word in title.split() if word and word not in STOP_WORDS
         ]
         word_count_diff = abs(len(query_words) - len(title_words))
-        original_title = result.get("original_title") or result.get("original_name") or ""
+        original_title = (
+            result.get("original_title") or result.get("original_name") or ""
+        )
         if title == query_normalized:
             bonus = 1200 if title == normalize_text(original_title) else 1000
             best_title_score = max(best_title_score, bonus)

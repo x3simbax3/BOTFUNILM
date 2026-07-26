@@ -51,6 +51,7 @@ services:
       TMDB_API: ""
       REDIS_URL: ""
       TEST_PROCESSES: "1"
+      RUFF_CACHE_DIR: /tmp/ruff-cache
 
 volumes:
   bot_data:

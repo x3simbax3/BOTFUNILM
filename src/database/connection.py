@@ -16,7 +16,7 @@ def database_path(database_url: str | None = None) -> str:
     if not url.startswith(prefix):
         raise ValueError("Only sqlite:/// database URLs are supported")
 
-    path = url[len(prefix):]
+    path = url[len(prefix) :]
     if not path:
         raise ValueError("SQLite database path cannot be empty")
     return path

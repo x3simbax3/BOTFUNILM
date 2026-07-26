@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
-from aiogram.fsm.storage.redis import RedisStorage, RedisEventIsolation
+from aiogram.fsm.storage.redis import RedisEventIsolation, RedisStorage
 
 from src import bot
 

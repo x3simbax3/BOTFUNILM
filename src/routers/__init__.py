@@ -7,7 +7,6 @@ from src.handlers.rating import router as rating_router
 from src.handlers.search import router as search_router
 from src.handlers.series import router as series_router
 
-
 router = Router(name="main")
 router.include_routers(
     errors_router,

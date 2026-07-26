@@ -1,11 +1,9 @@
-import importlib
 import os
 import sys
 import unittest
 
 
 class SmokeImportTests(unittest.TestCase):
-
     def setUp(self) -> None:
         self._orig_token = os.environ.get("BOT_TOKEN")
         os.environ["BOT_TOKEN"] = ""
@@ -32,13 +30,13 @@ class SmokeImportTests(unittest.TestCase):
         import src.handlers  # noqa: F401
 
     def test_router_contains_domain_routers(self) -> None:
-        from src.routers import router
         from src.handlers.errors import router as errors_router
         from src.handlers.library import router as library_router
         from src.handlers.menu import router as menu_router
         from src.handlers.rating import router as rating_router
         from src.handlers.search import router as search_router
         from src.handlers.series import router as series_router
+        from src.routers import router
 
         sub_names = {r.name for r in router.sub_routers}
         self.assertEqual(

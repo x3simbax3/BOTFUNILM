@@ -9,7 +9,6 @@ from src.database.media import find_media_by_title, update_media_poster
 from src.fsm import MenuState
 from src.handlers.common import is_active_tmdb_guess, tmdb_guess_caption
 from src.keyboards import rating_keyboard, tmdb_guess_keyboard, tmdb_retry_keyboard
-from src.posters import download_poster, poster_input
 from src.lang import (
     FORMAT_MISSING,
     LOCAL_SEARCH_FAILED,
@@ -30,6 +29,7 @@ from src.lang import (
     tmdb_found_text,
     tmdb_not_found_text,
 )
+from src.posters import download_poster, poster_input
 from src.tmdb import (
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
@@ -42,7 +42,6 @@ from src.tmdb import (
     find_title_guess,
 )
 
-
 router = Router(name="search")
 
 
@@ -50,11 +49,7 @@ router = Router(name="search")
 async def search_title(message: Message, state: FSMContext) -> None:
     title_query = _valid_title_query(message.text)
     if title_query is None:
-        await message.answer(
-            TITLE_AS_TEXT
-            if message.text is None
-            else TITLE_EMPTY
-        )
+        await message.answer(TITLE_AS_TEXT if message.text is None else TITLE_EMPTY)
         return
     if len(title_query) > 342:
         await message.answer(TMDB_TOO_LONG)
@@ -136,7 +131,9 @@ async def _show_guess(
     local_media,
 ) -> None:
     text = tmdb_guess_caption(content_format, guess.title, guess.overview)
-    photo = poster_input(guess.poster_path) if local_media is not None else guess.poster_url
+    photo = (
+        poster_input(guess.poster_path) if local_media is not None else guess.poster_url
+    )
     if photo:
         guess_message = await message.answer_photo(
             photo=photo,
@@ -174,7 +171,9 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
     data = await state.get_data()
     categories = rating_categories(data.get("content_type", "movie"))
     await callback.message.answer(
-        rating_prompt_text(data.get("tmdb_title", ""), categories[0][1], 1, len(categories)),
+        rating_prompt_text(
+            data.get("tmdb_title", ""), categories[0][1], 1, len(categories)
+        ),
         parse_mode="HTML",
         reply_markup=rating_keyboard(),
     )

@@ -6,10 +6,7 @@ import aiosqlite
 
 from src.database.connection import connection_scope
 
-
-LIBRARY_FILTER_NAMES = frozenset(
-    {"full_length", "series", "movie", "anime", "cartoon"}
-)
+LIBRARY_FILTER_NAMES = frozenset({"full_length", "series", "movie", "anime", "cartoon"})
 
 
 async def get_user_library_filters(
