@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
-from src.handlers import start
 from src.handlers import library as library_handlers
+from src.handlers import menu as menu_handlers
 from src.handlers import rating as rating_handlers
 from src.handlers import search as search_handlers
 from src.handlers import series as series_handlers
@@ -14,7 +14,7 @@ from src.keyboards import (
     main_menu_keyboard,
     selected_type_keyboard,
 )
-from src.texts import (
+from src.lang import (
     START_TEXT,
     TMDB_SEARCHING,
     TMDB_TOO_LONG,
@@ -25,6 +25,7 @@ from src.texts import (
     tmdb_not_found_text,
 )
 from src.tmdb import (
+    TMDB_IMAGE_URL,
     TmdbAuthenticationError,
     TmdbError,
     TmdbNotConfiguredError,
@@ -113,12 +114,12 @@ class CallbackStub:
         self.answers.append({"text": text, **kwargs})
 
 
-class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
+class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
     async def test_start_clears_state_sets_choosing_action_and_sends_menu(self) -> None:
         message = MessageStub()
         state = StateStub({"action": "add"})
 
-        await start.start(message, state)
+        await menu_handlers.start(message, state)
 
         self.assertTrue(state.cleared)
         self.assertEqual(state.data, {})
@@ -161,7 +162,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
             "get_user_library_item",
             AsyncMock(return_value=item),
         ):
-            await start.start(message, state)
+            await menu_handlers.start(message, state)
 
         self.assertEqual(state.state, MenuState.viewing_media)
         self.assertIn("Матрица", message.answers[0]["text"])
@@ -192,7 +193,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=items),
             ),
         ):
-            await start.open_library(callback, state)
+            await library_handlers.open_library(callback, state)
 
         rendered = message.edit_text_calls[0]
         self.assertIn("1.", rendered["text"])
@@ -211,7 +212,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
         callback = CallbackStub("menu:add", message)
         state = StateStub()
 
-        await start.choose_action(callback, state)
+        await menu_handlers.choose_action(callback, state)
 
         self.assertEqual(state.data, {"action": "add"})
         self.assertEqual(state.state, MenuState.choosing_format)
@@ -234,7 +235,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
         callback = CallbackStub("format:add:series", message)
         state = StateStub()
 
-        await start.choose_format(callback, state)
+        await menu_handlers.choose_format(callback, state)
 
         self.assertEqual(state.data, {"action": "add", "content_format": "series"})
         self.assertEqual(state.state, MenuState.choosing_content_type)
@@ -257,7 +258,7 @@ class StartHandlerTests(unittest.IsolatedAsyncioTestCase):
         callback = CallbackStub("type:add:series:anime", message)
         state = StateStub()
 
-        await start.choose_content_type(callback, state)
+        await menu_handlers.choose_content_type(callback, state)
 
         self.assertEqual(
             state.data,
@@ -302,7 +303,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub(text=None)
         state = StateStub({"content_format": "full_length"})
 
-        await start.search_title(message, state)
+        await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], "Введи название текстом.")
 
@@ -310,7 +311,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub(text="   ")
         state = StateStub({"content_format": "full_length"})
 
-        await start.search_title(message, state)
+        await search_handlers.search_title(message, state)
 
         self.assertEqual(
             message.answers[0]["text"],
@@ -321,7 +322,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub(text="Матрица")
         state = StateStub()
 
-        await start.search_title(message, state)
+        await search_handlers.search_title(message, state)
 
         self.assertEqual(
             message.answers[0]["text"],
@@ -332,7 +333,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub(text="x" * 343)
         state = StateStub({"content_format": "full_length"})
 
-        await start.search_title(message, state)
+        await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_TOO_LONG)
 
@@ -346,7 +347,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(return_value=guess),
         ):
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
         self.assertEqual(message.photo_answers[0]["photo"], guess.poster_url)
@@ -365,7 +366,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(return_value=guess),
         ):
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
         status_stub = message.answers[0]["stub"]
@@ -391,14 +392,14 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(),
         ) as tmdb_search:
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         tmdb_search.assert_not_awaited()
         self.assertEqual(state.data["media_id"], 7)
         self.assertEqual(state.data["tmdb_id"], 42)
         self.assertEqual(
             message.photo_answers[0]["photo"],
-            f"{start.TMDB_IMAGE_URL}/poster.jpg",
+            f"{TMDB_IMAGE_URL}/poster.jpg",
         )
 
     async def test_search_title_falls_back_to_tmdb(self) -> None:
@@ -411,7 +412,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(return_value=guess),
         ) as tmdb_search:
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         self.local_search.assert_awaited_once_with(
             "Матрица",
@@ -436,7 +437,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(side_effect=TmdbNotFoundError),
         ):
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
         status_stub = message.answers[0]["stub"]
@@ -481,7 +482,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "find_title_guess",
             AsyncMock(side_effect=error_class),
         ):
-            await start.search_title(message, state)
+            await search_handlers.search_title(message, state)
 
         self.assertEqual(message.answers[0]["text"], TMDB_SEARCHING)
         status_stub = message.answers[0]["stub"]
@@ -495,7 +496,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"tmdb_guess_message_id": 100})
         state.state = MenuState.confirming_tmdb_guess
 
-        await start.reject_tmdb_guess(callback, state)
+        await search_handlers.reject_tmdb_guess(callback, state)
 
         self.assertEqual(callback.answers, [{"text": "Это старый вариант."}])
         self.assertEqual(state.data["tmdb_guess_message_id"], 100)
@@ -513,7 +514,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        await start.reject_tmdb_guess(callback, state)
+        await search_handlers.reject_tmdb_guess(callback, state)
 
         self.assertEqual(state.state, MenuState.choosing_tmdb_retry)
         self.assertIsNone(state.data["tmdb_guess_message_id"])
@@ -525,7 +526,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         callback = CallbackStub("title:retry", message)
         state = StateStub()
 
-        await start.retry_title(callback, state)
+        await menu_handlers.retry_title(callback, state)
 
         self.assertEqual(state.state, MenuState.waiting_title)
         self.assertEqual(
@@ -555,7 +556,7 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             ) as upsert,
             patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
         ):
-            await start._finish_movie(callback, state, 8.6)
+            await rating_handlers.finish_movie(callback, state, 8.6)
 
         upsert.assert_awaited_once_with(
             tmdb_id=42,
@@ -589,7 +590,7 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             patch.object(media_service, "upsert_media", AsyncMock()) as upsert,
             patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
         ):
-            await start._finish_movie(callback, state, 8.0)
+            await rating_handlers.finish_movie(callback, state, 8.0)
 
         upsert.assert_not_awaited()
         save.assert_awaited_once_with(
@@ -637,7 +638,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=saved_progress),
             ) as get_progress,
         ):
-            await start._start_series_tracking(callback, state)
+            await series_handlers.start_series_tracking(callback, state)
 
         get_progress.assert_awaited_once_with(123, 7)
         self.assertEqual(state.data["watched_by_season"], {1: 6, 2: 1})
@@ -676,7 +677,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(),
             ) as save,
         ):
-            await start._finish_series_tracking(callback, state)
+            await series_handlers.finish_series_tracking(callback, state)
 
         upsert.assert_awaited_once_with(
             tmdb_id=42,
@@ -713,7 +714,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        await start.handle_episode_selection(callback, state)
+        await series_handlers.handle_episode_selection(callback, state)
 
         self.assertEqual(state.data["watched_by_season"], {1: 3})
         self.assertEqual(
@@ -736,7 +737,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        await start.handle_episode_selection(callback, state)
+        await series_handlers.handle_episode_selection(callback, state)
 
         self.assertEqual(state.data["watched_by_season"], {})
         self.assertEqual(

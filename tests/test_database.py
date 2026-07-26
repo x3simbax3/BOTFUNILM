@@ -3,22 +3,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.database import (
-    connect_database,
-    connection_scope,
-    find_media_by_title,
-    get_media_by_tmdb,
+from src.database.connection import connect_database, connection_scope
+from src.database.library import (
     get_user_library_filters,
     get_user_library_item,
-    get_user_media,
-    get_user_season_progress,
     list_user_library,
-    save_user_series_progress,
-    save_user_media,
-    upsert_media,
     update_user_library_filter,
+)
+from src.database.media import (
+    find_media_by_title,
+    get_media_by_tmdb,
+    upsert_media,
     update_media_poster,
 )
+from src.database.series import (
+    get_user_season_progress,
+    save_user_series_progress,
+)
+from src.database.user_media import get_user_media, save_user_media
 from src.database.connection import database_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

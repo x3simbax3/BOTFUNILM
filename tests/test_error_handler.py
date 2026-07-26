@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from src.handlers.errors import handle_unexpected_error
 from src.handlers.errors import router as errors_router
 from src.routers import router as main_router
-from src.texts import UNEXPECTED_ERROR_TEXT
+from src.lang import UNEXPECTED_ERROR_TEXT
 
 
 class UnexpectedErrorHandlerTests(unittest.IsolatedAsyncioTestCase):

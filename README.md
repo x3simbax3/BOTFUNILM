@@ -16,6 +16,7 @@
     <img src="https://img.shields.io/badge/aiogram-3.30.0-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="aiogram 3.30.0">
     <img src="https://img.shields.io/badge/TMDB-powered-01B4E4?style=for-the-badge&logo=themoviedatabase&logoColor=white" alt="TMDB powered">
     <img src="https://img.shields.io/badge/self--hostable-yes-10b981?style=for-the-badge" alt="Self-hostable">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f5c518?style=for-the-badge" alt="MIT License"></a>
   </p>
 
   <p>
@@ -98,17 +99,14 @@ Install the Atlas migration CLI:
 curl -sSf https://atlasgo.sh | sh
 ```
 
-Create `config/.env`:
+Create `config/.env` from the safe example and fill in both tokens:
 
-```env
-BOT_TOKEN=your_telegram_bot_token
-TMDB_API=your_tmdb_bearer_token
-TMDB_LANG=ru-RU
-DATABASE_URL=sqlite:///bot.db
-TEST_PROCESSES=2
-DEBUG=false
-MEDIA_ROOT=/absolute/path/to/BotFunilm/media
+```bash
+cp .env.example config/.env
 ```
+
+The example documents every supported environment variable. `BOT_TOKEN` and
+`TMDB_API` are intentionally empty and must never be committed with real values.
 
 `MEDIA_ROOT` необязателен. По умолчанию постеры сохраняются в `media/posters`
 внутри проекта и отправляются в Telegram с локального диска. Для резервного
@@ -129,8 +127,9 @@ uv run python -m src.bot
 ## Database and migrations
 
 The application uses SQLite through asynchronous `aiosqlite` calls. Queries are
-plain SQL functions in `src/database/queries.py`; there is no ORM. Atlas manages
-versioned SQL migrations, while `schema.sql` describes the desired schema.
+plain SQL functions grouped by domain in `src/database/`; there is no ORM.
+Atlas manages versioned SQL migrations, while `schema.sql` describes the
+desired schema.
 
 The Python database URL remains configured in `config/.env`:
 
@@ -202,4 +201,4 @@ Good first contribution areas:
 
 ## License
 
-License is not specified yet.
+BOTFUNILM is distributed under the [MIT License](LICENSE).
