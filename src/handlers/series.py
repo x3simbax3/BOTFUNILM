@@ -107,7 +107,6 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
 
     await state.update_data(
         media_id=media_id,
-        tv_details=details,
         seasons_data=seasons_data,
         total_seasons=details.number_of_seasons,
         total_episodes=total_episodes,

@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -673,6 +674,8 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["watched_by_season"], {1: 3})
         self.assertEqual(state.data["total_episodes"], 8)
         self.assertEqual(state.data["episodes_watched_total"], 3)
+        self.assertNotIn("tv_details", state.data)
+        json.dumps(state.data)
 
     async def test_start_series_tracking_restores_saved_progress(self) -> None:
         message = MessageStub()
