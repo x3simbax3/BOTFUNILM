@@ -70,7 +70,7 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
             "episode_count": season.episode_count,
         }
         for season in details.seasons
-        if season.episode_count > 0
+        if season.season_number > 0 and season.episode_count > 0
     ]
 
     try:
@@ -92,6 +92,9 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         watched = {
             int(row["season_number"]): int(row["episodes_watched"])
             for row in progress_rows
+            # Season 0 used to be trackable. Ignore that legacy progress now
+            # that specials are deliberately excluded from the series total.
+            if int(row["season_number"]) != 0
         }
         total_episodes = sum(season_episode_limits(seasons_data).values())
         watched = validate_series_progress(watched, seasons_data, total_episodes)

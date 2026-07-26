@@ -1,0 +1,56 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    env_file:
+      - config/.env
+    environment:
+      DATABASE_URL: sqlite:////data/bot.db
+      ATLAS_DATABASE_URL: sqlite:///data/bot.db?_fk=1
+      MEDIA_ROOT: /data/media
+      REDIS_URL: redis://redis:6379/0
+      FSM_TTL_SECONDS: "86400"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - bot_data:/data
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - volatile-ttl
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  test:
+    profiles:
+      - test
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    environment:
+      BOT_TOKEN: ""
+      TMDB_API: ""
+      REDIS_URL: ""
+      TEST_PROCESSES: "1"
+
+volumes:
+  bot_data:

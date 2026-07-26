@@ -107,7 +107,12 @@ async def find_title_guess(
 
 
 async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
-    """Fetch season and episode counts for a TV series."""
+    """Fetch regular season and episode counts for a TV series.
+
+    TMDB stores specials and bonus material in season 0, but excludes them from
+    ``number_of_seasons`` and ``number_of_episodes``.  Progress therefore uses
+    only regular seasons (1 and above) so that all totals share one meaning.
+    """
     if not TMDB_API:
         raise TmdbNotConfiguredError
 
@@ -121,7 +126,7 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
     seasons = []
     for raw_season in data.get("seasons") or []:
         season_number = raw_season.get("season_number", 0)
-        if season_number < 0:
+        if season_number <= 0:
             continue
         seasons.append(
             TmdbSeasonInfo(

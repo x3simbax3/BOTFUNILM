@@ -16,7 +16,7 @@ def season_episode_limits(seasons_data: Sequence[Mapping[str, Any]]) -> dict[int
     for season in seasons_data:
         season_number = season.get("season_number")
         episode_count = season.get("episode_count")
-        if not _is_nonnegative_int(season_number):
+        if not _is_positive_int(season_number):
             raise SeriesProgressError("Invalid season number")
         if not _is_nonnegative_int(episode_count):
             raise SeriesProgressError("Invalid season episode count")
@@ -41,7 +41,7 @@ def validate_series_progress(
 
     validated: dict[int, int] = {}
     for season_number, episodes_watched in seasons.items():
-        if not _is_nonnegative_int(season_number):
+        if not _is_positive_int(season_number):
             raise SeriesProgressError("Invalid season number")
         if not _is_nonnegative_int(episodes_watched):
             raise SeriesProgressError("Invalid watched episode count")
@@ -75,6 +75,10 @@ def apply_episode_selection(
 
 def _is_nonnegative_int(value: object) -> bool:
     return type(value) is int and value >= 0
+
+
+def _is_positive_int(value: object) -> bool:
+    return type(value) is int and value > 0
 
 
 __all__ = (

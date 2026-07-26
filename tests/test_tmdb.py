@@ -228,6 +228,35 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fetch.await_args.args[1], f"{tmdb.TMDB_URL}/search/movie")
         self.assertNotIn("with_genres", fetch.await_args.args[2])
 
+    async def test_tv_details_excludes_specials_from_trackable_seasons(self) -> None:
+        data = {
+            "number_of_seasons": 2,
+            "number_of_episodes": 10,
+            "seasons": [
+                {"season_number": 0, "name": "Specials", "episode_count": 25},
+                {"season_number": 1, "name": "Season 1", "episode_count": 6},
+                {"season_number": 2, "name": "Season 2", "episode_count": 4},
+            ],
+        }
+
+        with (
+            patch.object(tmdb, "TMDB_API", "token"),
+            patch.object(
+                tmdb,
+                "get_http_session",
+                AsyncMock(return_value=SessionStub()),
+            ),
+            patch.object(tmdb, "_fetch_json", AsyncMock(return_value=data)),
+        ):
+            details = await tmdb.fetch_tv_details(42)
+
+        self.assertEqual(details.number_of_seasons, 2)
+        self.assertEqual(details.number_of_episodes, 10)
+        self.assertEqual(
+            [(season.season_number, season.episode_count) for season in details.seasons],
+            [(1, 6), (2, 4)],
+        )
+
     async def test_fetch_json_classifies_http_errors(self) -> None:
         cases = (
             (401, tmdb.TmdbAuthenticationError),

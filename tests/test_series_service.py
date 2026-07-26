@@ -8,24 +8,25 @@ from src.services.series import (
 
 
 SEASONS = [
-    {"season_number": 0, "episode_count": 2},
     {"season_number": 1, "episode_count": 8},
+    {"season_number": 2, "episode_count": 2},
 ]
 
 
 class SeriesProgressServiceTests(unittest.TestCase):
     def test_validates_progress_against_each_season(self) -> None:
         self.assertEqual(
-            validate_series_progress({0: 1, 1: 8}, SEASONS, 10),
-            {0: 1, 1: 8},
+            validate_series_progress({1: 8, 2: 1}, SEASONS, 10),
+            {1: 8, 2: 1},
         )
 
     def test_rejects_negative_and_excess_progress(self) -> None:
         invalid_progress = (
             ({-1: 1}, 10),
+            ({0: 1}, 10),
             ({1: -1}, 10),
             ({1: 9}, 10),
-            ({2: 1}, 10),
+            ({3: 1}, 10),
             ({1: 1}, 9),
         )
         for seasons, total in invalid_progress:
@@ -53,7 +54,7 @@ class SeriesProgressServiceTests(unittest.TestCase):
                 {1: 3},
                 SEASONS,
                 10,
-                current_season=0,
+                current_season=2,
                 season_number=1,
                 episodes_watched=5,
             )

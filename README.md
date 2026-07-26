@@ -54,12 +54,15 @@ BOTFUNILM is a sleek, open-source Telegram bot for beautifully logging and organ
 - **Python**
 - **aiogram 3**
 - **TMDB API**
-- **SQLite / PostgreSQL-ready configuration**
+- **SQLite + Redis FSM storage**
+- **Docker Compose**
 - **Open-source, self-hostable core**
 
 ## Project Status
 
-BOTFUNILM is currently in active early development. The foundation is being built around a simple Telegram-native experience, TMDB-powered media lookup, and a storage layer that can grow from local SQLite to PostgreSQL.
+BOTFUNILM is currently in active early development. The foundation is built
+around a simple Telegram-native experience, TMDB-powered media lookup, durable
+SQLite data, and Redis-backed conversation state.
 
 Planned areas:
 
@@ -77,6 +80,54 @@ Clone the repository:
 git clone https://github.com/x3simbax3/BOTFUNILM.git
 cd BOTFUNILM
 ```
+
+### Docker Compose
+
+Create the configuration and fill in `BOT_TOKEN` and `TMDB_API`:
+
+```bash
+cp .env.example config/.env
+```
+
+Build and start the bot with Redis:
+
+```bash
+docker compose up --detach --build
+docker compose logs --follow bot
+```
+
+Compose starts two services: `bot` and `redis`. Before polling begins, the bot
+container applies all Atlas migrations. SQLite and downloaded posters are kept
+in the persistent `bot_data` volume; Redis holds only temporary FSM data with a
+24-hour TTL and is intentionally not exposed to the host network.
+
+Stop the services without deleting user data:
+
+```bash
+docker compose down
+```
+
+Do not add `--volumes` unless you intentionally want to delete the SQLite
+database and downloaded posters.
+
+Common Compose operations:
+
+```bash
+make ps                         # service status
+make logs                       # follow bot and Redis logs
+make restart                    # restart only the bot
+make build                      # rebuild the production image
+make start                      # build and start/update the stack
+make test                       # build test image and run tests once
+docker compose images           # list images used by the stack
+docker image rm botfunilm-bot botfunilm-test
+```
+
+Stop the stack before removing an image that is still used by a container. The
+`botfunilm_bot_data` volume is independent from the images and remains intact
+unless it is explicitly removed.
+
+### Local development
 
 Install `uv`:
 
@@ -164,17 +215,22 @@ make db-downgrade  # reverts one migration; review data-loss risk first
 Run the test suite in two worker processes:
 
 ```bash
-make test
+make test TEST_PROCESSES=2
 ```
 
-The equivalent direct command is `uv run pytest -n 2`.
-
-`TEST_PROCESSES` is read as an integer from `config/.env` and applies to every
-Make target that runs the test suite (`test`, `check`, `start`, and `commit`).
-It can also be overridden for a single invocation:
+`make test` builds the dedicated Docker `test` target and runs pytest inside a
+one-off container. The production bot image does not contain tests or
+development dependencies. For a local run without Docker, use:
 
 ```bash
-make check TEST_PROCESSES=4
+make test-local TEST_PROCESSES=2
+```
+
+Both commands default to one worker to keep resource usage predictable. Override
+it only when the host has enough CPU and memory:
+
+```bash
+make test TEST_PROCESSES=2
 ```
 
 ## TMDB Search Helper

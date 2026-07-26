@@ -602,6 +602,52 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_series_tracking_ignores_specials_and_legacy_progress(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:8", message)
+        state = StateStub(
+            {
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "content_type": "movie",
+            }
+        )
+        details = TmdbTvDetails(
+            number_of_seasons=1,
+            number_of_episodes=8,
+            seasons=[
+                TmdbSeasonInfo(0, "Спецвыпуски", 20),
+                TmdbSeasonInfo(1, "Сезон 1", 8),
+            ],
+        )
+        saved_progress = [
+            {"season_number": 0, "episodes_watched": 5},
+            {"season_number": 1, "episodes_watched": 3},
+        ]
+
+        with (
+            patch.object(
+                series_handlers,
+                "fetch_tv_details",
+                AsyncMock(return_value=details),
+            ),
+            patch.object(
+                series_handlers,
+                "get_user_season_progress",
+                AsyncMock(return_value=saved_progress),
+            ),
+        ):
+            await series_handlers.start_series_tracking(callback, state)
+
+        self.assertEqual(
+            state.data["seasons_data"],
+            [{"season_number": 1, "name": "Сезон 1", "episode_count": 8}],
+        )
+        self.assertEqual(state.data["watched_by_season"], {1: 3})
+        self.assertEqual(state.data["total_episodes"], 8)
+        self.assertEqual(state.data["episodes_watched_total"], 3)
+
     async def test_start_series_tracking_restores_saved_progress(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)

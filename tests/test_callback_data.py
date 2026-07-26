@@ -55,7 +55,7 @@ class CallbackDataTests(unittest.TestCase):
         self.assertEqual(parse_library_page_callback("library:page:0"), 0)
         self.assertEqual(parse_library_page_callback("library:page:100000"), 100_000)
         self.assertEqual(parse_rating_callback("rate:10"), 10)
-        self.assertEqual(parse_season_callback("season:0"), 0)
+        self.assertEqual(parse_season_callback("season:1"), 1)
         self.assertEqual(parse_season_callback("season:done"), "done")
         self.assertEqual(
             parse_episode_callback("ep:12:34"),
@@ -74,9 +74,11 @@ class CallbackDataTests(unittest.TestCase):
             (parse_rating_callback, "rate:11"),
             (parse_rating_callback, "rate:1:extra"),
             (parse_season_callback, "season:-1"),
+            (parse_season_callback, "season:0"),
             (parse_season_callback, "season:01"),
             (parse_season_callback, "season:10001"),
             (parse_episode_callback, "ep:-1:2"),
+            (parse_episode_callback, "ep:0:2"),
             (parse_episode_callback, "ep:1:-2"),
             (parse_episode_callback, "ep:01:2"),
             (parse_episode_callback, "ep:1:100001"),

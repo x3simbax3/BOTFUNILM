@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
-    "aiogram==3.30.0",
+    "aiogram[redis]==3.30.0",
     "aiosqlite==0.21.0",
     "python-dotenv==1.2.2",
 ]

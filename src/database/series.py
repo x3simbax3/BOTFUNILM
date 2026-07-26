@@ -118,8 +118,8 @@ def _validate_progress_values(seasons: dict[int, int], total_episodes: int) -> N
         raise ValueError("total_episodes must be a non-negative integer")
 
     for season_number, episodes_watched in seasons.items():
-        if type(season_number) is not int or season_number < 0:
-            raise ValueError("season numbers must be non-negative integers")
+        if type(season_number) is not int or season_number <= 0:
+            raise ValueError("season numbers must be positive integers")
         if type(episodes_watched) is not int or episodes_watched < 0:
             raise ValueError("episode counts must be non-negative integers")
 

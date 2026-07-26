@@ -416,6 +416,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
         invalid_progress = (
             ({-1: 1}, 10),
+            ({0: 1}, 10),
             ({1: -1}, 10),
             ({1: 11}, 10),
         )
@@ -467,6 +468,35 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
                     ) VALUES (?, ?, ?, ?)
                     """,
                     (123, media_id, 1, 11),
+                )
+
+    async def test_database_trigger_rejects_special_season_progress(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="TV",
+            number_of_seasons=1,
+            number_of_episodes=10,
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="watching",
+            episodes_watched=0,
+            database_url=self.database_url,
+        )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            async with connection_scope(self.database_url) as connection:
+                await connection.execute(
+                    """
+                    INSERT INTO user_season_progress (
+                        user_id, media_id, season_number, episodes_watched
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (123, media_id, 0, 1),
                 )
 
     async def test_series_progress_cannot_be_saved_for_movie(self) -> None:

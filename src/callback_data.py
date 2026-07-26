@@ -25,9 +25,9 @@ _BACK_RE = re.compile(r"back:([^:]+)(?::([^:]+))?(?::([^:]+))?\Z", re.ASCII)
 _LIBRARY_FILTER_RE = re.compile(r"library:filter:([^:]+)\Z", re.ASCII)
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
-_SEASON_RE = re.compile(r"season:(done|0|[1-9][0-9]{0,4})\Z", re.ASCII)
+_SEASON_RE = re.compile(r"season:(done|[1-9][0-9]{0,4})\Z", re.ASCII)
 _EPISODE_RE = re.compile(
-    r"ep:(?:done|(0|[1-9][0-9]{0,4}):(0|[1-9][0-9]{0,5}))\Z",
+    r"ep:(?:done|([1-9][0-9]{0,4}):(0|[1-9][0-9]{0,5}))\Z",
     re.ASCII,
 )
 

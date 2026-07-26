@@ -1,37 +1,64 @@
 PYTHON ?= uv run python
 PYTEST ?= uv run pytest
-TEST_PROCESSES ?= $(shell $(PYTHON) -c 'from config.config import TEST_PROCESSES; print(TEST_PROCESSES)')
+TEST_PROCESSES ?= 1
 ATLAS ?= atlas
+COMPOSE ?= docker compose
 
-.PHONY: help check test start migrate migration db-check db-status db-downgrade db-reset commit
+.PHONY: help check compose-check test test-local build start up start-local stop down restart logs ps migrate migration db-check db-status db-downgrade db-reset commit
 
 help:
-	@echo "Targets:"
-	@echo "  make check          Run project checks"
-	@echo "  make test           Run tests in $(TEST_PROCESSES) worker processes"
-	@echo "                      Override with TEST_PROCESSES=<number>"
-	@echo "  make migrate        Apply all pending database migrations"
-	@echo "  make migration name='...'  Generate a migration from schema.sql changes"
-	@echo "  make db-check       Validate migration files and checksums"
-	@echo "  make db-status      Show applied and pending migrations"
-	@echo "  make db-downgrade   Revert the latest migration"
-	@echo "  make db-reset       DELETE the local database and recreate it"
-	@echo "  make start          Run checks, migrations, then start the bot"
-	@echo "  make commit m='...' Run checks, stage changes, and commit"
+	@echo "Docker targets:"
+	@echo "  make start          Build and start bot + Redis through Compose"
+	@echo "  make build          Build the production bot image"
+	@echo "  make test           Build the test target and run tests in Docker"
+	@echo "  make restart        Restart only the bot container"
+	@echo "  make logs           Follow bot and Redis logs"
+	@echo "  make ps             Show Compose service status"
+	@echo "  make stop           Stop Compose without deleting persistent data"
+	@echo ""
+	@echo "Local development targets:"
+	@echo "  make start-local    Apply migrations and run bot through uv"
+	@echo "  make test-local     Run tests locally through uv"
+	@echo "  make db-check       Validate migration files and schema"
+	@echo "  make migration name='...'  Generate a migration"
+	@echo "  make db-status      Show local database migration status"
 
-check:
-	$(PYTHON) -m compileall -q src config tests
-	$(MAKE) test
+check: compose-check db-check test
+
+compose-check:
+	$(COMPOSE) config --quiet
 
 test:
-	@if find tests -type f \( -name 'test_*.py' -o -name '*_test.py' \) | grep -q .; then \
-		$(PYTEST) -n $(TEST_PROCESSES); \
-	else \
-		echo "No tests found yet. Skipping pytest."; \
-	fi
+	$(COMPOSE) --profile test build test
+	$(COMPOSE) --profile test run --rm test pytest -q -n $(TEST_PROCESSES)
 
-start: check migrate
+test-local:
+	$(PYTEST) -q -n $(TEST_PROCESSES)
+
+build: compose-check
+	$(COMPOSE) build bot
+
+start: up
+
+up: compose-check
+	$(COMPOSE) up --detach --build
+
+start-local: migrate
 	$(PYTHON) -m src.bot
+
+stop: down
+
+down:
+	$(COMPOSE) down
+
+restart:
+	$(COMPOSE) restart bot
+
+logs:
+	$(COMPOSE) logs --follow bot redis
+
+ps:
+	$(COMPOSE) ps
 
 migrate:
 	$(ATLAS) migrate apply --env local

@@ -1,0 +1,12 @@
+.git
+.github
+.pytest_cache
+.uv-cache
+.venv
+*.db
+*.db-shm
+*.db-wal
+*.egg-info
+__pycache__
+config/.env
+media
