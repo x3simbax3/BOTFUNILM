@@ -3,258 +3,266 @@
 
   <h1>BOTFUNILM</h1>
 
-  <p><strong>Your personal media tracker in Telegram.</strong></p>
+  <p><strong>Персональный Telegram-трекер фильмов, сериалов и аниме.</strong></p>
 
   <p>
-    <a href="https://github.com/x3simbax3/BOTFUNILM/commits/main">
-      <img src="https://img.shields.io/github/last-commit/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=111827" alt="Last commit">
-    </a>
-    <a href="https://github.com/x3simbax3/BOTFUNILM/issues">
-      <img src="https://img.shields.io/github/issues/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=2563eb" alt="Issues">
-    </a>
+    <a href="https://github.com/x3simbax3/BOTFUNILM/commits/main"><img src="https://img.shields.io/github/last-commit/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=111827" alt="Last commit"></a>
+    <a href="https://github.com/x3simbax3/BOTFUNILM/issues"><img src="https://img.shields.io/github/issues/x3simbax3/BOTFUNILM?style=for-the-badge&logo=github&color=2563eb" alt="Issues"></a>
     <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/aiogram-3.30.0-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="aiogram 3.30.0">
     <img src="https://img.shields.io/badge/TMDB-powered-01B4E4?style=for-the-badge&logo=themoviedatabase&logoColor=white" alt="TMDB powered">
-    <img src="https://img.shields.io/badge/self--hostable-yes-10b981?style=for-the-badge" alt="Self-hostable">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f5c518?style=for-the-badge" alt="MIT License"></a>
-  </p>
-
-  <p>
-    <a href="https://github.com/topics/telegram-bot"><img src="https://img.shields.io/badge/topic-telegram--bot-2CA5E0?style=flat-square" alt="telegram-bot"></a>
-    <a href="https://github.com/topics/media-tracker"><img src="https://img.shields.io/badge/topic-media--tracker-f97316?style=flat-square" alt="media-tracker"></a>
-    <a href="https://github.com/topics/movie-tracker"><img src="https://img.shields.io/badge/topic-movie--tracker-ef4444?style=flat-square" alt="movie-tracker"></a>
-    <a href="https://github.com/topics/anime"><img src="https://img.shields.io/badge/topic-anime-a855f7?style=flat-square" alt="anime"></a>
-    <a href="https://github.com/topics/tv-series"><img src="https://img.shields.io/badge/topic-tv--series-14b8a6?style=flat-square" alt="tv-series"></a>
-    <a href="https://github.com/topics/tmdb"><img src="https://img.shields.io/badge/topic-tmdb-01B4E4?style=flat-square" alt="tmdb"></a>
-    <a href="https://github.com/topics/python"><img src="https://img.shields.io/badge/topic-python-3776AB?style=flat-square" alt="python"></a>
-    <a href="https://github.com/topics/self-hosted"><img src="https://img.shields.io/badge/topic-self--hosted-10b981?style=flat-square" alt="self-hosted"></a>
   </p>
 </div>
 
-## Topics
+BOTFUNILM помогает вести личную медиатеку прямо в Telegram: искать фильмы,
+сериалы и аниме через TMDB, сохранять их в библиотеку, отмечать статус
+просмотра, оценивать и отслеживать прогресс по сезонам и эпизодам.
 
-`telegram-bot` `media-tracker` `movie-tracker` `anime` `tv-series` `tmdb` `python` `aiogram` `self-hosted` `watchlist`
+Проект находится в активной разработке. Сейчас он рассчитан на один процесс
+бота в режиме long polling и самостоятельное размещение на сервере.
 
-BOTFUNILM is a sleek, open-source Telegram bot for beautifully logging and organizing everything you watch: movies, anime, and TV series. Track seasons, keep your watch history in one place, follow clean statistics, and never lose the next episode again.
+## Возможности
 
-> Early development. Stars, issues, ideas, and contributions are highly appreciated.
+- поиск фильмов, сериалов и аниме по каталогу TMDB;
+- личная библиотека со статусами и фильтрами;
+- оценки и история просмотра;
+- прогресс сериалов по обычным сезонам и эпизодам;
+- локальное хранение постеров;
+- SQLite без ORM и версионируемые миграции Atlas;
+- Redis для временных FSM-состояний диалогов;
+- запуск production-стека и тестов через Docker Compose.
 
-## What It Does
+## Стек
 
-- Log movies, anime, and TV shows with watch status
-- Track series season by season, so you always know where you left off
-- Build clean watching statistics and personal insights
-- Get smart notifications when new episodes drop
-- Parse titles through TMDB, with future multi-source support
-- Keep the core modular, hackable, and self-hostable
-- Stay fast, minimal, and fully Telegram-native
+- Python 3.10+ и aiogram 3;
+- TMDB API;
+- SQLite + aiosqlite;
+- Redis 7.4 для FSM;
+- Atlas для миграций;
+- pytest и pytest-xdist;
+- uv, Docker и Docker Compose.
 
-## Tech Stack
+## Быстрый запуск через Docker Compose
 
-- **Python**
-- **aiogram 3**
-- **TMDB API**
-- **SQLite + Redis FSM storage**
-- **Docker Compose**
-- **Open-source, self-hostable core**
-
-## Project Status
-
-BOTFUNILM is currently in active early development. The foundation is built
-around a simple Telegram-native experience, TMDB-powered media lookup, durable
-SQLite data, and Redis-backed conversation state.
-
-Planned areas:
-
-- Watchlists and status flows
-- Season and episode progress
-- Statistics dashboard inside Telegram
-- Release tracking and notifications
-- More metadata providers beyond TMDB
-
-## Quick Start
-
-Clone the repository:
+Понадобятся Git, Docker Engine и Compose plugin. Клонируйте репозиторий:
 
 ```bash
 git clone https://github.com/x3simbax3/BOTFUNILM.git
 cd BOTFUNILM
 ```
 
-### Docker Compose
-
-Create the configuration and fill in `BOT_TOKEN` and `TMDB_API`:
+Создайте конфигурацию:
 
 ```bash
 cp .env.example config/.env
 ```
 
-Build and start the bot with Redis:
+Заполните как минимум:
+
+```env
+BOT_TOKEN=токен_от_BotFather
+TMDB_API=TMDB_API_Read_Access_Token
+```
+
+`TMDB_API` — именно Bearer-токен **API Read Access Token**, а не короткий API
+key. Реальный `config/.env` не должен попадать в Git.
+
+Соберите образы и запустите бот с Redis:
+
+```bash
+make start
+```
+
+То же действие без Makefile:
 
 ```bash
 docker compose up --detach --build
-docker compose logs --follow bot
 ```
 
-Compose starts two services: `bot` and `redis`. Before polling begins, the bot
-container applies all Atlas migrations. SQLite and downloaded posters are kept
-in the persistent `bot_data` volume; Redis holds only temporary FSM data with a
-24-hour TTL and is intentionally not exposed to the host network.
-
-Stop the services without deleting user data:
+Проверить состояние и посмотреть логи:
 
 ```bash
-docker compose down
+make ps
+make logs
 ```
 
-Do not add `--volumes` unless you intentionally want to delete the SQLite
-database and downloaded posters.
-
-Common Compose operations:
+Остановить сервисы:
 
 ```bash
-make ps                         # service status
-make logs                       # follow bot and Redis logs
-make restart                    # restart only the bot
-make build                      # rebuild the production image
-make start                      # build and start/update the stack
-make test                       # build test image and run tests once
-docker compose images           # list images used by the stack
-docker image rm botfunilm-bot botfunilm-test
+make stop
 ```
 
-Stop the stack before removing an image that is still used by a container. The
-`botfunilm_bot_data` volume is independent from the images and remains intact
-unless it is explicitly removed.
+При запуске Compose:
 
-### Local development
+1. Redis проходит healthcheck.
+2. Контейнер `bot` применяет все ожидающие миграции Atlas.
+3. После успешных миграций запускается `python -m src.bot`.
 
-Install `uv`:
+SQLite-база и постеры находятся в именованном volume `bot_data`, поэтому
+пересборка образа, перезапуск и обычный `docker compose down` их не удаляют.
+Не добавляйте `--volumes` к команде остановки, если не хотите безвозвратно
+удалить пользовательские данные.
+
+## Конфигурация
+
+Все поддерживаемые параметры перечислены в `.env.example`:
+
+| Переменная | Назначение | Значение по умолчанию |
+| --- | --- | --- |
+| `BOT_TOKEN` | токен Telegram-бота от BotFather | обязательна |
+| `TMDB_API` | TMDB API Read Access Token | обязательна для поиска |
+| `DATABASE_URL` | URL SQLite при локальном запуске | `sqlite:///bot.db` |
+| `DEBUG` | подробное логирование | `false` |
+| `TMDB_URL` | адрес совместимого TMDB API | `https://api.themoviedb.org/3` |
+| `TMDB_LANG` | язык данных TMDB | `ru-RU` |
+| `MEDIA_ROOT` | каталог загруженных постеров | `media` |
+| `REDIS_URL` | адрес Redis; пустое значение включает FSM в памяти | пусто |
+| `FSM_TTL_SECONDS` | срок жизни незавершённого FSM-диалога | `86400` |
+
+В Compose значения хранилища задаются специально для контейнеров:
+`DATABASE_URL=sqlite:////data/bot.db`, `MEDIA_ROOT=/data/media` и
+`REDIS_URL=redis://redis:6379/0`. Redis не публикует порт на хост, хранит только
+временные FSM-данные и ограничен 64 МБ памяти. Без `REDIS_URL` локальный запуск
+использует память процесса, поэтому незавершённые диалоги пропадут после
+перезапуска.
+
+## Как устроен тестовый контейнер
+
+Тесты запускаются отдельным Compose-сервисом `test`, который доступен только в
+профиле `test`. Это не production-контейнер бота и не фоновый сервис:
+
+```text
+Dockerfile: base -> test
+                    |
+                    +-- исходный код, миграции и tests/
+                    +-- dev-зависимости pytest и pytest-xdist
+                    +-- одноразовый запуск pytest
+```
+
+Production-stage `runtime`, напротив, не содержит `tests/` и dev-зависимостей.
+Тестовый сервис:
+
+- не читает `config/.env` и получает пустые `BOT_TOKEN`, `TMDB_API` и
+  `REDIS_URL`;
+- не запускает `bot` или Redis и не зависит от них;
+- не монтирует `bot_data`, поэтому не видит и не изменяет рабочую SQLite-базу и
+  постеры;
+- завершается вместе с pytest, после чего `--rm` удаляет контейнер;
+- оставляет собранный test-образ и BuildKit-кэш для ускорения следующего запуска.
+
+На слабом сервере запускайте ровно один pytest-worker:
+
+```bash
+make test TEST_PROCESSES=1
+```
+
+Makefile сначала выполняет `docker compose --profile test build test`, затем
+создаёт одноразовый контейнер командой
+`docker compose --profile test run --rm test pytest -q -n 1`. Параллельные
+воркеры и дополнительные фоновые сервисы при этом не запускаются. Увеличивать
+`TEST_PROCESSES` стоит только на машине с достаточным запасом CPU и памяти.
+
+После проверки можно убедиться, что одноразового контейнера не осталось:
+
+```bash
+docker compose --profile test ps --all
+```
+
+## Локальная разработка
+
+Установите [uv](https://docs.astral.sh/uv/) и зависимости из lock-файла:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Create the environment and install the locked dependencies:
-
-```bash
 uv sync
 ```
 
-`uv` creates `.venv` automatically. The committed `uv.lock` keeps direct and
-transitive dependency versions reproducible across installations.
-
-Install the Atlas migration CLI:
+`uv` создаст `.venv` и установит зафиксированные в `uv.lock` версии прямых и
+транзитивных зависимостей. Затем установите Atlas CLI:
 
 ```bash
 curl -sSf https://atlasgo.sh | sh
 ```
 
-Create `config/.env` from the safe example and fill in both tokens:
+Подготовьте `config/.env`, как описано выше, и запустите приложение:
 
 ```bash
-cp .env.example config/.env
+make start-local
 ```
 
-The example documents every supported environment variable. `BOT_TOKEN` and
-`TMDB_API` are intentionally empty and must never be committed with real values.
-
-`MEDIA_ROOT` необязателен. По умолчанию постеры сохраняются в `media/posters`
-внутри проекта и отправляются в Telegram с локального диска. Для резервного
-копирования сервера сохраняйте эту папку вместе с базой данных.
-
-Run the bot:
-
-```bash
-./run_bot.sh
-```
-
-You can also run it directly through the managed environment:
+`make start-local` применяет локальные миграции, после чего запускает бота.
+Прямой запуск без автоматической миграции:
 
 ```bash
 uv run python -m src.bot
 ```
 
-## Database and migrations
+Локальный прогон тестов доступен командой `make test-local`, однако основной
+воспроизводимый сценарий проекта — изолированный Docker-запуск из предыдущего
+раздела.
 
-The application uses SQLite through asynchronous `aiosqlite` calls. Queries are
-plain SQL functions grouped by domain in `src/database/`; there is no ORM.
-Atlas manages versioned SQL migrations, while `schema.sql` describes the
-desired schema.
+## База данных и миграции
 
-The Python database URL remains configured in `config/.env`:
+Приложение выполняет асинхронные SQL-запросы через `aiosqlite`; ORM не
+используется. Целевая схема хранится в `schema.sql`, а применяемая история — в
+каталоге `migrations/` и контрольной сумме `migrations/atlas.sum`.
 
-```env
-DATABASE_URL=sqlite:///bot.db
-```
-
-Apply all migrations:
+Основные команды:
 
 ```bash
-make migrate
+make migrate                         # применить локальные миграции
+make db-status                       # показать состояние миграций
+make db-check                        # проверить порядок, суммы и соответствие схеме
+make migration name="add runtime"    # создать миграцию после изменения schema.sql
+make db-downgrade                    # откатить одну миграцию
 ```
 
-Starting through `make start` or `./run_bot.sh` applies pending migrations before
-the bot starts. The local Atlas environment targets `bot.db` in `atlas.hcl`.
+Сначала измените `schema.sql`, затем создайте миграцию, внимательно проверьте
+сгенерированный SQL и только после этого применяйте её. `make db-reset` удаляет
+локальный `bot.db` после интерактивного подтверждения; к production-volume эта
+команда не относится.
 
-After changing `schema.sql`, generate and inspect a SQL migration, then apply it:
+## Архитектура
+
+```text
+src/
+├── bot.py              # Dispatcher, FSM storage и запуск polling
+├── routers/            # сборка дерева aiogram-роутеров
+├── handlers/           # Telegram-сценарии по функциональным областям
+├── services/           # бизнес-логика медиа и прогресса сериалов
+├── database/           # соединение и SQL-функции по доменам
+├── lang/ru/            # пользовательские тексты
+├── keyboards/          # inline/reply-клавиатуры
+├── tmdb*.py            # API-клиент, модели, matching и совместимый фасад
+└── posters.py          # загрузка и безопасная выдача локальных постеров
+```
+
+Обработчики отвечают за Telegram-взаимодействие, сервисы — за правила предметной
+области, а слой `database` — за хранение. FSM сохраняет незавершённый контекст
+диалога: в Redis на сервере и в памяти при локальном запуске без `REDIS_URL`.
+Постоянные пользовательские данные всегда находятся в SQLite.
+
+## Полезные команды
 
 ```bash
-make migration name="add media runtime"
-make migrate
+make help       # список основных целей
+make build      # пересобрать production-образ
+make restart    # перезапустить только bot
+make logs       # следить за логами bot и redis
+make ps         # состояние Compose-сервисов
+make test TEST_PROCESSES=1
 ```
 
-Useful migration commands:
+Для быстрой ручной проверки TMDB можно запустить `./tmdb_search.sh`: скрипт
+берёт `TMDB_API` из окружения или `config/.env`.
 
-```bash
-make db-status
-make db-check      # validates migration order and checksums
-make db-downgrade  # reverts one migration; review data-loss risk first
-```
+## Участие в разработке
 
-Run the test suite in two worker processes:
+Приветствуются issue и pull request с исправлениями, улучшением Telegram UX,
+поиска TMDB, слоя хранения, тестов и документации. Перед отправкой изменений
+проверьте миграции и запустите тестовый контейнер с одним worker.
 
-```bash
-make test TEST_PROCESSES=2
-```
+## Лицензия
 
-`make test` builds the dedicated Docker `test` target and runs pytest inside a
-one-off container. The production bot image does not contain tests or
-development dependencies. For a local run without Docker, use:
-
-```bash
-make test-local TEST_PROCESSES=2
-```
-
-Both commands default to one worker to keep resource usage predictable. Override
-it only when the host has enough CPU and memory:
-
-```bash
-make test TEST_PROCESSES=2
-```
-
-## TMDB Search Helper
-
-For quick manual TMDB checks, use:
-
-```bash
-./tmdb_search.sh
-```
-
-The script reads `TMDB_API` from your environment or from `config/.env`.
-
-## Contributing
-
-Ideas, bug reports, feature proposals, and pull requests are welcome. BOTFUNILM is intentionally small and modular, so it should be easy to inspect, extend, and self-host.
-
-Good first contribution areas:
-
-- Telegram UX flows
-- Media status models
-- TMDB parsing improvements
-- Storage layer implementation
-- Tests and development tooling
-
-## License
-
-BOTFUNILM is distributed under the [MIT License](LICENSE).
+Проект распространяется по лицензии [MIT](LICENSE).
