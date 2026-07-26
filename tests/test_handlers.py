@@ -203,7 +203,25 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             for button in row
         ]
         self.assertIn("library:page:1", callbacks)
+        self.assertEqual(state.data["library_sort"], "recent")
         self.assertEqual(state.state, MenuState.viewing_library)
+
+    async def test_rating_sort_button_toggles_rating_and_recent_order(self) -> None:
+        callback = CallbackStub("library:sort:rating", MessageStub())
+        state = StateStub({"library_sort": "recent"})
+
+        with patch.object(
+            library_handlers,
+            "open_library_page",
+            AsyncMock(),
+        ) as open_page:
+            await library_handlers.change_library_sort(callback, state)
+            self.assertEqual(state.data["library_sort"], "rating")
+
+            await library_handlers.change_library_sort(callback, state)
+            self.assertEqual(state.data["library_sort"], "recent")
+
+        self.assertEqual(open_page.await_count, 2)
 
     async def test_choose_action_saves_action_and_moves_to_choosing_format(
         self,

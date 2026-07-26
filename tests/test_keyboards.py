@@ -30,19 +30,50 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(
             callback_rows(keyboard),
             [
+                ["library:filter:all", "library:sort:rating"],
                 ["library:filter:series", "library:filter:full_length"],
-                [
-                    "library:filter:anime",
-                    "library:filter:movie",
-                    "library:filter:cartoon",
-                ],
-                ["library:filter:all"],
+                ["library:filter:movie", "library:filter:anime"],
+                ["library:filter:cartoon"],
                 ["library:page:0", "library:page:2"],
                 ["back:main"],
             ],
         )
-        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✅ Сериалы")
-        self.assertEqual(keyboard.inline_keyboard[0][1].text, "Полный метр")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✅ 📺 Сериалы")
+        self.assertEqual(keyboard.inline_keyboard[1][1].text, "🎬 Полный метр")
+
+    def test_all_filter_uses_only_one_selection_mark(self) -> None:
+        filters = {
+            "series": True,
+            "full_length": True,
+            "anime": True,
+            "movie": True,
+            "cartoon": True,
+        }
+
+        keyboard = keyboards.library_keyboard(filters, page=0, has_more=False)
+        labels = [button.text for row in keyboard.inline_keyboard for button in row]
+
+        self.assertEqual(
+            [label for label in labels if label.startswith("✅")], ["✅ Все"]
+        )
+
+    def test_rating_sort_has_compact_selected_button(self) -> None:
+        filters = {
+            "series": True,
+            "full_length": False,
+            "anime": False,
+            "movie": True,
+            "cartoon": False,
+        }
+
+        keyboard = keyboards.library_keyboard(
+            filters,
+            page=0,
+            has_more=False,
+            sort_order="rating",
+        )
+
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "✅ ⭐ Топ")
 
     def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
         self.assertEqual(

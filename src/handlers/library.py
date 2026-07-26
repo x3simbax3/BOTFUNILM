@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from src.callback_data import (
     parse_library_filter_callback,
     parse_library_page_callback,
+    parse_library_sort_callback,
 )
 from src.database.library import (
     get_user_library_filters,
@@ -42,6 +43,7 @@ LIBRARY_PAGE_SIZE = 20
 @router.callback_query(F.data == "menu:library")
 async def open_library(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
+        await state.update_data(library_sort="recent")
         await open_library_page(callback, state, 0)
 
 
@@ -63,6 +65,22 @@ async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer(FILTER_SAVE_FAILED, show_alert=True)
         return
 
+    await open_library_page(callback, state, 0)
+
+
+@router.callback_query(F.data.startswith("library:sort:"))
+async def change_library_sort(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    sort_name = parse_library_sort_callback(callback.data)
+    if sort_name is None:
+        await callback.answer(UNKNOWN_FILTER, show_alert=True)
+        return
+
+    data = await state.get_data()
+    sort_order = "recent" if data.get("library_sort") == sort_name else sort_name
+    await state.update_data(library_sort=sort_order)
     await open_library_page(callback, state, 0)
 
 
@@ -96,6 +114,11 @@ async def open_library_page(
     if not callback.message:
         return
 
+    data = await state.get_data()
+    sort_order = data.get("library_sort", "recent")
+    if sort_order not in {"recent", "rating"}:
+        sort_order = "recent"
+
     try:
         filters = await get_user_library_filters(callback.from_user.id)
         items = await list_user_library(
@@ -103,6 +126,7 @@ async def open_library_page(
             filters,
             limit=LIBRARY_PAGE_SIZE + 1,
             offset=page * LIBRARY_PAGE_SIZE,
+            sort_order=sort_order,
         )
         bot_user = await callback.bot.get_me()
         if not bot_user.username:
@@ -112,16 +136,22 @@ async def open_library_page(
         return
 
     visible_items = items[:LIBRARY_PAGE_SIZE]
-    await state.update_data(library_page=page)
+    await state.update_data(library_page=page, library_sort=sort_order)
     await state.set_state(MenuState.viewing_library)
     await replace_message(
         callback.message,
-        library_text(visible_items, bot_user.username, page * LIBRARY_PAGE_SIZE),
+        library_text(
+            visible_items,
+            bot_user.username,
+            page * LIBRARY_PAGE_SIZE,
+            sort_order,
+        ),
         parse_mode="HTML",
         reply_markup=library_keyboard(
             filters,
             page,
             len(items) > LIBRARY_PAGE_SIZE,
+            sort_order,
         ),
     )
     await callback.answer()

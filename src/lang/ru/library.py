@@ -19,11 +19,21 @@ ITEM_OPEN_FAILED = "Не удалось открыть тайтл. Попроб�
 ITEM_NOT_FOUND = "Тайтл не найден в твоей библиотеке."
 
 
-def library_text(items: list, bot_username: str, offset: int = 0) -> str:
+def library_text(
+    items: list,
+    bot_username: str,
+    offset: int = 0,
+    sort_order: str = "recent",
+) -> str:
     if not items:
         return "<b>Моя библиотека 📚</b>\n\nПо выбранным фильтрам ничего не найдено."
 
-    lines = ["<b>Моя библиотека 📚</b>", "", "Последние добавленные тайтлы:"]
+    heading = (
+        "Тайтлы с высокой оценкой:"
+        if sort_order == "rating"
+        else "Последние добавленные тайтлы:"
+    )
+    lines = ["<b>Моя библиотека 📚</b>", "", heading]
     for index, item in enumerate(items, start=offset + 1):
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
         lines.append(f'{index}. <a href="{url}">{escape(item["title"])}</a>')

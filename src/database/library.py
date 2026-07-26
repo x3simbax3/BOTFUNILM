@@ -7,6 +7,7 @@ import aiosqlite
 from src.database.connection import connection_scope
 
 LIBRARY_FILTER_NAMES = frozenset({"full_length", "series", "movie", "anime", "cartoon"})
+LIBRARY_SORT_ORDERS = frozenset({"recent", "rating"})
 
 
 async def get_user_library_filters(
@@ -79,14 +80,24 @@ async def list_user_library(
     *,
     limit: int = 20,
     offset: int = 0,
+    sort_order: str = "recent",
     database_url: str | None = None,
 ) -> list[aiosqlite.Row]:
     if limit <= 0 or offset < 0:
         raise ValueError("Invalid library page")
+    if sort_order not in LIBRARY_SORT_ORDERS:
+        raise ValueError("Unknown library sort order")
+
+    order_by = (
+        "um.user_rating IS NULL, um.user_rating DESC, "
+        "m.rating IS NULL, m.rating DESC, um.added_at DESC, m.id DESC"
+        if sort_order == "rating"
+        else "um.added_at DESC, m.id DESC"
+    )
 
     async with connection_scope(database_url) as connection:
         async with connection.execute(
-            """
+            f"""
             SELECT m.*, um.status AS user_status, um.user_rating,
                    um.episodes_watched, um.last_watched_at
             FROM user_media AS um
@@ -97,7 +108,7 @@ async def list_user_library(
               AND ((? AND m.content_type = 'movie')
                    OR (? AND m.content_type = 'anime')
                    OR (? AND m.content_type = 'cartoon'))
-            ORDER BY um.added_at DESC, m.id DESC
+            ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,
             (
@@ -140,6 +151,7 @@ def _filters_from_row(row: aiosqlite.Row) -> dict[str, bool]:
 
 __all__ = (
     "LIBRARY_FILTER_NAMES",
+    "LIBRARY_SORT_ORDERS",
     "get_user_library_filters",
     "get_user_library_item",
     "list_user_library",

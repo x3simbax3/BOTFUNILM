@@ -267,6 +267,50 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             all(row["content_format"] == "full_length" for row in full_length_only)
         )
 
+    async def test_library_can_be_sorted_by_user_then_tmdb_rating(self) -> None:
+        entries = (
+            (101, "Мой фаворит", 7.0, 10),
+            (102, "Второе место", 9.5, 8),
+            (103, "Без моей оценки", 9.9, None),
+        )
+        for tmdb_id, title, tmdb_rating, user_rating in entries:
+            media_id = await upsert_media(
+                tmdb_id=tmdb_id,
+                content_format="full_length",
+                content_type="movie",
+                title=title,
+                rating=tmdb_rating,
+                database_url=self.database_url,
+            )
+            await save_user_media(
+                user_id=123,
+                media_id=media_id,
+                status="completed",
+                user_rating=user_rating,
+                database_url=self.database_url,
+            )
+
+        filters = await get_user_library_filters(123, database_url=self.database_url)
+        rows = await list_user_library(
+            123,
+            filters,
+            sort_order="rating",
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            [row["title"] for row in rows],
+            ["Мой фаворит", "Второе место", "Без моей оценки"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "sort order"):
+            await list_user_library(
+                123,
+                filters,
+                sort_order="unknown",
+                database_url=self.database_url,
+            )
+
     async def test_library_item_belongs_to_requested_user(self) -> None:
         media_id = await upsert_media(
             tmdb_id=42,

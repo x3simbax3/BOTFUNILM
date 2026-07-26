@@ -72,6 +72,14 @@ class LocalizationTests(unittest.TestCase):
             '<a href="https://t.me/BotFunilmBot?start=media_7">Tom &amp; Jerry</a>',
             result,
         )
+        self.assertIn("Последние добавленные", result)
+
+        rating_result = lang.library_text(
+            [{"id": 7, "title": "Tom & Jerry"}],
+            "BotFunilmBot",
+            sort_order="rating",
+        )
+        self.assertIn("Тайтлы с высокой оценкой", rating_result)
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

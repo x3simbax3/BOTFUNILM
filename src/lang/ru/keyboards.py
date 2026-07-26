@@ -1,12 +1,13 @@
 MAIN_LIBRARY = "📚 Библиотека"
 MAIN_ADD = "➕ Добавить"
 
-FILTER_SERIES = "Сериалы"
-FILTER_FULL_LENGTH = "Полный метр"
-FILTER_ANIME = "Аниме"
-FILTER_MOVIES = "Фильмы"
-FILTER_CARTOONS = "Мультфильмы"
+FILTER_SERIES = "📺 Сериалы"
+FILTER_FULL_LENGTH = "🎬 Полный метр"
+FILTER_ANIME = "✨ Аниме"
+FILTER_MOVIES = "🎥 Фильмы"
+FILTER_CARTOONS = "🧸 Мульты"
 FILTER_ALL = "Все"
+SORT_RATING = "⭐ Топ"
 
 BACK = "⬅️ Назад"
 MORE = "Ещё ➡️"

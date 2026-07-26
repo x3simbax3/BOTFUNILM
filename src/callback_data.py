@@ -13,6 +13,7 @@ VALID_CONTENT_TYPES = frozenset({"movie", "anime", "cartoon"})
 VALID_LIBRARY_FILTERS = frozenset(
     {"all", "series", "full_length", "anime", "movie", "cartoon"}
 )
+VALID_LIBRARY_SORTS = frozenset({"rating"})
 
 MAX_LIBRARY_PAGE = 100_000
 MAX_SEASON_NUMBER = 10_000
@@ -22,6 +23,7 @@ _FORMAT_RE = re.compile(r"format:([^:]+):([^:]+)\Z", re.ASCII)
 _TYPE_RE = re.compile(r"type:([^:]+):([^:]+):([^:]+)\Z", re.ASCII)
 _BACK_RE = re.compile(r"back:([^:]+)(?::([^:]+))?(?::([^:]+))?\Z", re.ASCII)
 _LIBRARY_FILTER_RE = re.compile(r"library:filter:([^:]+)\Z", re.ASCII)
+_LIBRARY_SORT_RE = re.compile(r"library:sort:([^:]+)\Z", re.ASCII)
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
 _SEASON_RE = re.compile(r"season:(done|[1-9][0-9]{0,4})\Z", re.ASCII)
@@ -104,6 +106,13 @@ def parse_back_callback(data: str) -> BackCallback | None:
 def parse_library_filter_callback(data: str) -> str | None:
     match = _LIBRARY_FILTER_RE.fullmatch(data)
     if not match or match.group(1) not in VALID_LIBRARY_FILTERS:
+        return None
+    return match.group(1)
+
+
+def parse_library_sort_callback(data: str) -> str | None:
+    match = _LIBRARY_SORT_RE.fullmatch(data)
+    if not match or match.group(1) not in VALID_LIBRARY_SORTS:
         return None
     return match.group(1)
 

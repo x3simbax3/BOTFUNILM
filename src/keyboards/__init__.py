@@ -22,43 +22,51 @@ def library_keyboard(
     filters: dict[str, bool],
     page: int,
     has_more: bool,
+    sort_order: str = "recent",
 ) -> InlineKeyboardMarkup:
     all_selected = all(filters.values())
+
+    def filter_selected(name: str) -> bool:
+        return not all_selected and filters.get(name, False)
+
     rows = [
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_SERIES, filters.get("series", False)),
+                text=text.selected(text.FILTER_ALL, all_selected),
+                callback_data="library:filter:all",
+            ),
+            InlineKeyboardButton(
+                text=text.selected(text.SORT_RATING, sort_order == "rating"),
+                callback_data="library:sort:rating",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=text.selected(text.FILTER_SERIES, filter_selected("series")),
                 callback_data="library:filter:series",
             ),
             InlineKeyboardButton(
                 text=text.selected(
                     text.FILTER_FULL_LENGTH,
-                    filters.get("full_length", False),
+                    filter_selected("full_length"),
                 ),
                 callback_data="library:filter:full_length",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_ANIME, filters.get("anime", False)),
-                callback_data="library:filter:anime",
-            ),
-            InlineKeyboardButton(
-                text=text.selected(text.FILTER_MOVIES, filters.get("movie", False)),
+                text=text.selected(text.FILTER_MOVIES, filter_selected("movie")),
                 callback_data="library:filter:movie",
             ),
             InlineKeyboardButton(
-                text=text.selected(
-                    text.FILTER_CARTOONS,
-                    filters.get("cartoon", False),
-                ),
-                callback_data="library:filter:cartoon",
+                text=text.selected(text.FILTER_ANIME, filter_selected("anime")),
+                callback_data="library:filter:anime",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_ALL, all_selected),
-                callback_data="library:filter:all",
+                text=text.selected(text.FILTER_CARTOONS, filter_selected("cartoon")),
+                callback_data="library:filter:cartoon",
             ),
         ],
     ]
