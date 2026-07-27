@@ -57,7 +57,7 @@ def tracking_complete_text(
     status = "Завершён" if remaining == 0 else f"В процессе · осталось {remaining}"
     return (
         "✓ <b>Прогресс сохранён</b>\n\n"
-        f"📺 <b>{escape(title)}</b>\n"
+        f"▣\u00a0<b>{escape(title)}</b>\n"
         f"Просмотрено · <b>{watched_episodes} из {total_episodes}</b>\n"
         f"Статус · <b>{status}</b>\n"
         f"Моя оценка · <b>{average:.1f}/10</b>\n"

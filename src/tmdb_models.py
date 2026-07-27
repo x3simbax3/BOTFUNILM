@@ -13,6 +13,8 @@ class TmdbTitle:
     tmdb_id: int = 0
     poster_path: str | None = None
     rating: float | None = None
+    original_title: str | None = None
+    release_date: str | None = None
 
 
 @dataclass(frozen=True)

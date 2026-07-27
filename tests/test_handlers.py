@@ -479,8 +479,8 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
-            AsyncMock(return_value=guess),
+            "find_title_candidates",
+            AsyncMock(return_value=[guess]),
         ):
             await search_handlers.search_title(message, state)
 
@@ -498,8 +498,8 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
-            AsyncMock(return_value=guess),
+            "find_title_candidates",
+            AsyncMock(return_value=[guess]),
         ):
             await search_handlers.search_title(message, state)
 
@@ -509,26 +509,42 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["tmdb_guess_message_id"], 101)
         self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
 
-    async def test_search_title_uses_local_media_without_tmdb_request(self) -> None:
+    async def test_search_title_reuses_matching_local_media(self) -> None:
         message = MessageStub(text="матрица")
         state = StateStub({"content_format": "full_length", "content_type": "movie"})
         self.local_search.return_value = {
             "id": 7,
             "tmdb_id": 42,
             "title": "Матрица",
+            "original_title": "The Matrix",
             "description": "Описание",
             "poster_path": "/poster.jpg",
             "rating": 8.2,
+            "first_air_date": None,
+            "release_date": "1999-03-31",
         }
+        guess = TmdbTitle(
+            "Матрица",
+            "Описание",
+            "https://image.test/poster.jpg",
+            "матрица",
+            "матрица",
+            42,
+        )
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
-            AsyncMock(),
+            "find_title_candidates",
+            AsyncMock(return_value=[guess]),
         ) as tmdb_search:
             await search_handlers.search_title(message, state)
 
-        tmdb_search.assert_not_awaited()
+        tmdb_search.assert_awaited_once_with(
+            "матрица",
+            "full_length",
+            "movie",
+            limit=5,
+        )
         self.assertEqual(state.data["media_id"], 7)
         self.assertEqual(state.data["tmdb_id"], 42)
         self.assertEqual(state.data["tmdb_rating"], 8.2)
@@ -544,8 +560,8 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
-            AsyncMock(return_value=guess),
+            "find_title_candidates",
+            AsyncMock(return_value=[guess]),
         ) as tmdb_search:
             await search_handlers.search_title(message, state)
 
@@ -554,7 +570,12 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
             "full_length",
             "movie",
         )
-        tmdb_search.assert_awaited_once_with("Матрица", "full_length", "movie")
+        tmdb_search.assert_awaited_once_with(
+            "Матрица",
+            "full_length",
+            "movie",
+            limit=5,
+        )
         self.assertIsNone(state.data["media_id"])
 
     async def test_search_title_handles_tmdb_not_configured(self) -> None:
@@ -569,7 +590,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
+            "find_title_candidates",
             AsyncMock(side_effect=TmdbNotFoundError),
         ):
             await search_handlers.search_title(message, state)
@@ -614,7 +635,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(
             search_handlers,
-            "find_title_guess",
+            "find_title_candidates",
             AsyncMock(side_effect=error_class),
         ):
             await search_handlers.search_title(message, state)
@@ -862,8 +883,10 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             content_format="full_length",
             content_type="cartoon",
             title="Фильм",
+            original_title=None,
             description=None,
             poster_path=None,
+            release_date=None,
         )
         save.assert_awaited_once_with(
             user_id=123,
@@ -1109,8 +1132,10 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             content_format="series",
             content_type="movie",
             title="Сериал",
+            original_title=None,
             description=None,
             poster_path=None,
+            first_air_date=None,
             number_of_seasons=2,
             number_of_episodes=10,
         )

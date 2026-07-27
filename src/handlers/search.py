@@ -52,6 +52,7 @@ from src.lang import (
 from src.posters import download_poster, poster_input
 from src.services import ensure_media
 from src.tmdb import (
+    MAX_TITLE_CANDIDATES,
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
     TmdbError,
@@ -60,7 +61,7 @@ from src.tmdb import (
     TmdbRateLimitError,
     TmdbTitle,
     TmdbUnavailableError,
-    find_title_guess,
+    find_title_candidates,
 )
 
 router = Router(name="search")
@@ -91,15 +92,29 @@ async def search_title(message: Message, state: FSMContext) -> None:
             content_format,
             content_type,
         )
-        if local_media is None:
-            await status_msg.edit_text(TMDB_SEARCHING_REMOTE)
-            guess = await find_title_guess(title_query, content_format, content_type)
-        else:
-            guess = await _title_from_local_media(
-                local_media,
+        local_guess = (
+            await _title_from_local_media(local_media, title_query, content_format)
+            if local_media is not None
+            else None
+        )
+        await status_msg.edit_text(TMDB_SEARCHING_REMOTE)
+        try:
+            guesses = await find_title_candidates(
                 title_query,
                 content_format,
+                content_type,
+                limit=MAX_TITLE_CANDIDATES,
             )
+        except TmdbError:
+            if local_guess is None:
+                raise
+            guesses = [local_guess]
+
+        if local_guess is not None:
+            guesses = [
+                local_guess if guess.tmdb_id == local_guess.tmdb_id else guess
+                for guess in guesses
+            ]
     except aiosqlite.Error:
         await status_msg.edit_text(LOCAL_SEARCH_FAILED)
         return
@@ -108,8 +123,8 @@ async def search_title(message: Message, state: FSMContext) -> None:
         await status_msg.edit_text(text, parse_mode=parse_mode)
         return
 
-    await status_msg.edit_text(tmdb_found_text(guess.title), parse_mode="HTML")
-    await _show_guess(message, state, guess, content_format, local_media)
+    await status_msg.edit_text(tmdb_found_text(guesses[0].title), parse_mode="HTML")
+    await _show_guesses(message, state, guesses, content_format, local_media)
 
 
 async def _title_from_local_media(
@@ -142,45 +157,165 @@ async def _title_from_local_media(
         tmdb_id=local_media["tmdb_id"] or 0,
         poster_path=poster_path,
         rating=local_media["rating"],
+        original_title=local_media["original_title"],
+        release_date=local_media["first_air_date"] or local_media["release_date"],
     )
 
 
-async def _show_guess(
+async def _show_guesses(
     message: Message,
     state: FSMContext,
-    guess: TmdbTitle,
+    guesses: list[TmdbTitle],
     content_format: str,
     local_media,
 ) -> None:
-    text = tmdb_guess_caption(content_format, guess.title, guess.overview)
-    photo = (
-        poster_input(guess.poster_path) if local_media is not None else guess.poster_url
+    candidates = [
+        _candidate_payload(
+            guess,
+            int(local_media["id"])
+            if local_media is not None and guess.tmdb_id == local_media["tmdb_id"]
+            else None,
+        )
+        for guess in guesses
+    ]
+    guess_message = await _send_candidate(
+        message,
+        candidates[0],
+        content_format,
+        0,
+        len(candidates),
     )
+
+    await state.update_data(
+        tmdb_candidates=candidates,
+        tmdb_candidate_index=0,
+        tmdb_guess_message_id=guess_message.message_id,
+        **_selected_candidate_data(candidates[0]),
+    )
+    await state.set_state(MenuState.confirming_tmdb_guess)
+
+
+async def _send_candidate(
+    message: Message,
+    candidate: dict,
+    content_format: str,
+    position: int,
+    total: int,
+):
+    release_date = candidate.get("release_date") or ""
+    year = release_date[:4] if release_date[:4].isdigit() else ""
+    display_title = candidate["title"]
+    if year:
+        display_title = f"{display_title} ({year})"
+    original_title = candidate.get("original_title")
+    if original_title and original_title != candidate["title"]:
+        display_title = f"{display_title} · {original_title}"
+    text = tmdb_guess_caption(
+        content_format,
+        display_title,
+        candidate.get("overview"),
+    )
+    photo = poster_input(candidate.get("poster_path")) or candidate.get("poster_url")
+    keyboard = tmdb_guess_keyboard(position, total)
     if photo:
-        guess_message = await message.answer_photo(
+        return await message.answer_photo(
             photo=photo,
             caption=text,
             parse_mode="HTML",
-            reply_markup=tmdb_guess_keyboard(),
+            reply_markup=keyboard,
         )
-    else:
-        guess_message = await message.answer(
-            text,
-            parse_mode="HTML",
-            reply_markup=tmdb_guess_keyboard(),
-        )
+    return await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
-    await state.update_data(
-        media_id=local_media["id"] if local_media is not None else None,
-        tmdb_guess_message_id=guess_message.message_id,
-        tmdb_title=guess.title,
-        tmdb_id=guess.tmdb_id,
-        tmdb_description=guess.overview,
-        tmdb_poster_url=guess.poster_url,
-        tmdb_poster_path=guess.poster_path,
-        tmdb_rating=guess.rating,
+
+def _candidate_payload(guess: TmdbTitle, media_id: int | None) -> dict:
+    return {
+        "media_id": media_id,
+        "title": guess.title,
+        "overview": guess.overview,
+        "poster_url": guess.poster_url,
+        "tmdb_id": guess.tmdb_id,
+        "poster_path": guess.poster_path,
+        "rating": guess.rating,
+        "original_title": guess.original_title,
+        "release_date": guess.release_date,
+    }
+
+
+def _selected_candidate_data(candidate: dict) -> dict:
+    return {
+        "media_id": candidate.get("media_id"),
+        "tmdb_title": candidate["title"],
+        "tmdb_id": candidate["tmdb_id"],
+        "tmdb_description": candidate.get("overview"),
+        "tmdb_poster_url": candidate.get("poster_url"),
+        "tmdb_poster_path": candidate.get("poster_path"),
+        "tmdb_rating": candidate.get("rating"),
+        "tmdb_original_title": candidate.get("original_title"),
+        "tmdb_release_date": candidate.get("release_date"),
+    }
+
+
+@router.callback_query(
+    MenuState.confirming_tmdb_guess,
+    F.data.in_({"tmdb_guess:previous", "tmdb_guess:next"}),
+)
+async def navigate_tmdb_guesses(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+    if not await is_active_tmdb_guess(callback, state):
+        await callback.answer(STALE_GUESS)
+        return
+
+    data = await state.get_data()
+    candidates = data.get("tmdb_candidates", [])
+    if (
+        not isinstance(candidates, list)
+        or not 1 < len(candidates) <= MAX_TITLE_CANDIDATES
+    ):
+        await callback.answer(STALE_GUESS)
+        return
+
+    current = int(data.get("tmdb_candidate_index", 0))
+    step = -1 if callback.data == "tmdb_guess:previous" else 1
+    position = (current + step) % len(candidates)
+    candidate = candidates[position]
+    if not isinstance(candidate, dict):
+        await callback.answer(STALE_GUESS)
+        return
+
+    if not await delete_message_safely(callback.message):
+        await callback.answer(TMDB_FAILED, show_alert=True)
+        return
+    await callback.answer()
+    guess_message = await _send_candidate(
+        callback.message,
+        candidate,
+        data.get("content_format", ""),
+        position,
+        len(candidates),
     )
-    await state.set_state(MenuState.confirming_tmdb_guess)
+    await state.update_data(
+        tmdb_candidate_index=position,
+        tmdb_guess_message_id=guess_message.message_id,
+        **_selected_candidate_data(candidate),
+    )
+
+
+@router.callback_query(
+    MenuState.confirming_tmdb_guess,
+    F.data == "tmdb_guess:position",
+)
+async def show_tmdb_guess_position(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not await is_active_tmdb_guess(callback, state):
+        await callback.answer(STALE_GUESS)
+        return
+    data = await state.get_data()
+    candidates = data.get("tmdb_candidates", [])
+    position = int(data.get("tmdb_candidate_index", 0))
+    await callback.answer(f"Вариант {position + 1} из {len(candidates)}")
 
 
 @router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:yes")
@@ -199,7 +334,11 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         return
 
     await callback.answer()
-    await state.update_data(tmdb_guess_message_id=None)
+    await state.update_data(
+        tmdb_candidates=[],
+        tmdb_candidate_index=0,
+        tmdb_guess_message_id=None,
+    )
     await delete_message_safely(callback.message)
     await callback.message.answer(
         WATCH_STATUS_PROMPT,
@@ -288,7 +427,11 @@ async def reject_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     await state.set_state(MenuState.choosing_tmdb_retry)
-    await state.update_data(tmdb_guess_message_id=None)
+    await state.update_data(
+        tmdb_candidates=[],
+        tmdb_candidate_index=0,
+        tmdb_guess_message_id=None,
+    )
     data = await state.get_data()
     await callback.message.answer(
         REJECTED_GUESS,

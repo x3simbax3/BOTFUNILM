@@ -39,6 +39,7 @@ from src.tmdb_models import (
 logger = logging.getLogger(__name__)
 
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
+MAX_TITLE_CANDIDATES = 5
 
 # Compatibility aliases for existing callers and tests. New code should import
 # public matching functions from src.tmdb_matching directly when appropriate.
@@ -56,9 +57,24 @@ async def find_title_guess(
     content_format: str,
     content_type: str,
 ) -> TmdbTitle:
+    return (await find_title_candidates(query, content_format, content_type, limit=1))[
+        0
+    ]
+
+
+async def find_title_candidates(
+    query: str,
+    content_format: str,
+    content_type: str,
+    *,
+    limit: int = 5,
+) -> list[TmdbTitle]:
     original_query = query.strip()
     if not original_query:
         raise ValueError("empty query")
+    if limit <= 0:
+        raise ValueError("invalid candidate limit")
+    limit = min(limit, MAX_TITLE_CANDIDATES)
 
     if not TMDB_API:
         raise TmdbNotConfiguredError
@@ -85,22 +101,30 @@ async def find_title_guess(
             content_type,
         )
 
-        if results:
-            best_result = max(
-                results,
-                key=lambda result: _relevance_score(result, original_query),
-            )
-            best_score = _relevance_score(best_result, original_query)
-            best = _parse_title(best_result, original_query)
+        ranked = sorted(
+            ((_relevance_score(result, original_query), result) for result in results),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        relevant = [result for score, result in ranked if score >= MIN_RELEVANCE]
+        if relevant:
+            candidates: list[TmdbTitle] = []
+            seen_ids: set[int] = set()
+            for result in relevant:
+                candidate = _parse_title(result, original_query)
+                if candidate.tmdb_id in seen_ids:
+                    continue
+                seen_ids.add(candidate.tmdb_id)
+                candidates.append(candidate)
+                if len(candidates) == limit:
+                    break
             logger.info(
-                "query='%s': лучший='%s', score=%.0f, results=%d",
+                "query='%s': найдено вариантов=%d, results=%d",
                 query_variant,
-                best.title,
-                best_score,
+                len(candidates),
                 len(results),
             )
-            if best_score >= MIN_RELEVANCE:
-                return best
+            return candidates
 
     raise TmdbNotFoundError(original_query)
 
@@ -192,6 +216,8 @@ def _parse_title(result: dict, original_query: str = "") -> TmdbTitle:
         tmdb_id=result.get("id", 0),
         poster_path=poster_path,
         rating=_parse_rating(result.get("vote_average")),
+        original_title=result.get("original_name") or result.get("original_title"),
+        release_date=result.get("first_air_date") or result.get("release_date"),
     )
 
 
@@ -205,6 +231,7 @@ def _parse_rating(value: object) -> float | None:
 __all__ = (
     "ANIMATION_GENRE_ID",
     "MIN_RELEVANCE",
+    "MAX_TITLE_CANDIDATES",
     "STOP_WORDS",
     "TMDB_IMAGE_URL",
     "TmdbAuthenticationError",
@@ -218,6 +245,7 @@ __all__ = (
     "TmdbUnavailableError",
     "fetch_tv_details",
     "fetch_title_details",
+    "find_title_candidates",
     "find_title_guess",
     "title_relevance_score",
 )

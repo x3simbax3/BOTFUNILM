@@ -1,7 +1,7 @@
 from html import escape
 
 from .common import DESCRIPTION_NOT_FOUND
-from .menu import CONTENT_TYPE_TITLES
+from .menu import CONTENT_TYPE_TITLES, MEDIA_KIND_TITLES
 
 USER_STATUS_TITLES = {
     "planned": "Хочу посмотреть",
@@ -16,14 +16,6 @@ USER_STATUS_ICONS = {
     "completed": "✓",
     "on_hold": "Ⅱ",
     "dropped": "×",
-}
-MEDIA_KIND_TITLES = {
-    ("full_length", "movie"): "Фильм",
-    ("series", "movie"): "Сериал",
-    ("full_length", "anime"): "Аниме-фильм",
-    ("series", "anime"): "Аниме-сериал",
-    ("full_length", "cartoon"): "Мультфильм",
-    ("series", "cartoon"): "Мультсериал",
 }
 LIBRARY_ITEM_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈"
 

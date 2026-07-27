@@ -48,6 +48,10 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓\u00a0По дате")
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓\u00a0Сериалы")
         self.assertEqual(keyboard.inline_keyboard[1][1].text, "Полный метр")
+        self.assertEqual(
+            [button.text for button in keyboard.inline_keyboard[-2]],
+            ["‹\u00a0Пред. страница", "След. страница\u00a0›"],
+        )
 
     def test_all_filter_marks_mandatory_sort_and_completed_status(self) -> None:
         filters = {
@@ -145,6 +149,22 @@ class KeyboardsTests(unittest.TestCase):
             callback_rows(keyboards.tmdb_guess_keyboard()),
             [["tmdb_guess:yes", "tmdb_guess:no"]],
         )
+
+    def test_tmdb_guess_carousel_has_navigation(self) -> None:
+        keyboard = keyboards.tmdb_guess_keyboard(position=1, total=5)
+
+        self.assertEqual(
+            callback_rows(keyboard),
+            [
+                [
+                    "tmdb_guess:previous",
+                    "tmdb_guess:position",
+                    "tmdb_guess:next",
+                ],
+                ["tmdb_guess:yes", "tmdb_guess:no"],
+            ],
+        )
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "2 / 5")
 
     def test_watch_status_buttons_have_expected_callbacks(self) -> None:
         self.assertEqual(

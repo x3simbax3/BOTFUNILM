@@ -29,9 +29,14 @@ async def ensure_media(
         "content_format": content_format,
         "content_type": data.get("content_type", "movie"),
         "title": data.get("tmdb_title", ""),
+        "original_title": data.get("tmdb_original_title"),
         "description": data.get("tmdb_description"),
         "poster_path": poster_path or data.get("tmdb_poster_path"),
     }
+    if content_format == "series":
+        media_details["first_air_date"] = data.get("tmdb_release_date")
+    else:
+        media_details["release_date"] = data.get("tmdb_release_date")
     if number_of_seasons is not None:
         media_details["number_of_seasons"] = number_of_seasons
     if number_of_episodes is not None:

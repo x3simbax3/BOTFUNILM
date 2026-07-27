@@ -109,14 +109,14 @@ def library_keyboard(
     if page > 0:
         pagination.append(
             InlineKeyboardButton(
-                text=text.BACK,
+                text=text.PREVIOUS_PAGE,
                 callback_data=f"library:page:{page - 1}",
             )
         )
     if has_more:
         pagination.append(
             InlineKeyboardButton(
-                text=text.MORE,
+                text=text.NEXT_PAGE,
                 callback_data=f"library:page:{page + 1}",
             )
         )
@@ -202,17 +202,33 @@ def selected_type_keyboard(action: str, content_format: str) -> InlineKeyboardMa
     )
 
 
-def tmdb_guess_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def tmdb_guess_keyboard(
+    position: int = 0,
+    total: int = 1,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if total > 1:
+        rows.append(
             [
+                InlineKeyboardButton(text="《", callback_data="tmdb_guess:previous"),
                 InlineKeyboardButton(
-                    text=text.GUESS_YES,
-                    callback_data="tmdb_guess:yes",
+                    text=f"{position + 1} / {total}",
+                    callback_data="tmdb_guess:position",
                 ),
-                InlineKeyboardButton(text=text.GUESS_NO, callback_data="tmdb_guess:no"),
-            ],
-        ],
+                InlineKeyboardButton(text="》", callback_data="tmdb_guess:next"),
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.GUESS_YES,
+                callback_data="tmdb_guess:yes",
+            ),
+            InlineKeyboardButton(text=text.GUESS_NO, callback_data="tmdb_guess:no"),
+        ]
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=rows,
     )
 
 

@@ -19,6 +19,16 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(locale.keyboards.MAIN_ADD, "＋\u00a0Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
+    def test_start_text_keeps_decorative_heading_on_one_line(self) -> None:
+        self.assertNotIn("(˶ᵔ ᵕ ᵔ˶)", lang.START_TEXT)
+        self.assertIn("┈┈┈  <b>Выбери действие</b>  ┈┈┈", lang.START_TEXT)
+
+    def test_selected_cartoon_series_is_named_multiseries(self) -> None:
+        result = lang.selected_type_text("add", "series", "cartoon")
+
+        self.assertIn("Мультсериал", result)
+        self.assertNotIn("Сериалы · Мультфильм", result)
+
     def test_animation_uses_its_own_rating_categories(self) -> None:
         for content_type in ("anime", "cartoon"):
             with self.subTest(content_type=content_type):
@@ -156,6 +166,12 @@ class LocalizationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             lang.episodes_prompt_text("Series", "Season 1", 10, -1)
+
+    def test_saved_series_progress_uses_styled_series_symbol(self) -> None:
+        result = lang.tracking_complete_text("Series", 10, 10, 8.0)
+
+        self.assertIn("▣\u00a0<b>Series</b>", result)
+        self.assertNotIn("📺", result)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,11 @@
 from .common import BOT_NAME
 
 START_TEXT = f"""┈┈┈  <b>{BOT_NAME}</b>  ┈┈┈
-<i>Фильмы и сериалы — в одном месте</i>  (˶ᵔ ᵕ ᵔ˶)
+<i>Фильмы и сериалы — в одном месте</i>
 
 Сохраняй просмотренное, отмечай серии и собирай собственный рейтинг.
 
-┈┈┈┈┈┈┈┈┈┈
-<b>Выбери действие</b>"""
+┈┈┈  <b>Выбери действие</b>  ┈┈┈"""
 
 ACTION_TITLES = {
     "library": "Моя библиотека",
@@ -27,6 +26,15 @@ CONTENT_TYPE_TITLES = {
     "movie": "Фильм",
     "anime": "Аниме",
     "cartoon": "Мультфильм",
+}
+
+MEDIA_KIND_TITLES = {
+    ("full_length", "movie"): "Фильм",
+    ("series", "movie"): "Сериал",
+    ("full_length", "anime"): "Аниме-фильм",
+    ("series", "anime"): "Аниме-сериал",
+    ("full_length", "cartoon"): "Мультфильм",
+    ("series", "cartoon"): "Мультсериал",
 }
 
 INVALID_SELECTION = "Некорректный выбор"
@@ -57,7 +65,7 @@ def selected_type_text(action: str, content_format: str, content_type: str) -> s
     return (
         f"┈┈┈  <b>{ACTION_TITLES[action]}</b>  ┈┈┈\n"
         "<i>Шаг 3 из 4 · Название</i>\n\n"
-        f"{FORMAT_TITLES[content_format]} · {CONTENT_TYPE_TITLES[content_type]}\n\n"
+        f"{MEDIA_KIND_TITLES[(content_format, content_type)]}\n\n"
         "<b>Введи название</b>\n"
         "<i>На русском или языке оригинала</i>"
     )
@@ -71,6 +79,7 @@ __all__ = (
     "FORMAT_RESULT_TITLES",
     "FORMAT_TITLES",
     "INVALID_SELECTION",
+    "MEDIA_KIND_TITLES",
     "SELECTION_SAVED",
     "START_TEXT",
     "UNKNOWN_STEP",
