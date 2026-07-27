@@ -172,6 +172,37 @@ class KeyboardsTests(unittest.TestCase):
             [["watch_status:completed"], ["watch_status:planned"]],
         )
 
+    def test_planned_library_item_has_management_actions(self) -> None:
+        self.assertEqual(
+            callback_rows(keyboards.library_item_keyboard(planned=True)),
+            [
+                ["library:item:watched"],
+                ["library:item:edit", "library:item:delete"],
+                ["library:back"],
+            ],
+        )
+
+    def test_series_edit_menu_can_change_rating_and_progress(self) -> None:
+        self.assertEqual(
+            callback_rows(keyboards.library_edit_keyboard(series=True)),
+            [
+                ["library:item:edit:rating"],
+                ["library:item:edit:progress"],
+                ["library:item:edit:back"],
+            ],
+        )
+
+    def test_season_list_can_mark_every_season_watched(self) -> None:
+        keyboard = keyboards.season_list_keyboard(
+            [{"season_number": 1, "name": "Сезон 1", "episode_count": 8}],
+            {},
+        )
+
+        self.assertEqual(
+            callback_rows(keyboard),
+            [["season:all"], ["season:1"], ["season:done"]],
+        )
+
     def test_rating_keyboard_has_back_button(self) -> None:
         self.assertEqual(
             callback_rows(keyboards.rating_keyboard()),

@@ -160,6 +160,31 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
         return
 
     data = await state.get_data()
+    if selection == "all":
+        seasons_data = data.get("seasons_data", [])
+        try:
+            watched = season_episode_limits(seasons_data)
+            watched = validate_series_progress(
+                watched,
+                seasons_data,
+                data.get("total_episodes", 0),
+            )
+        except SeriesProgressError:
+            await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
+            return
+        await state.update_data(
+            watched_by_season=watched,
+            episodes_watched_total=sum(watched.values()),
+            current_season=None,
+        )
+        await callback.message.edit_text(
+            series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+            parse_mode="HTML",
+            reply_markup=season_list_keyboard(seasons_data, watched),
+        )
+        await callback.answer()
+        return
+
     season_number = selection
     season_info = next(
         (
@@ -260,7 +285,7 @@ async def finish_series_tracking(
     data = await state.get_data()
     title = data.get("tmdb_title", "")
     total = data.get("total_episodes", 0)
-    average = data.get("rating_average", 0)
+    average = data.get("rating_average")
     try:
         watched = validate_series_progress(
             _progress_from_state(data.get("watched_by_season", {})),
@@ -290,7 +315,7 @@ async def finish_series_tracking(
             media_id=media_id,
             seasons=watched,
             total_episodes=total,
-            user_rating=round(average) if average else None,
+            user_rating=round(average) if average is not None else None,
         )
     except (aiosqlite.Error, RuntimeError, ValueError):
         await callback.answer(

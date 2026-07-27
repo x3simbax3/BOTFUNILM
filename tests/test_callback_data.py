@@ -66,6 +66,7 @@ class CallbackDataTests(unittest.TestCase):
         self.assertEqual(parse_rating_callback("rate:10"), 10)
         self.assertEqual(parse_season_callback("season:1"), 1)
         self.assertEqual(parse_season_callback("season:done"), "done")
+        self.assertEqual(parse_season_callback("season:all"), "all")
         self.assertEqual(
             parse_episode_callback("ep:12:34"),
             EpisodeCallback(12, 34),

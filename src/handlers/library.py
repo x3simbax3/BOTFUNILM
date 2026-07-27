@@ -17,23 +17,41 @@ from src.database.library import (
     update_user_library_filter,
 )
 from src.database.media import update_media_metadata
+from src.database.user_media import delete_user_media, set_user_media_status
 from src.fsm import MenuState
-from src.handlers.common import CAPTION_ELLIPSIS, PHOTO_CAPTION_LIMIT, replace_message
+from src.handlers.common import (
+    CAPTION_ELLIPSIS,
+    PHOTO_CAPTION_LIMIT,
+    delete_message_safely,
+    edit_message,
+    replace_message,
+)
+from src.handlers.series import start_series_tracking
 from src.keyboards import (
+    library_delete_keyboard,
+    library_edit_keyboard,
     library_item_keyboard,
     library_keyboard,
     main_menu_keyboard,
+    rating_keyboard,
 )
 from src.lang import (
     DESCRIPTION_NOT_FOUND,
     FILTER_SAVE_FAILED,
     INVALID_PAGE,
+    ITEM_ACTION_FAILED,
+    ITEM_DELETE_PROMPT,
+    ITEM_DELETED,
+    ITEM_EDIT_PROMPT,
+    ITEM_MARKED_WATCHED,
     ITEM_NOT_FOUND,
     ITEM_OPEN_FAILED,
     LIBRARY_OPEN_FAILED,
     UNKNOWN_FILTER,
     library_item_text,
     library_text,
+    rating_categories,
+    rating_prompt_text,
 )
 from src.posters import poster_input
 from src.tmdb import TmdbError, fetch_title_details
@@ -182,10 +200,215 @@ async def show_library_item(
     await send(
         **content,
         parse_mode="HTML",
-        reply_markup=library_item_keyboard(),
+        reply_markup=library_item_keyboard(planned=item["user_status"] == "planned"),
     )
     await state.update_data(media_id=media_id, library_page=0)
     await state.set_state(MenuState.viewing_media)
+
+
+@router.callback_query(MenuState.viewing_media, F.data == "library:item:edit")
+async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    await edit_message(
+        callback.message,
+        ITEM_EDIT_PROMPT,
+        reply_markup=library_edit_keyboard(series=item["content_format"] == "series"),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data == "library:item:edit:back",
+)
+async def back_from_library_item_edit(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    await _edit_library_item_message(callback.message, item)
+    await callback.answer()
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data == "library:item:edit:rating",
+)
+async def edit_library_item_rating(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    categories = rating_categories(item["content_type"])
+    await state.update_data(
+        **_library_workflow_data(item),
+        ratings={},
+        rating_index=0,
+        library_rating_edit=True,
+    )
+    await state.set_state(MenuState.rating_category)
+    await replace_message(
+        callback.message,
+        rating_prompt_text(item["title"], categories[0][1], 1, len(categories)),
+        parse_mode="HTML",
+        reply_markup=rating_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data.in_({"library:item:watched", "library:item:edit:progress"}),
+)
+async def change_library_item_progress(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+
+    if item["content_format"] == "series":
+        await state.update_data(
+            **_library_workflow_data(item),
+            rating_average=item["user_rating"],
+            library_rating_edit=False,
+        )
+        await delete_message_safely(callback.message)
+        await start_series_tracking(callback, state)
+        await callback.answer()
+        return
+
+    if callback.data != "library:item:watched" or item["user_status"] != "planned":
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    try:
+        updated = await set_user_media_status(
+            callback.from_user.id,
+            int(item["id"]),
+            "completed",
+        )
+        if not updated:
+            raise RuntimeError("Library item disappeared")
+        refreshed = await get_user_library_item(callback.from_user.id, int(item["id"]))
+    except (aiosqlite.Error, RuntimeError, ValueError):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    if refreshed is None:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return
+    await _edit_library_item_message(callback.message, refreshed)
+    await callback.answer(ITEM_MARKED_WATCHED)
+
+
+@router.callback_query(MenuState.viewing_media, F.data == "library:item:delete")
+async def confirm_library_item_delete(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+    if await _current_library_item(callback, state) is None:
+        return
+    await edit_message(
+        callback.message,
+        ITEM_DELETE_PROMPT,
+        reply_markup=library_delete_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data == "library:item:delete:cancel",
+)
+async def cancel_library_item_delete(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    await back_from_library_item_edit(callback, state)
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data == "library:item:delete:confirm",
+)
+async def delete_library_item(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    data = await state.get_data()
+    media_id = data.get("media_id")
+    if type(media_id) is not int or media_id <= 0:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return
+    try:
+        deleted = await delete_user_media(callback.from_user.id, media_id)
+    except aiosqlite.Error:
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    if not deleted:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return
+    await replace_message(
+        callback.message,
+        ITEM_DELETED,
+        reply_markup=main_menu_keyboard(),
+    )
+    await state.set_state(MenuState.choosing_action)
+    await callback.answer()
+
+
+async def _current_library_item(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    media_id = data.get("media_id")
+    if type(media_id) is not int or media_id <= 0:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return None
+    try:
+        item = await get_user_library_item(callback.from_user.id, media_id)
+    except aiosqlite.Error:
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return None
+    if item is None:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+    return item
+
+
+async def _edit_library_item_message(message: Message, item) -> None:
+    await edit_message(
+        message,
+        library_item_caption(item),
+        parse_mode="HTML",
+        reply_markup=library_item_keyboard(planned=item["user_status"] == "planned"),
+    )
+
+
+def _library_workflow_data(item) -> dict:
+    return {
+        "media_id": int(item["id"]),
+        "tmdb_id": item["tmdb_id"],
+        "tmdb_title": item["title"],
+        "tmdb_description": item["description"],
+        "tmdb_poster_path": item["poster_path"],
+        "tmdb_original_title": item["original_title"],
+        "tmdb_release_date": item["release_date"] or item["first_air_date"],
+        "content_format": item["content_format"],
+        "content_type": item["content_type"],
+    }
 
 
 async def _refresh_item_metadata(item):

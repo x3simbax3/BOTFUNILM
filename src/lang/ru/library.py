@@ -25,6 +25,13 @@ INVALID_PAGE = "Некорректная страница"
 LIBRARY_OPEN_FAILED = "Не удалось открыть библиотеку"
 ITEM_OPEN_FAILED = "Не удалось открыть запись. Попробуй ещё раз."
 ITEM_NOT_FOUND = "Запись не найдена в твоей библиотеке."
+ITEM_ACTION_FAILED = "Не удалось изменить запись. Попробуй ещё раз."
+ITEM_DELETED = "Запись удалена из библиотеки."
+ITEM_DELETE_PROMPT = "Удалить эту запись из библиотеки?"
+ITEM_EDIT_PROMPT = "Что изменить?"
+ITEM_MARKED_WATCHED = "Отмечено как просмотренное."
+RATING_UPDATED = "Оценка изменена."
+RATING_EDIT_CANCELLED = "Изменение оценки отменено."
 
 
 def library_text(
@@ -130,8 +137,15 @@ __all__ = (
     "INVALID_PAGE",
     "ITEM_NOT_FOUND",
     "ITEM_OPEN_FAILED",
+    "ITEM_ACTION_FAILED",
+    "ITEM_DELETED",
+    "ITEM_DELETE_PROMPT",
+    "ITEM_EDIT_PROMPT",
+    "ITEM_MARKED_WATCHED",
     "LIBRARY_OPEN_FAILED",
     "UNKNOWN_FILTER",
+    "RATING_UPDATED",
+    "RATING_EDIT_CANCELLED",
     "USER_STATUS_TITLES",
     "library_item_text",
     "library_text",

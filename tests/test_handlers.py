@@ -857,6 +857,24 @@ class RatingNavigationHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_library_rating_edit_updates_existing_item_without_status_change(
+        self,
+    ) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:9", message)
+        state = StateStub({"media_id": 7, "library_rating_edit": True})
+
+        with patch.object(
+            rating_handlers,
+            "update_user_media_rating",
+            AsyncMock(return_value=True),
+        ) as update_rating:
+            await rating_handlers.finish_library_rating_edit(callback, state, 8.6)
+
+        update_rating.assert_awaited_once_with(123, 7, 9)
+        self.assertFalse(state.data["library_rating_edit"])
+        self.assertEqual(state.state, MenuState.choosing_action)
+
     async def test_finish_movie_saves_completed_media_and_returns_to_menu(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
@@ -924,6 +942,28 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_all_seasons_selection_fills_complete_progress(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("season:all", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Сериал",
+                "total_episodes": 10,
+                "seasons_data": [
+                    {"season_number": 1, "name": "Сезон 1", "episode_count": 8},
+                    {"season_number": 2, "name": "Сезон 2", "episode_count": 2},
+                ],
+                "watched_by_season": {},
+            }
+        )
+
+        await series_handlers.handle_season_selection(callback, state)
+
+        self.assertEqual(state.data["watched_by_season"], {1: 8, 2: 2})
+        self.assertEqual(state.data["episodes_watched_total"], 10)
+        self.assertEqual(callback.answers, [{"text": None}])
+        self.assertEqual(len(message.edit_text_calls), 1)
+
     async def test_finish_series_rejects_empty_progress_without_saving(self) -> None:
         message = MessageStub()
         callback = CallbackStub("season:done", message)

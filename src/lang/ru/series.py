@@ -51,16 +51,19 @@ def tracking_complete_text(
     title: str,
     total_episodes: int,
     watched_episodes: int,
-    average: float,
+    average: float | None,
 ) -> str:
     remaining = _remaining_episodes(total_episodes, watched_episodes)
     status = "Завершён" if remaining == 0 else f"В процессе · осталось {remaining}"
+    rating_line = (
+        f"Моя оценка · <b>{average:.1f}/10</b>\n" if average is not None else ""
+    )
     return (
         "✓ <b>Прогресс сохранён</b>\n\n"
         f"▣\u00a0<b>{escape(title)}</b>\n"
         f"Просмотрено · <b>{watched_episodes} из {total_episodes}</b>\n"
         f"Статус · <b>{status}</b>\n"
-        f"Моя оценка · <b>{average:.1f}/10</b>\n"
+        f"{rating_line}"
         f"<i>{date.today().strftime('%d.%m.%Y')}</i>"
     )
 

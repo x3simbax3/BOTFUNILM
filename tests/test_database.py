@@ -20,7 +20,13 @@ from src.database.series import (
     get_user_season_progress,
     save_user_series_progress,
 )
-from src.database.user_media import get_user_media, save_user_media
+from src.database.user_media import (
+    delete_user_media,
+    get_user_media,
+    save_user_media,
+    set_user_media_status,
+    update_user_media_rating,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = sorted((PROJECT_ROOT / "migrations").glob("*.sql"))
@@ -209,6 +215,42 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["status"], "completed")
         self.assertEqual(row["user_rating"], 9)
         self.assertEqual(row["episodes_watched"], 12)
+
+    async def test_library_item_status_rating_and_deletion_can_be_changed(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=43,
+            content_format="full_length",
+            content_type="movie",
+            title="Planned movie",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="planned",
+            database_url=self.database_url,
+        )
+
+        self.assertTrue(
+            await set_user_media_status(
+                123, media_id, "completed", database_url=self.database_url
+            )
+        )
+        self.assertTrue(
+            await update_user_media_rating(
+                123, media_id, 9, database_url=self.database_url
+            )
+        )
+        row = await get_user_media(123, media_id, database_url=self.database_url)
+        self.assertEqual(row["status"], "completed")
+        self.assertEqual(row["user_rating"], 9)
+
+        self.assertTrue(
+            await delete_user_media(123, media_id, database_url=self.database_url)
+        )
+        self.assertIsNone(
+            await get_user_media(123, media_id, database_url=self.database_url)
+        )
 
     async def test_library_filters_are_persisted_per_user(self) -> None:
         defaults = await get_user_library_filters(123, database_url=self.database_url)

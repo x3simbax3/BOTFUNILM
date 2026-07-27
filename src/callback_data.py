@@ -35,7 +35,7 @@ _LIBRARY_FILTER_RE = re.compile(r"library:filter:([^:]+)\Z", re.ASCII)
 _LIBRARY_SORT_RE = re.compile(r"library:sort:(recent|rating)\Z", re.ASCII)
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
-_SEASON_RE = re.compile(r"season:(done|[1-9][0-9]{0,4})\Z", re.ASCII)
+_SEASON_RE = re.compile(r"season:(done|all|[1-9][0-9]{0,4})\Z", re.ASCII)
 _EPISODE_RE = re.compile(
     r"ep:(?:done|back|([1-9][0-9]{0,4}):([1-9][0-9]{0,5}))\Z",
     re.ASCII,
@@ -144,7 +144,7 @@ def parse_season_callback(data: str) -> int | str | None:
     if not match:
         return None
     value = match.group(1)
-    if value == "done":
+    if value in {"done", "all"}:
         return value
     season_number = int(value)
     return season_number if season_number <= MAX_SEASON_NUMBER else None

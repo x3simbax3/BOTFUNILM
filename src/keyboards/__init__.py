@@ -127,16 +127,85 @@ def library_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def library_item_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def library_item_keyboard(*, planned: bool = False) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if planned:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=text.MARK_WATCHED,
+                    callback_data="library:item:watched",
+                )
+            ]
+        )
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=text.EDIT_ITEM,
+                    callback_data="library:item:edit",
+                ),
+                InlineKeyboardButton(
+                    text=text.DELETE_ITEM,
+                    callback_data="library:item:delete",
+                ),
+            ],
             [
                 InlineKeyboardButton(
                     text=text.TO_LIBRARY,
                     callback_data="library:back",
                 )
             ],
-        ],
+        ]
+    )
+    return InlineKeyboardMarkup(
+        inline_keyboard=rows,
+    )
+
+
+def library_edit_keyboard(*, series: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=text.EDIT_RATING,
+                callback_data="library:item:edit:rating",
+            )
+        ]
+    ]
+    if series:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=text.EDIT_PROGRESS,
+                    callback_data="library:item:edit:progress",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.BACK,
+                callback_data="library:item:edit:back",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def library_delete_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=text.CONFIRM_DELETE,
+                    callback_data="library:item:delete:confirm",
+                ),
+                InlineKeyboardButton(
+                    text=text.CANCEL,
+                    callback_data="library:item:delete:cancel",
+                ),
+            ]
+        ]
     )
 
 
@@ -331,6 +400,14 @@ def season_list_keyboard(
 ) -> InlineKeyboardMarkup:
     """Build a keyboard containing seasons and their progress."""
     buttons: list[list[InlineKeyboardButton]] = []
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text=text.ALL_SEASONS,
+                callback_data="season:all",
+            )
+        ]
+    )
     for s in seasons:
         num = s["season_number"]
         name = s["name"]
@@ -357,6 +434,8 @@ __all__ = (
     "content_type_keyboard",
     "episodes_keyboard",
     "format_keyboard",
+    "library_delete_keyboard",
+    "library_edit_keyboard",
     "library_item_keyboard",
     "library_keyboard",
     "main_menu_keyboard",

@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from src.callback_data import parse_rating_callback
-from src.database.user_media import save_user_media
+from src.database.user_media import save_user_media, update_user_media_rating
 from src.fsm import MenuState
 from src.handlers.common import delete_message_safely
 from src.handlers.series import start_series_tracking
@@ -17,6 +17,8 @@ from src.lang import (
     INVALID_RATING,
     MOVIE_SAVE_FAILED,
     RATING_ALREADY_SAVED,
+    RATING_EDIT_CANCELLED,
+    RATING_UPDATED,
     movie_watched_text,
     rating_categories,
     rating_prompt_text,
@@ -37,6 +39,15 @@ async def back_from_rating(callback: CallbackQuery, state: FSMContext) -> None:
     categories = rating_categories(data.get("content_type", "movie"))
     if rating_index <= 0:
         await state.update_data(ratings={}, rating_index=0)
+        if data.get("library_rating_edit"):
+            await state.update_data(library_rating_edit=False)
+            await state.set_state(MenuState.choosing_action)
+            await callback.message.edit_text(
+                RATING_EDIT_CANCELLED,
+                reply_markup=main_menu_keyboard(),
+            )
+            await callback.answer()
+            return
         await state.set_state(MenuState.choosing_watch_status)
         await delete_message_safely(callback.message)
         await callback.answer()
@@ -103,12 +114,44 @@ async def handle_rating(callback: CallbackQuery, state: FSMContext) -> None:
             ),
             parse_mode="HTML",
         )
-        if data.get("content_format") == "series":
+        if data.get("library_rating_edit"):
+            await finish_library_rating_edit(callback, state, average)
+        elif data.get("content_format") == "series":
             await start_series_tracking(callback, state)
         else:
             await finish_movie(callback, state, average)
 
     await callback.answer()
+
+
+async def finish_library_rating_edit(
+    callback: CallbackQuery,
+    state: FSMContext,
+    average: float,
+) -> None:
+    data = await state.get_data()
+    media_id = data.get("media_id")
+    if type(media_id) is not int or media_id <= 0:
+        await callback.answer(MOVIE_SAVE_FAILED, show_alert=True)
+        return
+    try:
+        updated = await update_user_media_rating(
+            callback.from_user.id,
+            media_id,
+            round(average),
+        )
+        if not updated:
+            raise RuntimeError("Library item disappeared")
+    except (aiosqlite.Error, RuntimeError, ValueError):
+        await callback.answer(MOVIE_SAVE_FAILED, show_alert=True)
+        return
+
+    await state.update_data(library_rating_edit=False)
+    await callback.message.answer(
+        RATING_UPDATED,
+        reply_markup=main_menu_keyboard(),
+    )
+    await state.set_state(MenuState.choosing_action)
 
 
 async def finish_movie(
