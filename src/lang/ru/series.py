@@ -10,6 +10,7 @@ INVALID_EPISODE = "Некорректный эпизод"
 INVALID_PROGRESS_TRANSITION = "Некорректный переход прогресса"
 INVALID_PROGRESS = "Некорректный прогресс сериала. Выбери эпизоды заново."
 PROGRESS_SAVE_FAILED = "Не удалось сохранить прогресс. Попробуй ещё раз."
+NO_EPISODES_SELECTED = "Отметь хотя бы одну просмотренную серию"
 
 
 def default_season_name(season_number: int) -> str:
@@ -17,10 +18,16 @@ def default_season_name(season_number: int) -> str:
 
 
 def series_tracking_text(title: str, seasons: list[dict]) -> str:
-    lines = [f"📺 <b>{escape(title)}</b>\n"]
+    total = sum(season["episode_count"] for season in seasons)
+    lines = [
+        f"📺 <b>{escape(title)}</b>",
+        f"<i>{len(seasons)} сез. · {total} сер.</i>",
+        "",
+        "<b>Прогресс по сезонам</b>",
+    ]
     for season in seasons:
-        lines.append(f"• {escape(season['name'])} — {season['episode_count']} серий")
-    lines.append("\n<b>Выбери сезон</b>, чтобы отметить прогресс:")
+        lines.append(f"{escape(season['name'])} · {season['episode_count']} сер.")
+    lines.append("\nВыбери сезон")
     return "\n".join(lines)
 
 
@@ -32,11 +39,11 @@ def episodes_prompt_text(
 ) -> str:
     remaining = _remaining_episodes(total_episodes, already_watched)
     return (
-        f"<b>{escape(title)}</b>\n"
-        f"<blockquote>{escape(season_name)}</blockquote>\n"
-        f"✅ Просмотрено: <b>{already_watched}/{total_episodes}</b>\n"
-        f"⏳ Осталось: <b>{remaining}</b>\n\n"
-        "Укажи, сколько серий уже посмотрено:"
+        f"📺 <b>{escape(title)}</b>\n"
+        f"<i>{escape(season_name)}</i>\n\n"
+        f"Просмотрено · <b>{already_watched} из {total_episodes}</b>\n"
+        f"Осталось · <b>{remaining}</b>\n\n"
+        "<b>Сколько серий просмотрено?</b>"
     )
 
 
@@ -47,14 +54,14 @@ def tracking_complete_text(
     average: float,
 ) -> str:
     remaining = _remaining_episodes(total_episodes, watched_episodes)
-    status = "досмотрен" if remaining == 0 else f"осталось {remaining} серий"
+    status = "Завершён" if remaining == 0 else f"В процессе · осталось {remaining}"
     return (
-        "<b>Прогресс сохранён ✅</b>\n\n"
+        "✓ <b>Прогресс сохранён</b>\n\n"
         f"📺 <b>{escape(title)}</b>\n"
-        f"Просмотрено: <b>{watched_episodes}/{total_episodes}</b>\n"
-        f"Статус: <b>{status}</b>\n"
-        f"⭐ Оценка: <b>{average:.1f}/10</b>\n"
-        f"📅 {date.today().strftime('%d.%m.%Y')}"
+        f"Просмотрено · <b>{watched_episodes} из {total_episodes}</b>\n"
+        f"Статус · <b>{status}</b>\n"
+        f"Моя оценка · <b>{average:.1f}/10</b>\n"
+        f"<i>{date.today().strftime('%d.%m.%Y')}</i>"
     )
 
 
@@ -75,6 +82,7 @@ __all__ = (
     "INVALID_PROGRESS",
     "INVALID_PROGRESS_TRANSITION",
     "INVALID_SEASON",
+    "NO_EPISODES_SELECTED",
     "PROGRESS_LOAD_FAILED",
     "PROGRESS_SAVE_FAILED",
     "SAVED_PROGRESS_INVALID",

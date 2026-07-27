@@ -6,8 +6,21 @@ import aiosqlite
 
 from src.database.connection import connection_scope
 
-LIBRARY_FILTER_NAMES = frozenset({"full_length", "series", "movie", "anime", "cartoon"})
+LIBRARY_FILTER_NAMES = frozenset(
+    {
+        "full_length",
+        "series",
+        "movie",
+        "anime",
+        "cartoon",
+        "completed",
+        "planned",
+    }
+)
 LIBRARY_SORT_ORDERS = frozenset({"recent", "rating"})
+FORMAT_FILTERS = frozenset({"full_length", "series"})
+TYPE_FILTERS = frozenset({"movie", "anime", "cartoon"})
+STATUS_FILTERS = frozenset({"completed", "planned"})
 
 
 async def get_user_library_filters(
@@ -49,19 +62,52 @@ async def update_user_library_filter(
             await connection.execute(
                 """
                 UPDATE user_library_filters
-                SET full_length = 1, series = 1, movie = 1, anime = 1, cartoon = 1
+                SET full_length = 1, series = 1,
+                    movie = 1, anime = 1, cartoon = 1,
+                    completed = 1, planned = 1
                 WHERE user_id = ?
                 """,
                 (user_id,),
             )
-        else:
+        elif filter_name in FORMAT_FILTERS:
             await connection.execute(
                 f"""
                 UPDATE user_library_filters
-                SET {filter_name} = CASE {filter_name} WHEN 1 THEN 0 ELSE 1 END
+                SET full_length = ?, series = ?
                 WHERE user_id = ?
                 """,
-                (user_id,),
+                (
+                    filter_name == "full_length",
+                    filter_name == "series",
+                    user_id,
+                ),
+            )
+        elif filter_name in TYPE_FILTERS:
+            await connection.execute(
+                """
+                UPDATE user_library_filters
+                SET movie = ?, anime = ?, cartoon = ?
+                WHERE user_id = ?
+                """,
+                (
+                    filter_name == "movie",
+                    filter_name == "anime",
+                    filter_name == "cartoon",
+                    user_id,
+                ),
+            )
+        else:
+            await connection.execute(
+                """
+                UPDATE user_library_filters
+                SET completed = ?, planned = ?
+                WHERE user_id = ?
+                """,
+                (
+                    filter_name == "completed",
+                    filter_name == "planned",
+                    user_id,
+                ),
             )
         async with connection.execute(
             "SELECT * FROM user_library_filters WHERE user_id = ?",
@@ -94,6 +140,9 @@ async def list_user_library(
         if sort_order == "rating"
         else "um.added_at DESC, m.id DESC"
     )
+    status_unfiltered = filters.get("completed", False) and filters.get(
+        "planned", False
+    )
 
     async with connection_scope(database_url) as connection:
         async with connection.execute(
@@ -108,6 +157,9 @@ async def list_user_library(
               AND ((? AND m.content_type = 'movie')
                    OR (? AND m.content_type = 'anime')
                    OR (? AND m.content_type = 'cartoon'))
+              AND (? OR (? AND (um.status = 'completed'
+                                OR COALESCE(um.episodes_watched, 0) > 0))
+                     OR (? AND um.status = 'planned'))
             ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,
@@ -118,6 +170,9 @@ async def list_user_library(
                 filters.get("movie", False),
                 filters.get("anime", False),
                 filters.get("cartoon", False),
+                status_unfiltered,
+                filters.get("completed", False),
+                filters.get("planned", False),
                 limit,
                 offset,
             ),

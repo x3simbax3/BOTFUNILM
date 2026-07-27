@@ -12,8 +12,8 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=text.MAIN_LIBRARY, callback_data="menu:library"
                 ),
-                InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add"),
             ],
+            [InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add")],
         ],
     )
 
@@ -24,16 +24,33 @@ def library_keyboard(
     has_more: bool,
     sort_order: str = "recent",
 ) -> InlineKeyboardMarkup:
-    all_selected = all(filters.values())
+    format_unfiltered = filters.get("series", False) and filters.get(
+        "full_length", False
+    )
+    type_unfiltered = all(
+        filters.get(name, False) for name in ("movie", "anime", "cartoon")
+    )
+    status_unfiltered = filters.get("completed", False) and filters.get(
+        "planned", False
+    )
 
     def filter_selected(name: str) -> bool:
-        return not all_selected and filters.get(name, False)
+        if name in {"series", "full_length"}:
+            unfiltered = format_unfiltered
+        elif name in {"movie", "anime", "cartoon"}:
+            unfiltered = type_unfiltered
+        else:
+            unfiltered = status_unfiltered
+        return not unfiltered and filters.get(name, False)
 
     rows = [
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_ALL, all_selected),
-                callback_data="library:filter:all",
+                text=text.selected(
+                    text.FILTER_RECENT,
+                    sort_order == "recent",
+                ),
+                callback_data="library:sort:recent",
             ),
             InlineKeyboardButton(
                 text=text.selected(text.SORT_RATING, sort_order == "rating"),
@@ -62,11 +79,31 @@ def library_keyboard(
                 text=text.selected(text.FILTER_ANIME, filter_selected("anime")),
                 callback_data="library:filter:anime",
             ),
-        ],
-        [
             InlineKeyboardButton(
                 text=text.selected(text.FILTER_CARTOONS, filter_selected("cartoon")),
                 callback_data="library:filter:cartoon",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=text.selected(
+                    text.FILTER_COMPLETED,
+                    filter_selected("completed"),
+                ),
+                callback_data="library:filter:completed",
+            ),
+            InlineKeyboardButton(
+                text=text.selected(
+                    text.FILTER_PLANNED,
+                    filter_selected("planned"),
+                ),
+                callback_data="library:filter:planned",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=text.RESET_FILTERS,
+                callback_data="library:filter:all",
             ),
         ],
     ]
@@ -132,14 +169,10 @@ def content_type_keyboard(action: str, content_format: str) -> InlineKeyboardMar
                     text=text.TYPE_MOVIE,
                     callback_data=f"type:{action}:{content_format}:movie",
                 ),
-            ],
-            [
                 InlineKeyboardButton(
                     text=text.TYPE_ANIME,
                     callback_data=f"type:{action}:{content_format}:anime",
                 ),
-            ],
-            [
                 InlineKeyboardButton(
                     text=text.TYPE_CARTOON,
                     callback_data=f"type:{action}:{content_format}:cartoon",
@@ -177,6 +210,23 @@ def tmdb_guess_keyboard() -> InlineKeyboardMarkup:
                     callback_data="tmdb_guess:yes",
                 ),
                 InlineKeyboardButton(text=text.GUESS_NO, callback_data="tmdb_guess:no"),
+            ],
+        ],
+    )
+
+
+def watch_status_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=text.STATUS_COMPLETED,
+                    callback_data="watch_status:completed",
+                ),
+                InlineKeyboardButton(
+                    text=text.STATUS_PLANNED,
+                    callback_data="watch_status:planned",
+                ),
             ],
         ],
     )
@@ -241,11 +291,7 @@ def episodes_keyboard(
         buttons.append(row)
     buttons.append(
         [
-            InlineKeyboardButton(text="0", callback_data=f"ep:{season_number}:0"),
-        ]
-    )
-    buttons.append(
-        [
+            InlineKeyboardButton(text=text.BACK, callback_data="ep:back"),
             InlineKeyboardButton(text=text.SAVE, callback_data="ep:done"),
         ]
     )
@@ -292,4 +338,5 @@ __all__ = (
     "selected_type_keyboard",
     "tmdb_guess_keyboard",
     "tmdb_retry_keyboard",
+    "watch_status_keyboard",
 )

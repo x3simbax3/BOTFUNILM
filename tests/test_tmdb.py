@@ -174,10 +174,17 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
 
     def test_parse_title_with_poster(self) -> None:
         result = tmdb._parse_title(
-            {"title": "Форсаж", "overview": "desc", "poster_path": "/p.jpg"}, "Форсаж"
+            {
+                "title": "Форсаж",
+                "overview": "desc",
+                "poster_path": "/p.jpg",
+                "vote_average": 7.8,
+            },
+            "Форсаж",
         )
         self.assertEqual(result.title, "Форсаж")
         self.assertEqual(result.poster_url, f"{tmdb.TMDB_IMAGE_URL}/p.jpg")
+        self.assertEqual(result.rating, 7.8)
 
     def test_parse_title_without_poster(self) -> None:
         result = tmdb._parse_title({"title": "Форсаж"}, "Форсаж")

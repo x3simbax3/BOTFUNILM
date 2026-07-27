@@ -35,9 +35,10 @@ def rating_prompt_text(
     total: int,
 ) -> str:
     return (
-        f"<b>Оцениваем «{escape(title)}»</b>\n\n"
-        f"{category_number}/{total} · <b>{category_name}</b>\n"
-        "Выбери оценку от 1 до 10:"
+        f"★ <b>{escape(title)}</b>\n"
+        f"<i>Критерий {category_number} из {total}</i>\n\n"
+        f"<b>{category_name}</b>\n"
+        "Выбери оценку от 1 до 10"
     )
 
 
@@ -47,21 +48,21 @@ def rating_summary_text(
     average: float,
     categories: list[tuple[str, str]] | None = None,
 ) -> str:
-    lines = [f"<b>Оценки «{escape(title)}»</b> ✅\n"]
+    lines = [f"✓ <b>{escape(title)}</b>", "<i>Оценка сохранена</i>", ""]
     for key, name in categories or RATING_CATEGORIES:
         score = ratings.get(key, "-")
-        lines.append(f"• {name}: <b>{score}/10</b>")
-    lines.append(f"\n⭐ <b>Итог: {average:.1f}/10</b>")
-    lines.append(f"📅 {_today()}")
+        lines.append(f"{name} · <b>{score}/10</b>")
+    lines.append(f"\n★ <b>Итоговая оценка · {average:.1f}/10</b>")
+    lines.append(f"<i>{_today()}</i>")
     return "\n".join(lines)
 
 
 def movie_watched_text(title: str, average: float) -> str:
     return (
-        "<b>Фильм сохранён ✅</b>\n\n"
-        f"🎬 <b>{escape(title)}</b>\n"
-        f"⭐ Оценка: <b>{average:.1f}/10</b>\n"
-        f"📅 {_today()}"
+        "✓ <b>Добавлено в библиотеку</b>\n\n"
+        f"🎞 <b>{escape(title)}</b>\n"
+        f"Моя оценка · <b>{average:.1f}/10</b>\n"
+        f"<i>{_today()}</i>"
     )
 
 

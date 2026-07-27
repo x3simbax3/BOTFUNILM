@@ -36,6 +36,8 @@ async def ensure_media(
         media_details["number_of_seasons"] = number_of_seasons
     if number_of_episodes is not None:
         media_details["number_of_episodes"] = number_of_episodes
+    if data.get("tmdb_rating") is not None:
+        media_details["rating"] = data["tmdb_rating"]
 
     return await upsert_media(
         **media_details,

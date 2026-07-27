@@ -166,6 +166,27 @@ async def update_media_poster(
         )
 
 
+async def update_media_metadata(
+    media_id: int,
+    *,
+    poster_path: str | None = None,
+    rating: float | None = None,
+    database_url: str | None = None,
+) -> None:
+    """Fill refreshable TMDB metadata without clearing existing values."""
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            """
+            UPDATE media
+            SET poster_path = COALESCE(?, poster_path),
+                rating = COALESCE(?, rating),
+                last_updated = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (poster_path, rating, media_id),
+        )
+
+
 def _last_row_id(cursor: aiosqlite.Cursor) -> int:
     if cursor.lastrowid is None:
         raise RuntimeError("Insert did not produce a row id")
@@ -176,5 +197,6 @@ __all__ = (
     "find_media_by_title",
     "get_media_by_tmdb",
     "upsert_media",
+    "update_media_metadata",
     "update_media_poster",
 )

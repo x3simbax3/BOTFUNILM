@@ -1,5 +1,6 @@
 """Series season selection and progress persistence handlers."""
 
+from collections.abc import Mapping
 from datetime import date
 
 import aiosqlite
@@ -27,6 +28,7 @@ from src.lang import (
     INVALID_PROGRESS,
     INVALID_PROGRESS_TRANSITION,
     INVALID_SEASON,
+    NO_EPISODES_SELECTED,
     PROGRESS_LOAD_FAILED,
     PROGRESS_SAVE_FAILED,
     SAVED_PROGRESS_INVALID,
@@ -171,7 +173,11 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
         await callback.answer(SEASON_NOT_FOUND)
         return
 
-    watched = data.get("watched_by_season", {})
+    try:
+        watched = _progress_from_state(data.get("watched_by_season", {}))
+    except SeriesProgressError:
+        await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
+        return
     await state.update_data(current_season=season_number)
     await callback.message.edit_text(
         episodes_prompt_text(
@@ -195,16 +201,32 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
     if selection is None:
         await callback.answer(INVALID_EPISODE, show_alert=True)
         return
+
+    data = await state.get_data()
+    if selection == "back":
+        try:
+            watched = _progress_from_state(data.get("watched_by_season", {}))
+        except SeriesProgressError:
+            await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
+            return
+        seasons_data = data.get("seasons_data", [])
+        await state.update_data(current_season=None)
+        await callback.message.edit_text(
+            series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+            parse_mode="HTML",
+            reply_markup=season_list_keyboard(seasons_data, watched),
+        )
+        await callback.answer()
+        return
     if selection == "done":
         await finish_series_tracking(callback, state)
         return
 
-    data = await state.get_data()
     assert isinstance(selection, EpisodeCallback)
     season_number = selection.season_number
     try:
         watched = apply_episode_selection(
-            data.get("watched_by_season", {}),
+            _progress_from_state(data.get("watched_by_season", {})),
             data.get("seasons_data", []),
             data.get("total_episodes", 0),
             current_season=data.get("current_season"),
@@ -241,7 +263,7 @@ async def finish_series_tracking(
     average = data.get("rating_average", 0)
     try:
         watched = validate_series_progress(
-            data.get("watched_by_season", {}),
+            _progress_from_state(data.get("watched_by_season", {})),
             data.get("seasons_data", []),
             total,
         )
@@ -253,6 +275,9 @@ async def finish_series_tracking(
         return
 
     watched_total = sum(watched.values())
+    if watched_total == 0:
+        await callback.answer(NO_EPISODES_SELECTED, show_alert=True)
+        return
     try:
         media_id = await ensure_media(
             data,
@@ -282,3 +307,27 @@ async def finish_series_tracking(
     await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
     await state.set_state(MenuState.choosing_action)
     await callback.answer()
+
+
+def _progress_from_state(value: object) -> dict[int, int]:
+    """Restore integer season keys after Redis JSON serialization."""
+    if not isinstance(value, Mapping):
+        raise SeriesProgressError("Invalid progress state")
+
+    progress: dict[int, int] = {}
+    for raw_season, episodes_watched in value.items():
+        if type(raw_season) is int:
+            season_number = raw_season
+        elif (
+            isinstance(raw_season, str)
+            and raw_season.isascii()
+            and raw_season.isdigit()
+            and str(int(raw_season)) == raw_season
+        ):
+            season_number = int(raw_season)
+        else:
+            raise SeriesProgressError("Invalid season key in progress state")
+        if season_number in progress:
+            raise SeriesProgressError("Duplicate season in progress state")
+        progress[season_number] = episodes_watched
+    return progress

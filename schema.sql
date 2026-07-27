@@ -69,5 +69,7 @@ CREATE TABLE user_library_filters (
     movie               INTEGER NOT NULL DEFAULT 1 CHECK (movie IN (0, 1)),
     anime               INTEGER NOT NULL DEFAULT 1 CHECK (anime IN (0, 1)),
     cartoon             INTEGER NOT NULL DEFAULT 1 CHECK (cartoon IN (0, 1)),
+    completed           INTEGER NOT NULL DEFAULT 1 CHECK (completed IN (0, 1)),
+    planned             INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),
     PRIMARY KEY (user_id)
 );

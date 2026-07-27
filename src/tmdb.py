@@ -142,6 +142,22 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
     )
 
 
+async def fetch_title_details(tmdb_id: int, content_format: str) -> TmdbTitle:
+    """Fetch current title metadata for repairing catalogue entries."""
+    if not TMDB_API:
+        raise TmdbNotConfiguredError
+    if tmdb_id <= 0 or content_format not in {"full_length", "series"}:
+        raise ValueError("invalid title details request")
+
+    media_path = "tv" if content_format == "series" else "movie"
+    url = f"{TMDB_URL.rstrip('/')}/{media_path}/{tmdb_id}"
+    session = await get_http_session()
+    data = await _fetch_json(session, url, {"language": TMDB_LANG})
+    if not data:
+        raise TmdbError("Не удалось получить информацию о тайтле")
+    return _parse_title(data)
+
+
 async def _fetch_json(
     session: aiohttp.ClientSession,
     url: str,
@@ -175,7 +191,15 @@ def _parse_title(result: dict, original_query: str = "") -> TmdbTitle:
         normalized_query=original_query,
         tmdb_id=result.get("id", 0),
         poster_path=poster_path,
+        rating=_parse_rating(result.get("vote_average")),
     )
+
+
+def _parse_rating(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    rating = float(value)
+    return rating if 0 <= rating <= 10 else None
 
 
 __all__ = (
@@ -193,6 +217,7 @@ __all__ = (
     "TmdbTvDetails",
     "TmdbUnavailableError",
     "fetch_tv_details",
+    "fetch_title_details",
     "find_title_guess",
     "title_relevance_score",
 )

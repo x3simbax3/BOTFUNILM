@@ -16,6 +16,7 @@ from src.database.library import (
     list_user_library,
     update_user_library_filter,
 )
+from src.database.media import update_media_metadata
 from src.fsm import MenuState
 from src.handlers.common import CAPTION_ELLIPSIS, PHOTO_CAPTION_LIMIT, replace_message
 from src.keyboards import (
@@ -35,6 +36,7 @@ from src.lang import (
     library_text,
 )
 from src.posters import poster_input
+from src.tmdb import TmdbError, fetch_title_details
 
 router = Router(name="library")
 LIBRARY_PAGE_SIZE = 20
@@ -78,9 +80,7 @@ async def change_library_sort(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.answer(UNKNOWN_FILTER, show_alert=True)
         return
 
-    data = await state.get_data()
-    sort_order = "recent" if data.get("library_sort") == sort_name else sort_name
-    await state.update_data(library_sort=sort_order)
+    await state.update_data(library_sort=sort_name)
     await open_library_page(callback, state, 0)
 
 
@@ -173,8 +173,8 @@ async def show_library_item(
         await _show_library_error(message, state, ITEM_NOT_FOUND)
         return
 
+    item, photo = await _refresh_item_metadata(item)
     text = library_item_caption(item)
-    photo = poster_input(item["poster_path"])
     send = message.answer_photo if photo else message.answer
     content = {"caption": text, "photo": photo} if photo else {"text": text}
     await send(
@@ -184,6 +184,45 @@ async def show_library_item(
     )
     await state.update_data(media_id=media_id, library_page=0)
     await state.set_state(MenuState.viewing_media)
+
+
+async def _refresh_item_metadata(item):
+    """Repair missing TMDB rating or poster when an old item is opened."""
+    refreshed = dict(item)
+    photo = poster_input(refreshed.get("poster_path"))
+    if (
+        refreshed.get("tmdb_id") in {None, 0}
+        or (photo is not None and refreshed.get("rating") is not None)
+    ):
+        return refreshed, photo
+
+    try:
+        details = await fetch_title_details(
+            int(refreshed["tmdb_id"]),
+            refreshed["content_format"],
+        )
+    except (TmdbError, ValueError):
+        return refreshed, photo
+
+    poster_path = None
+    if photo is None and details.poster_path:
+        poster_path = details.poster_path
+        refreshed["poster_path"] = poster_path
+        photo = poster_input(poster_path)
+    rating = None
+    if refreshed.get("rating") is None and details.rating is not None:
+        rating = details.rating
+        refreshed["rating"] = rating
+    if poster_path is not None or rating is not None:
+        try:
+            await update_media_metadata(
+                int(refreshed["id"]),
+                poster_path=poster_path,
+                rating=rating,
+            )
+        except aiosqlite.Error:
+            pass
+    return refreshed, photo
 
 
 async def _show_library_error(

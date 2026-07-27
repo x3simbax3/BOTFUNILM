@@ -98,11 +98,12 @@ async def save_user_series_progress(
         ) as cursor:
             episodes_watched = int((await cursor.fetchone())[0])
 
-        status = (
-            "completed"
-            if total_episodes > 0 and episodes_watched == total_episodes
-            else "watching"
-        )
+        if episodes_watched == 0:
+            status = "planned"
+        elif total_episodes > 0 and episodes_watched == total_episodes:
+            status = "completed"
+        else:
+            status = "watching"
         await connection.execute(
             """
             UPDATE user_media
@@ -125,6 +126,8 @@ def _validate_progress_values(seasons: dict[int, int], total_episodes: int) -> N
 
     if sum(seasons.values()) > total_episodes:
         raise ValueError("watched episodes cannot exceed total episodes")
+    if sum(seasons.values()) == 0:
+        raise ValueError("at least one watched episode is required")
 
 
 __all__ = ("get_user_season_progress", "save_user_series_progress")

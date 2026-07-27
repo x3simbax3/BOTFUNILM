@@ -220,8 +220,115 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         other_user = await get_user_library_filters(456, database_url=self.database_url)
 
         self.assertTrue(all(defaults.values()))
-        self.assertFalse(changed["anime"])
+        self.assertTrue(changed["anime"])
+        self.assertFalse(changed["movie"])
+        self.assertFalse(changed["cartoon"])
+        self.assertTrue(changed["series"])
+        self.assertTrue(changed["full_length"])
         self.assertTrue(all(other_user.values()))
+
+    async def test_library_filters_are_exclusive_within_each_group(self) -> None:
+        series = await update_user_library_filter(
+            123,
+            "series",
+            database_url=self.database_url,
+        )
+        anime = await update_user_library_filter(
+            123,
+            "anime",
+            database_url=self.database_url,
+        )
+        planned = await update_user_library_filter(
+            123,
+            "planned",
+            database_url=self.database_url,
+        )
+        reset = await update_user_library_filter(
+            123,
+            "all",
+            database_url=self.database_url,
+        )
+
+        self.assertTrue(series["series"])
+        self.assertFalse(series["full_length"])
+        self.assertTrue(anime["series"])
+        self.assertFalse(anime["full_length"])
+        self.assertTrue(anime["anime"])
+        self.assertFalse(anime["movie"])
+        self.assertFalse(anime["cartoon"])
+        self.assertTrue(planned["planned"])
+        self.assertFalse(planned["completed"])
+        self.assertTrue(all(reset.values()))
+
+    async def test_library_can_be_filtered_by_watch_status(self) -> None:
+        completed_id = await upsert_media(
+            tmdb_id=301,
+            content_format="full_length",
+            content_type="movie",
+            title="Просмотрено",
+            database_url=self.database_url,
+        )
+        planned_id = await upsert_media(
+            tmdb_id=302,
+            content_format="full_length",
+            content_type="movie",
+            title="На потом",
+            database_url=self.database_url,
+        )
+        watching_id = await upsert_media(
+            tmdb_id=303,
+            content_format="series",
+            content_type="movie",
+            title="Начато",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=completed_id,
+            status="completed",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=watching_id,
+            status="watching",
+            episodes_watched=1,
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=planned_id,
+            status="planned",
+            database_url=self.database_url,
+        )
+
+        filters = await update_user_library_filter(
+            123,
+            "planned",
+            database_url=self.database_url,
+        )
+        rows = await list_user_library(
+            123,
+            filters,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual([row["title"] for row in rows], ["На потом"])
+
+        completed_filters = await update_user_library_filter(
+            123,
+            "completed",
+            database_url=self.database_url,
+        )
+        watched_rows = await list_user_library(
+            123,
+            completed_filters,
+            database_url=self.database_url,
+        )
+        self.assertEqual(
+            {row["title"] for row in watched_rows},
+            {"Просмотрено", "Начато"},
+        )
 
     async def test_library_is_filtered_and_paginated_newest_first(self) -> None:
         for index in range(25):
@@ -463,6 +570,8 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             ({0: 1}, 10),
             ({1: -1}, 10),
             ({1: 11}, 10),
+            ({1: 0}, 10),
+            ({}, 10),
         )
 
         for seasons, total in invalid_progress:

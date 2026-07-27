@@ -35,7 +35,12 @@ class CallbackDataTests(unittest.TestCase):
             parse_library_filter_callback("library:filter:anime"),
             "anime",
         )
+        self.assertEqual(
+            parse_library_filter_callback("library:filter:planned"),
+            "planned",
+        )
         self.assertEqual(parse_library_sort_callback("library:sort:rating"), "rating")
+        self.assertEqual(parse_library_sort_callback("library:sort:recent"), "recent")
 
     def test_rejects_unknown_values_and_extra_segments(self) -> None:
         invalid_callbacks = (
@@ -66,6 +71,7 @@ class CallbackDataTests(unittest.TestCase):
             EpisodeCallback(12, 34),
         )
         self.assertEqual(parse_episode_callback("ep:done"), "done")
+        self.assertEqual(parse_episode_callback("ep:back"), "back")
 
     def test_rejects_noncanonical_or_out_of_range_numbers(self) -> None:
         invalid_callbacks = (
@@ -84,6 +90,7 @@ class CallbackDataTests(unittest.TestCase):
             (parse_episode_callback, "ep:-1:2"),
             (parse_episode_callback, "ep:0:2"),
             (parse_episode_callback, "ep:1:-2"),
+            (parse_episode_callback, "ep:1:0"),
             (parse_episode_callback, "ep:01:2"),
             (parse_episode_callback, "ep:1:100001"),
             (parse_episode_callback, "ep:done:extra"),

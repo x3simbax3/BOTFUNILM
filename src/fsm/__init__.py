@@ -9,6 +9,7 @@ class MenuState(StatesGroup):
     choosing_content_type = State()
     waiting_title = State()
     confirming_tmdb_guess = State()
+    choosing_watch_status = State()
     choosing_tmdb_retry = State()
     rating_category = State()
     tracking_series = State()

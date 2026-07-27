@@ -12,6 +12,7 @@ class TmdbTitle:
     normalized_query: str
     tmdb_id: int = 0
     poster_path: str | None = None
+    rating: float | None = None
 
 
 @dataclass(frozen=True)

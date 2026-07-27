@@ -4,19 +4,27 @@ from .common import DESCRIPTION_NOT_FOUND
 from .menu import CONTENT_TYPE_TITLES, FORMAT_TITLES
 
 USER_STATUS_TITLES = {
-    "planned": "Запланировано",
+    "planned": "Хочу посмотреть",
     "watching": "Смотрю",
     "completed": "Просмотрено",
     "on_hold": "Отложено",
     "dropped": "Брошено",
 }
+USER_STATUS_ICONS = {
+    "planned": "○",
+    "watching": "▶",
+    "completed": "✓",
+    "on_hold": "Ⅱ",
+    "dropped": "×",
+}
+LIBRARY_ITEM_DIVIDER = "──────────────────────────────"
 
 UNKNOWN_FILTER = "Неизвестный фильтр"
 FILTER_SAVE_FAILED = "Не удалось сохранить фильтр"
 INVALID_PAGE = "Некорректная страница"
 LIBRARY_OPEN_FAILED = "Не удалось открыть библиотеку"
-ITEM_OPEN_FAILED = "Не удалось открыть тайтл. Попробуй ещё раз."
-ITEM_NOT_FOUND = "Тайтл не найден в твоей библиотеке."
+ITEM_OPEN_FAILED = "Не удалось открыть запись. Попробуй ещё раз."
+ITEM_NOT_FOUND = "Запись не найдена в твоей библиотеке."
 
 
 def library_text(
@@ -26,18 +34,53 @@ def library_text(
     sort_order: str = "recent",
 ) -> str:
     if not items:
-        return "<b>Моя библиотека 📚</b>\n\nПо выбранным фильтрам ничего не найдено."
+        return (
+            "<b>Моя библиотека</b>\n"
+            "<i>Ничего не найдено</i>\n\n"
+            "Измени фильтры и попробуй снова."
+        )
 
-    heading = (
-        "Тайтлы с высокой оценкой:"
-        if sort_order == "rating"
-        else "Последние добавленные тайтлы:"
-    )
-    lines = ["<b>Моя библиотека 📚</b>", "", heading]
+    heading = "По оценке" if sort_order == "rating" else "Недавние"
+    lines = ["<b>Моя библиотека</b>", f"<i>{heading}</i>", ""]
     for index, item in enumerate(items, start=offset + 1):
+        if index > offset + 1:
+            lines.append(LIBRARY_ITEM_DIVIDER)
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
-        lines.append(f'{index}. <a href="{url}">{escape(item["title"])}</a>')
+        lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
+        lines.append(_library_item_summary(item))
     return "\n".join(lines)
+
+
+def _library_item_summary(item) -> str:
+    parts: list[str] = []
+    status_value = _item_value(item, "user_status")
+    if _item_value(item, "content_format") == "series":
+        watched = _item_value(item, "episodes_watched", 0) or 0
+        total = _item_value(item, "number_of_episodes")
+        progress = (
+            f"{watched} из {total} серий"
+            if total is not None
+            else f"{watched} серий"
+        )
+        parts.append(progress)
+    if status_value is not None:
+        status = USER_STATUS_TITLES.get(status_value, status_value)
+        parts.append(escape(status))
+
+    user_rating = _item_value(item, "user_rating")
+    tmdb_rating = _item_value(item, "rating")
+    parts.append(f"Моя · {user_rating}/10" if user_rating is not None else "Моя · —")
+    parts.append(
+        f"TMDB · {tmdb_rating:.1f}/10" if tmdb_rating is not None else "TMDB · —"
+    )
+    return " · ".join(parts)
+
+
+def _item_value(item, name: str, default=None):
+    try:
+        return item[name]
+    except (IndexError, KeyError):
+        return default
 
 
 def library_item_text(item, description: str | None = None) -> str:
@@ -46,34 +89,42 @@ def library_item_text(item, description: str | None = None) -> str:
     user_status = USER_STATUS_TITLES.get(item["user_status"], item["user_status"])
     date_value = item["release_date"] or item["first_air_date"]
 
-    lines = [
-        f"🎬 <b>{escape(item['title'])}</b>",
-        f"<i>{escape(content_format)} · {escape(content_type)}</i>",
-    ]
+    icon = "📺" if item["content_format"] == "series" else "🎞"
+    lines = [f"{icon} <b>{escape(item['title'])}</b>"]
     if item["original_title"] and item["original_title"] != item["title"]:
-        lines.append(f"Оригинал: <i>{escape(item['original_title'])}</i>")
+        lines.append(f"<i>{escape(item['original_title'])}</i>")
+    lines.append(f"<i>{escape(content_format)} · {escape(content_type)}</i>")
 
-    lines.extend(["", f"Статус: <b>{escape(user_status)}</b>"])
-    if item["user_rating"] is not None:
-        lines.append(f"Моя оценка: <b>{item['user_rating']}/10</b>")
-    if item["rating"] is not None:
-        lines.append(f"Рейтинг TMDB: <b>{item['rating']:.1f}/10</b>")
-    if date_value:
-        lines.append(f"Дата выхода: <b>{escape(date_value)}</b>")
-    if item["number_of_seasons"] is not None:
-        lines.append(f"Сезонов: <b>{item['number_of_seasons']}</b>")
+    lines.extend(["", "<b>Моя запись</b>"])
+    status_icon = USER_STATUS_ICONS.get(item["user_status"], "·")
+    lines.append(f"Статус · <b>{status_icon} {escape(user_status)}</b>")
     if item["number_of_episodes"] is not None:
         watched = item["episodes_watched"] or 0
         lines.append(
-            f"Серий просмотрено: <b>{watched}/{item['number_of_episodes']}</b>"
+            f"Прогресс · <b>{watched} из {item['number_of_episodes']} серий</b>"
         )
+    if item["user_rating"] is not None:
+        lines.append(f"Оценка · <b>{item['user_rating']}/10</b>")
+
+    details_heading = (
+        "О сериале" if item["content_format"] == "series" else "О фильме"
+    )
+    lines.extend(["", f"<b>{details_heading}</b>"])
+    if item["rating"] is not None:
+        lines.append(f"TMDB · <b>{item['rating']:.1f}/10</b>")
+    if date_value:
+        lines.append(f"Премьера · <b>{escape(date_value)}</b>")
+    if item["number_of_seasons"] is not None:
+        lines.append(f"Сезонов · <b>{item['number_of_seasons']}</b>")
+    if item["number_of_episodes"] is not None:
+        lines.append(f"Серий · <b>{item['number_of_episodes']}</b>")
 
     description_text = (
         item["description"] or DESCRIPTION_NOT_FOUND
         if description is None
         else description
     )
-    lines.extend(["", escape(description_text)])
+    lines.extend(["", f"<blockquote>{escape(description_text)}</blockquote>"])
     return "\n".join(lines)
 
 

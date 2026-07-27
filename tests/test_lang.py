@@ -16,7 +16,7 @@ class LocalizationTests(unittest.TestCase):
         locale = lang.get_locale("ru-RU")
 
         self.assertEqual(locale.menu.START_TEXT, lang.START_TEXT)
-        self.assertEqual(locale.keyboards.MAIN_ADD, "➕ Добавить")
+        self.assertEqual(locale.keyboards.MAIN_ADD, "Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
     def test_animation_uses_its_own_rating_categories(self) -> None:
@@ -62,24 +62,69 @@ class LocalizationTests(unittest.TestCase):
 
     def test_library_text_numbers_and_escapes_clickable_titles(self) -> None:
         result = lang.library_text(
-            [{"id": 7, "title": "Tom & Jerry"}],
+            [
+                {
+                    "id": 7,
+                    "title": "Tom & Jerry",
+                    "content_format": "full_length",
+                },
+                {
+                    "id": 8,
+                    "title": "Second title",
+                    "content_format": "full_length",
+                },
+            ],
             "BotFunilmBot",
             offset=20,
         )
 
         self.assertIn("21.", result)
         self.assertIn(
-            '<a href="https://t.me/BotFunilmBot?start=media_7">Tom &amp; Jerry</a>',
+            '<a href="https://t.me/BotFunilmBot?start=media_7">'
+            "21. Tom &amp; Jerry</a>",
             result,
         )
-        self.assertIn("Последние добавленные", result)
+        self.assertIn("<i>Недавние</i>", result)
+        self.assertEqual(result.count("──────────────────────────────"), 1)
 
         rating_result = lang.library_text(
-            [{"id": 7, "title": "Tom & Jerry"}],
+            [
+                {
+                    "id": 7,
+                    "title": "Tom & Jerry",
+                    "content_format": "full_length",
+                }
+            ],
             "BotFunilmBot",
             sort_order="rating",
         )
-        self.assertIn("Тайтлы с высокой оценкой", rating_result)
+        self.assertIn("<i>По оценке</i>", rating_result)
+
+    def test_library_text_shows_series_progress_status_and_rating(self) -> None:
+        result = lang.library_text(
+            [
+                {
+                    "id": 7,
+                    "title": "Сериал",
+                    "content_format": "series",
+                    "user_status": "watching",
+                    "episodes_watched": 7,
+                    "number_of_episodes": 10,
+                    "user_rating": 8,
+                    "rating": 8.4,
+                }
+            ],
+            "BotFunilmBot",
+        )
+
+        self.assertIn(
+            "7 из 10 серий · Смотрю · Моя · 8/10 · TMDB · 8.4/10",
+            result,
+        )
+        self.assertNotIn(
+            '<a href="https://t.me/BotFunilmBot?start=media_7">7 из 10',
+            result,
+        )
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

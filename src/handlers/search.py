@@ -6,16 +6,29 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.database.media import find_media_by_title, update_media_poster
+from src.database.user_media import save_user_media
 from src.fsm import MenuState
-from src.handlers.common import is_active_tmdb_guess, tmdb_guess_caption
-from src.keyboards import rating_keyboard, tmdb_guess_keyboard, tmdb_retry_keyboard
+from src.handlers.common import (
+    delete_message_safely,
+    is_active_tmdb_guess,
+    tmdb_guess_caption,
+)
+from src.keyboards import (
+    main_menu_keyboard,
+    rating_keyboard,
+    tmdb_guess_keyboard,
+    tmdb_retry_keyboard,
+    watch_status_keyboard,
+)
 from src.lang import (
     FORMAT_MISSING,
+    INVALID_WATCH_STATUS,
     LOCAL_SEARCH_FAILED,
     REJECTED_GUESS,
     STALE_GUESS,
     TITLE_AS_TEXT,
     TITLE_EMPTY,
+    TITLE_SAVE_FAILED,
     TMDB_AUTH_FAILED,
     TMDB_FAILED,
     TMDB_NOT_CONFIGURED,
@@ -24,12 +37,15 @@ from src.lang import (
     TMDB_SEARCHING_REMOTE,
     TMDB_TOO_LONG,
     TMDB_UNAVAILABLE,
+    WATCH_STATUS_PROMPT,
+    planned_title_saved_text,
     rating_categories,
     rating_prompt_text,
     tmdb_found_text,
     tmdb_not_found_text,
 )
 from src.posters import download_poster, poster_input
+from src.services import ensure_media
 from src.tmdb import (
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
@@ -120,6 +136,7 @@ async def _title_from_local_media(
         normalized_query=title_query,
         tmdb_id=local_media["tmdb_id"] or 0,
         poster_path=poster_path,
+        rating=local_media["rating"],
     )
 
 
@@ -156,6 +173,7 @@ async def _show_guess(
         tmdb_description=guess.overview,
         tmdb_poster_url=guess.poster_url,
         tmdb_poster_path=guess.poster_path,
+        tmdb_rating=guess.rating,
     )
     await state.set_state(MenuState.confirming_tmdb_guess)
 
@@ -167,7 +185,55 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         return
 
     await callback.answer()
-    await state.update_data(tmdb_guess_message_id=None, ratings={}, rating_index=0)
+    await state.update_data(tmdb_guess_message_id=None)
+    await delete_message_safely(callback.message)
+    await callback.message.answer(
+        WATCH_STATUS_PROMPT,
+        parse_mode="HTML",
+        reply_markup=watch_status_keyboard(),
+    )
+    await state.set_state(MenuState.choosing_watch_status)
+
+
+@router.callback_query(
+    MenuState.choosing_watch_status,
+    F.data.startswith("watch_status:"),
+)
+async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    status = callback.data.removeprefix("watch_status:")
+    if status not in {"completed", "planned"}:
+        await callback.answer(INVALID_WATCH_STATUS, show_alert=True)
+        return
+
+    if status == "planned":
+        data = await state.get_data()
+        try:
+            media_id = await ensure_media(data, data.get("content_format", ""))
+            await save_user_media(
+                user_id=callback.from_user.id,
+                media_id=media_id,
+                status="planned",
+            )
+        except (aiosqlite.Error, RuntimeError, ValueError):
+            await callback.answer(TITLE_SAVE_FAILED, show_alert=True)
+            return
+
+        await callback.message.edit_text(
+            planned_title_saved_text(data.get("tmdb_title", "")),
+            parse_mode="HTML",
+        )
+        await callback.message.answer(
+            "Готово — тайтл сохранён на потом.",
+            reply_markup=main_menu_keyboard(),
+        )
+        await state.set_state(MenuState.choosing_action)
+        await callback.answer()
+        return
+
+    await state.update_data(ratings={}, rating_index=0)
     data = await state.get_data()
     categories = rating_categories(data.get("content_type", "movie"))
     await callback.message.answer(
@@ -178,6 +244,7 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         reply_markup=rating_keyboard(),
     )
     await state.set_state(MenuState.rating_category)
+    await callback.answer()
 
 
 @router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:no")

@@ -1,5 +1,6 @@
 """Shared presentation helpers for Telegram handlers."""
 
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -46,6 +47,15 @@ async def replace_message(
         return
 
     await edit_message(message, text, parse_mode, reply_markup)
+
+
+async def delete_message_safely(message: Message) -> bool:
+    """Delete a workflow message without breaking the next step on API failure."""
+    try:
+        await message.delete()
+    except TelegramAPIError:
+        return False
+    return True
 
 
 async def is_active_tmdb_guess(

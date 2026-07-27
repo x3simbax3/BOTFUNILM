@@ -11,9 +11,18 @@ VALID_ACTIONS = frozenset({"add"})
 VALID_CONTENT_FORMATS = frozenset({"full_length", "series"})
 VALID_CONTENT_TYPES = frozenset({"movie", "anime", "cartoon"})
 VALID_LIBRARY_FILTERS = frozenset(
-    {"all", "series", "full_length", "anime", "movie", "cartoon"}
+    {
+        "all",
+        "series",
+        "full_length",
+        "anime",
+        "movie",
+        "cartoon",
+        "completed",
+        "planned",
+    }
 )
-VALID_LIBRARY_SORTS = frozenset({"rating"})
+VALID_LIBRARY_SORTS = frozenset({"recent", "rating"})
 
 MAX_LIBRARY_PAGE = 100_000
 MAX_SEASON_NUMBER = 10_000
@@ -23,12 +32,12 @@ _FORMAT_RE = re.compile(r"format:([^:]+):([^:]+)\Z", re.ASCII)
 _TYPE_RE = re.compile(r"type:([^:]+):([^:]+):([^:]+)\Z", re.ASCII)
 _BACK_RE = re.compile(r"back:([^:]+)(?::([^:]+))?(?::([^:]+))?\Z", re.ASCII)
 _LIBRARY_FILTER_RE = re.compile(r"library:filter:([^:]+)\Z", re.ASCII)
-_LIBRARY_SORT_RE = re.compile(r"library:sort:([^:]+)\Z", re.ASCII)
+_LIBRARY_SORT_RE = re.compile(r"library:sort:(recent|rating)\Z", re.ASCII)
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
 _SEASON_RE = re.compile(r"season:(done|[1-9][0-9]{0,4})\Z", re.ASCII)
 _EPISODE_RE = re.compile(
-    r"ep:(?:done|([1-9][0-9]{0,4}):(0|[1-9][0-9]{0,5}))\Z",
+    r"ep:(?:done|back|([1-9][0-9]{0,4}):([1-9][0-9]{0,5}))\Z",
     re.ASCII,
 )
 
@@ -145,8 +154,8 @@ def parse_episode_callback(data: str) -> EpisodeCallback | str | None:
     match = _EPISODE_RE.fullmatch(data)
     if not match:
         return None
-    if data == "ep:done":
-        return "done"
+    if data in {"ep:done", "ep:back"}:
+        return data.removeprefix("ep:")
     season_number, episodes_watched = (int(value) for value in match.groups())
     if season_number > MAX_SEASON_NUMBER or episodes_watched > MAX_EPISODE_COUNT:
         return None
