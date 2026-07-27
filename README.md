@@ -87,6 +87,17 @@ make ps
 make logs
 ```
 
+После изменения исходного кода пересоберите runtime-образ и пересоздайте только
+сервис бота:
+
+```bash
+make deploy
+```
+
+`make restart` является алиасом этой команды и тоже выполняет пересборку. Redis
+при этом не пересоздаётся без необходимости, а постоянный `bot_data` не
+затрагивается.
+
 Остановить сервисы:
 
 ```bash
@@ -267,9 +278,10 @@ src/
 ```bash
 make help       # список основных целей
 make build      # пересобрать production-образ
+make deploy     # пересобрать и пересоздать только bot
 make lint       # проверить Ruff без изменения файлов
 make format     # исправить и отформатировать Python-код
-make restart    # перезапустить только bot
+make restart    # алиас для make deploy
 make logs       # следить за логами bot и redis
 make ps         # состояние Compose-сервисов
 make check TEST_PROCESSES=1

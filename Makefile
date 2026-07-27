@@ -9,18 +9,19 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up start-local stop down restart logs ps migrate migration db-check db-status db-downgrade db-reset commit
+.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps migrate migration db-check db-status db-downgrade db-reset commit
 .NOTPARALLEL: check
 
 help:
 	@echo "Docker targets:"
 	@echo "  make start          Build and start bot + Redis through Compose"
+	@echo "  make deploy         Rebuild and recreate only the bot service"
 	@echo "  make build          Build the production bot image"
 	@echo "  make lint           Check formatting and lint in Docker"
 	@echo "  make format         Fix lint issues and format source files in Docker"
 	@echo "  make test           Build the test target and run tests in Docker"
 	@echo "  make check          Validate Compose/DB, then run lint and tests"
-	@echo "  make restart        Restart only the bot container"
+	@echo "  make restart        Alias for make deploy"
 	@echo "  make logs           Follow bot and Redis logs"
 	@echo "  make ps             Show Compose service status"
 	@echo "  make stop           Stop Compose without deleting persistent data"
@@ -65,6 +66,9 @@ start: up
 up: compose-check
 	$(COMPOSE) up --detach --build
 
+deploy: compose-check
+	$(COMPOSE) up --detach --build bot
+
 start-local: migrate
 	$(PYTHON) -m src.bot
 
@@ -73,8 +77,7 @@ stop: down
 down:
 	$(COMPOSE) down
 
-restart:
-	$(COMPOSE) restart bot
+restart: deploy
 
 logs:
 	$(COMPOSE) logs --follow bot redis
