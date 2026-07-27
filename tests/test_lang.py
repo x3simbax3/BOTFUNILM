@@ -16,7 +16,7 @@ class LocalizationTests(unittest.TestCase):
         locale = lang.get_locale("ru-RU")
 
         self.assertEqual(locale.menu.START_TEXT, lang.START_TEXT)
-        self.assertEqual(locale.keyboards.MAIN_ADD, "Добавить")
+        self.assertEqual(locale.keyboards.MAIN_ADD, "＋\u00a0Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
     def test_animation_uses_its_own_rating_categories(self) -> None:
@@ -80,12 +80,11 @@ class LocalizationTests(unittest.TestCase):
 
         self.assertIn("21.", result)
         self.assertIn(
-            '<a href="https://t.me/BotFunilmBot?start=media_7">'
-            "21. Tom &amp; Jerry</a>",
+            '<a href="https://t.me/BotFunilmBot?start=media_7">21. Tom &amp; Jerry</a>',
             result,
         )
-        self.assertIn("<i>Недавние</i>", result)
-        self.assertEqual(result.count("──────────────────────────────"), 1)
+        self.assertIn("<i>По дате</i>", result)
+        self.assertEqual(result.count("┈┈┈┈┈┈┈┈┈┈┈┈┈"), 1)
 
         rating_result = lang.library_text(
             [
@@ -125,6 +124,31 @@ class LocalizationTests(unittest.TestCase):
             '<a href="https://t.me/BotFunilmBot?start=media_7">7 из 10',
             result,
         )
+
+    def test_library_item_uses_combined_media_kind_and_styled_watching_icon(
+        self,
+    ) -> None:
+        item = {
+            "title": "Мультсериал",
+            "original_title": None,
+            "description": "Описание",
+            "content_format": "series",
+            "content_type": "cartoon",
+            "user_status": "watching",
+            "user_rating": None,
+            "rating": None,
+            "release_date": None,
+            "first_air_date": None,
+            "number_of_seasons": 1,
+            "number_of_episodes": 10,
+            "episodes_watched": 3,
+        }
+
+        result = lang.library_item_text(item)
+
+        self.assertIn("<i>Мультсериал</i>", result)
+        self.assertNotIn("Сериалы · Мультфильм", result)
+        self.assertIn("Статус · <b>◉ Смотрю</b>", result)
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

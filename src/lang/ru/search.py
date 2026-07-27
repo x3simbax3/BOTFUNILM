@@ -19,8 +19,9 @@ TMDB_UNAVAILABLE = "TMDB сейчас недоступен. Попробуй н�
 TMDB_FAILED = "Не удалось получить ответ от TMDB. Попробуй позже."
 INVALID_WATCH_STATUS = "Неизвестный статус просмотра"
 TITLE_SAVE_FAILED = "Не удалось сохранить. Попробуй ещё раз."
+ALREADY_IN_LIBRARY = "Уже добавлено в библиотеку"
 WATCH_STATUS_PROMPT = (
-    "<b>Добавление</b>\n"
+    "┈┈┈  <b>Добавление</b>  ┈┈┈\n"
     "<i>Шаг 4 из 4 · Статус</i>\n\n"
     "Уже посмотрено или сохранить на потом?"
 )
@@ -29,7 +30,7 @@ WATCH_STATUS_PROMPT = (
 def tmdb_guess_text(content_format: str, title: str, overview: str | None) -> str:
     description = overview or DESCRIPTION_NOT_FOUND
     return (
-        "⌕ <b>Результат поиска</b>\n\n"
+        "┈┈┈  ⌕ <b>Результат поиска</b>  ┈┈┈\n\n"
         f"<b>{escape(title)}</b>\n"
         f"<i>{FORMAT_RESULT_TITLES[content_format]}</i>\n\n"
         f"<blockquote>{escape(description)}</blockquote>\n\n"
@@ -57,6 +58,7 @@ def planned_title_saved_text(title: str) -> str:
 
 
 __all__ = (
+    "ALREADY_IN_LIBRARY",
     "FORMAT_MISSING",
     "INVALID_WATCH_STATUS",
     "LOCAL_SEARCH_FAILED",

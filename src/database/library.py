@@ -30,7 +30,20 @@ async def get_user_library_filters(
 ) -> dict[str, bool]:
     async with connection_scope(database_url) as connection:
         await connection.execute(
-            "INSERT OR IGNORE INTO user_library_filters (user_id) VALUES (?)",
+            """
+            INSERT OR IGNORE INTO user_library_filters
+                (user_id, completed, planned)
+            VALUES (?, 1, 0)
+            """,
+            (user_id,),
+        )
+        # Normalize rows created with the old all-statuses default.
+        await connection.execute(
+            """
+            UPDATE user_library_filters
+            SET planned = 0
+            WHERE user_id = ? AND completed = 1 AND planned = 1
+            """,
             (user_id,),
         )
         async with connection.execute(
@@ -55,7 +68,11 @@ async def update_user_library_filter(
 
     async with connection_scope(database_url) as connection:
         await connection.execute(
-            "INSERT OR IGNORE INTO user_library_filters (user_id) VALUES (?)",
+            """
+            INSERT OR IGNORE INTO user_library_filters
+                (user_id, completed, planned)
+            VALUES (?, 1, 0)
+            """,
             (user_id,),
         )
         if filter_name == "all":
@@ -64,50 +81,39 @@ async def update_user_library_filter(
                 UPDATE user_library_filters
                 SET full_length = 1, series = 1,
                     movie = 1, anime = 1, cartoon = 1,
-                    completed = 1, planned = 1
+                    completed = 1, planned = 0
                 WHERE user_id = ?
                 """,
                 (user_id,),
             )
-        elif filter_name in FORMAT_FILTERS:
-            await connection.execute(
-                f"""
-                UPDATE user_library_filters
-                SET full_length = ?, series = ?
-                WHERE user_id = ?
-                """,
-                (
-                    filter_name == "full_length",
-                    filter_name == "series",
-                    user_id,
-                ),
-            )
-        elif filter_name in TYPE_FILTERS:
-            await connection.execute(
-                """
-                UPDATE user_library_filters
-                SET movie = ?, anime = ?, cartoon = ?
-                WHERE user_id = ?
-                """,
-                (
-                    filter_name == "movie",
-                    filter_name == "anime",
-                    filter_name == "cartoon",
-                    user_id,
-                ),
-            )
         else:
+            if filter_name in FORMAT_FILTERS:
+                group = ("full_length", "series")
+            elif filter_name in TYPE_FILTERS:
+                group = ("movie", "anime", "cartoon")
+            else:
+                group = ("completed", "planned")
+
+            async with connection.execute(
+                "SELECT * FROM user_library_filters WHERE user_id = ?",
+                (user_id,),
+            ) as cursor:
+                current = await cursor.fetchone()
+            if current is None:
+                raise RuntimeError("Library filters were not created")
+
+            # Formats and types can return to an unfiltered group. A watch
+            # status is mandatory, so clicking it keeps it selected.
+            restore_group = (
+                filter_name not in STATUS_FILTERS
+                and bool(current[filter_name])
+                and sum(bool(current[name]) for name in group) == 1
+            )
+            values = [True if restore_group else name == filter_name for name in group]
+            assignments = ", ".join(f"{name} = ?" for name in group)
             await connection.execute(
-                """
-                UPDATE user_library_filters
-                SET completed = ?, planned = ?
-                WHERE user_id = ?
-                """,
-                (
-                    filter_name == "completed",
-                    filter_name == "planned",
-                    user_id,
-                ),
+                f"UPDATE user_library_filters SET {assignments} WHERE user_id = ?",
+                (*values, user_id),
             )
         async with connection.execute(
             "SELECT * FROM user_library_filters WHERE user_id = ?",

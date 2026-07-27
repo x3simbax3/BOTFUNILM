@@ -30,9 +30,6 @@ def library_keyboard(
     type_unfiltered = all(
         filters.get(name, False) for name in ("movie", "anime", "cartoon")
     )
-    status_unfiltered = filters.get("completed", False) and filters.get(
-        "planned", False
-    )
 
     def filter_selected(name: str) -> bool:
         if name in {"series", "full_length"}:
@@ -40,7 +37,7 @@ def library_keyboard(
         elif name in {"movie", "anime", "cartoon"}:
             unfiltered = type_unfiltered
         else:
-            unfiltered = status_unfiltered
+            return filters.get(name, False)
         return not unfiltered and filters.get(name, False)
 
     rows = [
@@ -169,10 +166,14 @@ def content_type_keyboard(action: str, content_format: str) -> InlineKeyboardMar
                     text=text.TYPE_MOVIE,
                     callback_data=f"type:{action}:{content_format}:movie",
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     text=text.TYPE_ANIME,
                     callback_data=f"type:{action}:{content_format}:anime",
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     text=text.TYPE_CARTOON,
                     callback_data=f"type:{action}:{content_format}:cartoon",
@@ -223,6 +224,8 @@ def watch_status_keyboard() -> InlineKeyboardMarkup:
                     text=text.STATUS_COMPLETED,
                     callback_data="watch_status:completed",
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     text=text.STATUS_PLANNED,
                     callback_data="watch_status:planned",
@@ -270,6 +273,7 @@ def rating_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             buttons[:5],
             buttons[5:],
+            [InlineKeyboardButton(text=text.BACK, callback_data="rating:back")],
         ],
     )
 
@@ -279,7 +283,14 @@ def episodes_keyboard(
     season_number: int,
 ) -> InlineKeyboardMarkup:
     """Build a keyboard for selecting watched episodes in a season."""
-    buttons: list[list[InlineKeyboardButton]] = []
+    buttons: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=text.ALL_EPISODES,
+                callback_data=f"ep:{season_number}:{total_episodes}",
+            )
+        ]
+    ]
     for i in range(0, total_episodes, 5):
         row = [
             InlineKeyboardButton(

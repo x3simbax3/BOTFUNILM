@@ -50,7 +50,7 @@ services:
       BOT_TOKEN: ""
       TMDB_API: ""
       REDIS_URL: ""
-      TEST_PROCESSES: "1"
+      TEST_PROCESSES: "2"
       RUFF_CACHE_DIR: /tmp/ruff-cache
 
 volumes:

@@ -24,7 +24,7 @@ class KeyboardsTests(unittest.TestCase):
             "movie": True,
             "cartoon": True,
             "completed": True,
-            "planned": True,
+            "planned": False,
         }
 
         keyboard = keyboards.library_keyboard(filters, page=1, has_more=True)
@@ -45,11 +45,11 @@ class KeyboardsTests(unittest.TestCase):
                 ["back:main"],
             ],
         )
-        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓ По дате")
-        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓ Сериалы")
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓\u00a0По дате")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓\u00a0Сериалы")
         self.assertEqual(keyboard.inline_keyboard[1][1].text, "Полный метр")
 
-    def test_all_filter_uses_only_one_selection_mark(self) -> None:
+    def test_all_filter_marks_mandatory_sort_and_completed_status(self) -> None:
         filters = {
             "series": True,
             "full_length": True,
@@ -57,7 +57,7 @@ class KeyboardsTests(unittest.TestCase):
             "movie": True,
             "cartoon": True,
             "completed": True,
-            "planned": True,
+            "planned": False,
         }
 
         keyboard = keyboards.library_keyboard(filters, page=0, has_more=False)
@@ -65,7 +65,7 @@ class KeyboardsTests(unittest.TestCase):
 
         self.assertEqual(
             [label for label in labels if label.startswith("✓")],
-            ["✓ По дате"],
+            ["✓\u00a0По дате", "✓\u00a0Просмотрено"],
         )
 
     def test_filter_groups_show_only_one_selected_option(self) -> None:
@@ -84,13 +84,13 @@ class KeyboardsTests(unittest.TestCase):
         )
         labels = [button.text for row in keyboard.inline_keyboard for button in row]
 
-        self.assertIn("✓ Сериалы", labels)
-        self.assertIn("✓ Аниме", labels)
-        self.assertNotIn("✓ Полный метр", labels)
-        self.assertNotIn("✓ Кино", labels)
-        self.assertNotIn("✓ Мультфильмы", labels)
-        self.assertNotIn("✓ Просмотрено", labels)
-        self.assertIn("✓ Хочу посмотреть", labels)
+        self.assertIn("✓\u00a0Сериалы", labels)
+        self.assertIn("✓\u00a0Аниме", labels)
+        self.assertNotIn("✓\u00a0Полный метр", labels)
+        self.assertNotIn("✓\u00a0Кино", labels)
+        self.assertNotIn("✓\u00a0Мультфильмы", labels)
+        self.assertNotIn("✓\u00a0Просмотрено", labels)
+        self.assertIn("✓\u00a0Хочу посмотреть", labels)
 
     def test_rating_sort_has_compact_selected_button(self) -> None:
         filters = {
@@ -110,7 +110,7 @@ class KeyboardsTests(unittest.TestCase):
             sort_order="rating",
         )
 
-        self.assertEqual(keyboard.inline_keyboard[0][1].text, "✓ По оценке")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "✓\u00a0По оценке")
 
     def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
         self.assertEqual(
@@ -127,11 +127,9 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(
             callback_rows(keyboards.content_type_keyboard("add", "series")),
             [
-                [
-                    "type:add:series:movie",
-                    "type:add:series:anime",
-                    "type:add:series:cartoon",
-                ],
+                ["type:add:series:movie"],
+                ["type:add:series:anime"],
+                ["type:add:series:cartoon"],
                 ["back:format:add"],
             ],
         )
@@ -151,7 +149,17 @@ class KeyboardsTests(unittest.TestCase):
     def test_watch_status_buttons_have_expected_callbacks(self) -> None:
         self.assertEqual(
             callback_rows(keyboards.watch_status_keyboard()),
-            [["watch_status:completed", "watch_status:planned"]],
+            [["watch_status:completed"], ["watch_status:planned"]],
+        )
+
+    def test_rating_keyboard_has_back_button(self) -> None:
+        self.assertEqual(
+            callback_rows(keyboards.rating_keyboard()),
+            [
+                ["rate:1", "rate:2", "rate:3", "rate:4", "rate:5"],
+                ["rate:6", "rate:7", "rate:8", "rate:9", "rate:10"],
+                ["rating:back"],
+            ],
         )
 
     def test_tmdb_retry_with_context_returns_to_selected_content_type(self) -> None:
@@ -176,9 +184,14 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(
             callback_rows(keyboards.episodes_keyboard(3, 2)),
             [
+                ["ep:2:3"],
                 ["ep:2:1", "ep:2:2", "ep:2:3"],
                 ["ep:back", "ep:done"],
             ],
+        )
+        self.assertEqual(
+            keyboards.episodes_keyboard(3, 2).inline_keyboard[0][0].text,
+            "✓\u00a0Все серии",
         )
 
 

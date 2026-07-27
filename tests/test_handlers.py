@@ -235,7 +235,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("TMDB · <b>8.7/10</b>", message.photo_answers[0]["caption"])
 
-    async def test_open_library_shows_only_first_twenty_and_more_button(self) -> None:
+    async def test_open_library_shows_only_first_ten_and_more_button(self) -> None:
         message = MessageStub()
         callback = CallbackStub("menu:library", message)
         state = StateStub()
@@ -254,7 +254,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "title": f"Title {index}",
                 "content_format": "full_length",
             }
-            for index in range(1, 22)
+            for index in range(1, 12)
         ]
 
         with (
@@ -273,8 +273,8 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         rendered = message.edit_text_calls[0]
         self.assertIn("1.", rendered["text"])
-        self.assertIn("20.", rendered["text"])
-        self.assertNotIn("Title 21", rendered["text"])
+        self.assertIn("10.", rendered["text"])
+        self.assertNotIn("Title 11", rendered["text"])
         callbacks = [
             button.callback_data
             for row in rendered["reply_markup"].inline_keyboard
@@ -302,7 +302,21 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(open_page.await_count, 2)
 
-    async def test_reset_filters_preserves_current_sort(self) -> None:
+    async def test_clicking_selected_sort_keeps_its_selection(self) -> None:
+        callback = CallbackStub("library:sort:rating", MessageStub())
+        state = StateStub({"library_sort": "rating"})
+
+        with patch.object(
+            library_handlers,
+            "open_library_page",
+            AsyncMock(),
+        ) as open_page:
+            await library_handlers.change_library_sort(callback, state)
+
+        self.assertEqual(state.data["library_sort"], "rating")
+        open_page.assert_awaited_once_with(callback, state, 0)
+
+    async def test_reset_filters_restores_recent_sort(self) -> None:
         callback = CallbackStub("library:filter:all", MessageStub())
         state = StateStub({"library_sort": "rating"})
 
@@ -321,7 +335,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             await library_handlers.change_library_filter(callback, state)
 
         update_filter.assert_awaited_once_with(123, "all")
-        self.assertEqual(state.data["library_sort"], "rating")
+        self.assertEqual(state.data["library_sort"], "recent")
         open_page.assert_awaited_once_with(callback, state, 0)
 
     async def test_choose_action_saves_action_and_moves_to_choosing_format(
@@ -630,7 +644,11 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(message.deleted)
         status_keyboard = message.answers[0]["reply_markup"]
         self.assertEqual(
-            [button.callback_data for button in status_keyboard.inline_keyboard[0]],
+            [
+                button.callback_data
+                for row in status_keyboard.inline_keyboard
+                for button in row
+            ],
             ["watch_status:completed", "watch_status:planned"],
         )
 
@@ -650,6 +668,33 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(state.data["tmdb_guess_message_id"])
         self.assertEqual(state.state, MenuState.choosing_watch_status)
+
+    async def test_confirm_guess_shows_alert_for_existing_library_item(self) -> None:
+        message = MessageStub(message_id=100)
+        callback = CallbackStub("tmdb_guess:yes", message)
+        state = StateStub(
+            {
+                "tmdb_guess_message_id": 100,
+                "media_id": 7,
+                "tmdb_title": "Уже добавлено",
+                "content_format": "full_length",
+                "content_type": "movie",
+            }
+        )
+
+        with patch.object(
+            search_handlers,
+            "_already_in_library",
+            AsyncMock(return_value=True),
+        ):
+            await search_handlers.confirm_tmdb_guess(callback, state)
+
+        self.assertEqual(
+            callback.answers,
+            [{"text": "Уже добавлено в библиотеку", "show_alert": True}],
+        )
+        self.assertEqual(state.state, None)
+        self.assertFalse(message.deleted)
 
     async def test_planned_status_saves_without_rating(self) -> None:
         message = MessageStub()
@@ -750,6 +795,44 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(callback.answers, [{"text": None}])
+
+
+class RatingNavigationHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_back_from_first_rating_returns_to_watch_status(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rating:back", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Фильм",
+                "content_type": "movie",
+                "ratings": {},
+                "rating_index": 0,
+            }
+        )
+
+        await rating_handlers.back_from_rating(callback, state)
+
+        self.assertEqual(state.state, MenuState.choosing_watch_status)
+        self.assertTrue(message.deleted)
+        self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_back_from_later_rating_reopens_previous_category(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rating:back", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Фильм",
+                "content_type": "movie",
+                "ratings": {"acting": 8, "story": 7},
+                "rating_index": 2,
+            }
+        )
+
+        await rating_handlers.back_from_rating(callback, state)
+
+        self.assertEqual(state.data["rating_index"], 1)
+        self.assertEqual(state.data["ratings"], {"acting": 8})
+        self.assertIn("Сюжет", message.edit_text_calls[0]["text"])
 
 
 class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):

@@ -1,7 +1,7 @@
 from html import escape
 
 from .common import DESCRIPTION_NOT_FOUND
-from .menu import CONTENT_TYPE_TITLES, FORMAT_TITLES
+from .menu import CONTENT_TYPE_TITLES
 
 USER_STATUS_TITLES = {
     "planned": "Хочу посмотреть",
@@ -12,12 +12,20 @@ USER_STATUS_TITLES = {
 }
 USER_STATUS_ICONS = {
     "planned": "○",
-    "watching": "▶",
+    "watching": "◉",
     "completed": "✓",
     "on_hold": "Ⅱ",
     "dropped": "×",
 }
-LIBRARY_ITEM_DIVIDER = "──────────────────────────────"
+MEDIA_KIND_TITLES = {
+    ("full_length", "movie"): "Фильм",
+    ("series", "movie"): "Сериал",
+    ("full_length", "anime"): "Аниме-фильм",
+    ("series", "anime"): "Аниме-сериал",
+    ("full_length", "cartoon"): "Мультфильм",
+    ("series", "cartoon"): "Мультсериал",
+}
+LIBRARY_ITEM_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈"
 
 UNKNOWN_FILTER = "Неизвестный фильтр"
 FILTER_SAVE_FAILED = "Не удалось сохранить фильтр"
@@ -35,13 +43,13 @@ def library_text(
 ) -> str:
     if not items:
         return (
-            "<b>Моя библиотека</b>\n"
+            "┈┈┈  <b>Моя библиотека</b>  ┈┈┈\n"
             "<i>Ничего не найдено</i>\n\n"
             "Измени фильтры и попробуй снова."
         )
 
-    heading = "По оценке" if sort_order == "rating" else "Недавние"
-    lines = ["<b>Моя библиотека</b>", f"<i>{heading}</i>", ""]
+    heading = "По оценке" if sort_order == "rating" else "По дате"
+    lines = ["┈┈┈  <b>Моя библиотека</b>  ┈┈┈", f"<i>{heading}</i>", ""]
     for index, item in enumerate(items, start=offset + 1):
         if index > offset + 1:
             lines.append(LIBRARY_ITEM_DIVIDER)
@@ -58,9 +66,7 @@ def _library_item_summary(item) -> str:
         watched = _item_value(item, "episodes_watched", 0) or 0
         total = _item_value(item, "number_of_episodes")
         progress = (
-            f"{watched} из {total} серий"
-            if total is not None
-            else f"{watched} серий"
+            f"{watched} из {total} серий" if total is not None else f"{watched} серий"
         )
         parts.append(progress)
     if status_value is not None:
@@ -84,16 +90,17 @@ def _item_value(item, name: str, default=None):
 
 
 def library_item_text(item, description: str | None = None) -> str:
-    content_format = FORMAT_TITLES.get(item["content_format"], item["content_format"])
-    content_type = CONTENT_TYPE_TITLES.get(item["content_type"], item["content_type"])
+    media_kind = MEDIA_KIND_TITLES.get(
+        (item["content_format"], item["content_type"]),
+        CONTENT_TYPE_TITLES.get(item["content_type"], item["content_type"]),
+    )
     user_status = USER_STATUS_TITLES.get(item["user_status"], item["user_status"])
     date_value = item["release_date"] or item["first_air_date"]
 
-    icon = "📺" if item["content_format"] == "series" else "🎞"
-    lines = [f"{icon} <b>{escape(item['title'])}</b>"]
+    lines = [f"┈┈┈  <b>{escape(item['title'])}</b>  ┈┈┈"]
     if item["original_title"] and item["original_title"] != item["title"]:
         lines.append(f"<i>{escape(item['original_title'])}</i>")
-    lines.append(f"<i>{escape(content_format)} · {escape(content_type)}</i>")
+    lines.append(f"<i>{escape(media_kind)}</i>")
 
     lines.extend(["", "<b>Моя запись</b>"])
     status_icon = USER_STATUS_ICONS.get(item["user_status"], "·")
@@ -106,9 +113,7 @@ def library_item_text(item, description: str | None = None) -> str:
     if item["user_rating"] is not None:
         lines.append(f"Оценка · <b>{item['user_rating']}/10</b>")
 
-    details_heading = (
-        "О сериале" if item["content_format"] == "series" else "О фильме"
-    )
+    details_heading = "О сериале" if item["content_format"] == "series" else "О фильме"
     lines.extend(["", f"<b>{details_heading}</b>"])
     if item["rating"] is not None:
         lines.append(f"TMDB · <b>{item['rating']:.1f}/10</b>")
@@ -124,7 +129,7 @@ def library_item_text(item, description: str | None = None) -> str:
         if description is None
         else description
     )
-    lines.extend(["", f"<blockquote>{escape(description_text)}</blockquote>"])
+    lines.extend(["", "<b>Описание</b>", escape(description_text)])
     return "\n".join(lines)
 
 

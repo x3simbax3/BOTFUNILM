@@ -219,13 +219,18 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
         other_user = await get_user_library_filters(456, database_url=self.database_url)
 
-        self.assertTrue(all(defaults.values()))
+        self.assertTrue(defaults["completed"])
+        self.assertFalse(defaults["planned"])
+        self.assertTrue(
+            all(value for name, value in defaults.items() if name != "planned")
+        )
         self.assertTrue(changed["anime"])
         self.assertFalse(changed["movie"])
         self.assertFalse(changed["cartoon"])
         self.assertTrue(changed["series"])
         self.assertTrue(changed["full_length"])
-        self.assertTrue(all(other_user.values()))
+        self.assertTrue(other_user["completed"])
+        self.assertFalse(other_user["planned"])
 
     async def test_library_filters_are_exclusive_within_each_group(self) -> None:
         series = await update_user_library_filter(
@@ -258,7 +263,47 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(anime["cartoon"])
         self.assertTrue(planned["planned"])
         self.assertFalse(planned["completed"])
-        self.assertTrue(all(reset.values()))
+        self.assertTrue(reset["completed"])
+        self.assertFalse(reset["planned"])
+        self.assertTrue(
+            all(value for name, value in reset.items() if name != "planned")
+        )
+
+    async def test_clicking_selected_filter_restores_its_group(self) -> None:
+        for filter_name, group in (
+            ("series", ("series", "full_length")),
+            ("anime", ("movie", "anime", "cartoon")),
+        ):
+            with self.subTest(filter_name=filter_name):
+                selected = await update_user_library_filter(
+                    123,
+                    filter_name,
+                    database_url=self.database_url,
+                )
+                restored = await update_user_library_filter(
+                    123,
+                    filter_name,
+                    database_url=self.database_url,
+                )
+
+                self.assertTrue(selected[filter_name])
+                self.assertTrue(all(restored[name] for name in group))
+
+    async def test_clicking_selected_status_keeps_it_selected(self) -> None:
+        selected = await update_user_library_filter(
+            123,
+            "planned",
+            database_url=self.database_url,
+        )
+        unchanged = await update_user_library_filter(
+            123,
+            "planned",
+            database_url=self.database_url,
+        )
+
+        self.assertTrue(selected["planned"])
+        self.assertFalse(selected["completed"])
+        self.assertEqual(unchanged, selected)
 
     async def test_library_can_be_filtered_by_watch_status(self) -> None:
         completed_id = await upsert_media(

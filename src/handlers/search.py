@@ -5,8 +5,12 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.database.media import find_media_by_title, update_media_poster
-from src.database.user_media import save_user_media
+from src.database.media import (
+    find_media_by_title,
+    get_media_by_tmdb,
+    update_media_poster,
+)
+from src.database.user_media import get_user_media, save_user_media
 from src.fsm import MenuState
 from src.handlers.common import (
     delete_message_safely,
@@ -21,6 +25,7 @@ from src.keyboards import (
     watch_status_keyboard,
 )
 from src.lang import (
+    ALREADY_IN_LIBRARY,
     FORMAT_MISSING,
     INVALID_WATCH_STATUS,
     LOCAL_SEARCH_FAILED,
@@ -184,6 +189,15 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer(STALE_GUESS)
         return
 
+    data = await state.get_data()
+    try:
+        if await _already_in_library(data, callback.from_user.id):
+            await callback.answer(ALREADY_IN_LIBRARY, show_alert=True)
+            return
+    except aiosqlite.Error:
+        await callback.answer(LOCAL_SEARCH_FAILED, show_alert=True)
+        return
+
     await callback.answer()
     await state.update_data(tmdb_guess_message_id=None)
     await delete_message_safely(callback.message)
@@ -193,6 +207,24 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         reply_markup=watch_status_keyboard(),
     )
     await state.set_state(MenuState.choosing_watch_status)
+
+
+async def _already_in_library(data: dict, user_id: int) -> bool:
+    media_id = data.get("media_id")
+    if media_id is None:
+        tmdb_id = data.get("tmdb_id")
+        content_format = data.get("content_format")
+        if not tmdb_id or not content_format:
+            return False
+        media = await get_media_by_tmdb(
+            tmdb_id,
+            content_format,
+            data.get("content_type", "movie"),
+        )
+        if media is None:
+            return False
+        media_id = media["id"]
+    return await get_user_media(user_id, int(media_id)) is not None
 
 
 @router.callback_query(

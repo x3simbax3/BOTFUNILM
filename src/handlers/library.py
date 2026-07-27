@@ -39,7 +39,7 @@ from src.posters import poster_input
 from src.tmdb import TmdbError, fetch_title_details
 
 router = Router(name="library")
-LIBRARY_PAGE_SIZE = 20
+LIBRARY_PAGE_SIZE = 10
 
 
 @router.callback_query(F.data == "menu:library")
@@ -67,6 +67,8 @@ async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer(FILTER_SAVE_FAILED, show_alert=True)
         return
 
+    if filter_name == "all":
+        await state.update_data(library_sort="recent")
     await open_library_page(callback, state, 0)
 
 
@@ -190,9 +192,8 @@ async def _refresh_item_metadata(item):
     """Repair missing TMDB rating or poster when an old item is opened."""
     refreshed = dict(item)
     photo = poster_input(refreshed.get("poster_path"))
-    if (
-        refreshed.get("tmdb_id") in {None, 0}
-        or (photo is not None and refreshed.get("rating") is not None)
+    if refreshed.get("tmdb_id") in {None, 0} or (
+        photo is not None and refreshed.get("rating") is not None
     ):
         return refreshed, photo
 

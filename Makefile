@@ -1,6 +1,6 @@
 PYTHON ?= uv run python
 PYTEST ?= uv run pytest
-TEST_PROCESSES ?= 1
+TEST_PROCESSES ?= 2
 ATLAS ?= atlas
 COMPOSE ?= docker compose
 QUALITY_PATHS := src config tests

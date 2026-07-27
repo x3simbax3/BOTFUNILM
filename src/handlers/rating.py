@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery
 from src.callback_data import parse_rating_callback
 from src.database.user_media import save_user_media
 from src.fsm import MenuState
+from src.handlers.common import delete_message_safely
 from src.handlers.series import start_series_tracking
 from src.keyboards import main_menu_keyboard, rating_keyboard
 from src.lang import (
@@ -24,6 +25,38 @@ from src.lang import (
 from src.services import ensure_media
 
 router = Router(name="rating")
+
+
+@router.callback_query(MenuState.rating_category, F.data == "rating:back")
+async def back_from_rating(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+
+    data = await state.get_data()
+    rating_index = data.get("rating_index", 0)
+    categories = rating_categories(data.get("content_type", "movie"))
+    if rating_index <= 0:
+        await state.update_data(ratings={}, rating_index=0)
+        await state.set_state(MenuState.choosing_watch_status)
+        await delete_message_safely(callback.message)
+        await callback.answer()
+        return
+
+    previous_index = rating_index - 1
+    ratings = dict(data.get("ratings", {}))
+    ratings.pop(categories[previous_index][0], None)
+    await state.update_data(ratings=ratings, rating_index=previous_index)
+    await callback.message.edit_text(
+        rating_prompt_text(
+            data.get("tmdb_title", ""),
+            categories[previous_index][1],
+            previous_index + 1,
+            len(categories),
+        ),
+        parse_mode="HTML",
+        reply_markup=rating_keyboard(),
+    )
+    await callback.answer()
 
 
 @router.callback_query(MenuState.rating_category, F.data.startswith("rate:"))

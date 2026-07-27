@@ -20,7 +20,7 @@ def default_season_name(season_number: int) -> str:
 def series_tracking_text(title: str, seasons: list[dict]) -> str:
     total = sum(season["episode_count"] for season in seasons)
     lines = [
-        f"📺 <b>{escape(title)}</b>",
+        f"┈┈┈  <b>{escape(title)}</b>  ┈┈┈",
         f"<i>{len(seasons)} сез. · {total} сер.</i>",
         "",
         "<b>Прогресс по сезонам</b>",
@@ -39,7 +39,7 @@ def episodes_prompt_text(
 ) -> str:
     remaining = _remaining_episodes(total_episodes, already_watched)
     return (
-        f"📺 <b>{escape(title)}</b>\n"
+        f"┈┈┈  <b>{escape(title)}</b>  ┈┈┈\n"
         f"<i>{escape(season_name)}</i>\n\n"
         f"Просмотрено · <b>{already_watched} из {total_episodes}</b>\n"
         f"Осталось · <b>{remaining}</b>\n\n"
