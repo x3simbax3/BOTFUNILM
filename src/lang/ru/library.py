@@ -44,14 +44,12 @@ def library_text(
     bot_username: str,
     offset: int = 0,
     sort_order: str = "recent",
-    filters: dict[str, bool] | None = None,
 ) -> str:
     if not items:
         return (
             f"{LIBRARY_HEADING}\n"
             "╰ <i>Ничего не найдено</i>\n\n"
-            "Измени фильтры и попробуй снова.\n\n"
-            f"{_active_filters_text(filters, sort_order)}"
+            "Измени фильтры и попробуй снова."
         )
 
     heading = {
@@ -71,47 +69,7 @@ def library_text(
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
         lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
         lines.append(_library_item_summary(item))
-    lines.extend(["", _active_filters_text(filters, sort_order)])
     return "\n".join(lines)
-
-
-def _active_filters_text(
-    filters: dict[str, bool] | None,
-    sort_order: str,
-) -> str:
-    if filters is None:
-        return "<b>Фильтры</b> · Все"
-    groups = (
-        (
-            ("full_length", "Полный метр"),
-            ("series", "Сериалы"),
-        ),
-        (
-            ("movie", "Кино"),
-            ("anime", "Аниме"),
-            ("cartoon", "Мультфильмы"),
-        ),
-        (
-            ("completed", "Просмотрено"),
-            ("planned", "Хочу посмотреть"),
-            ("unfinished", "Не досмотрено"),
-            ("ongoing", "Сейчас выходит"),
-        ),
-        (("rated", "С оценкой"), ("unrated", "Без оценки")),
-    )
-    selected: list[str] = []
-    for group in groups:
-        active = [label for name, label in group if filters.get(name, False)]
-        if len(active) != len(group):
-            selected.extend(active or ["Ничего"])
-    filter_text = " · ".join(selected) if selected else "Все"
-    sort_text = {
-        "recent": "по дате",
-        "rating": "по моей оценке",
-        "tmdb_rating": "по TMDB",
-        "title": "по названию",
-    }.get(sort_order, "по дате")
-    return f"<b>Фильтры</b> · {escape(filter_text)}\n<i>Сортировка · {sort_text}</i>"
 
 
 def _library_item_summary(item) -> str:

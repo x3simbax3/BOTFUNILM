@@ -117,32 +117,6 @@ class LocalizationTests(unittest.TestCase):
             rating_result,
         )
 
-    def test_library_text_shows_active_filters_at_bottom(self) -> None:
-        result = lang.library_text(
-            [{"id": 7, "title": "Сериал", "content_format": "series"}],
-            "BotFunilmBot",
-            filters={
-                "full_length": False,
-                "series": True,
-                "movie": False,
-                "anime": True,
-                "cartoon": False,
-                "completed": False,
-                "planned": False,
-                "unfinished": True,
-                "ongoing": False,
-                "rated": True,
-                "unrated": True,
-            },
-        )
-
-        self.assertTrue(
-            result.endswith(
-                "<b>Фильтры</b> · Сериалы · Аниме · Не досмотрено\n"
-                "<i>Сортировка · по дате</i>"
-            )
-        )
-
     def test_library_text_shows_series_progress_status_and_rating(self) -> None:
         result = lang.library_text(
             [

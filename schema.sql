@@ -114,7 +114,5 @@ CREATE TABLE user_library_filters (
     planned             INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),
     unfinished          INTEGER NOT NULL DEFAULT 1 CHECK (unfinished IN (0, 1)),
     ongoing             INTEGER NOT NULL DEFAULT 1 CHECK (ongoing IN (0, 1)),
-    rated               INTEGER NOT NULL DEFAULT 1 CHECK (rated IN (0, 1)),
-    unrated             INTEGER NOT NULL DEFAULT 1 CHECK (unrated IN (0, 1)),
     PRIMARY KEY (user_id)
 );

@@ -22,17 +22,14 @@ VALID_LIBRARY_FILTERS = frozenset(
         "planned",
         "unfinished",
         "ongoing",
-        "rated",
-        "unrated",
         "format_all",
         "category_all",
         "status_all",
-        "rating_all",
     }
 )
 VALID_LIBRARY_SORTS = frozenset({"recent", "rating", "tmdb_rating", "title"})
 VALID_LIBRARY_FILTER_GROUPS = frozenset(
-    {"format", "category", "status", "rating", "sort", "back"}
+    {"format", "category", "status", "sort", "back"}
 )
 
 MAX_LIBRARY_PAGE = 100_000

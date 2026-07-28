@@ -32,11 +32,35 @@ def library_keyboard(
     rows = [
         [
             InlineKeyboardButton(
+                text=text.RESET_FILTERS,
+                callback_data="library:filter:all",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text=text.FILTER_FORMAT_GROUP,
                 callback_data="library:filters:format",
             ),
             InlineKeyboardButton(
+                text=_compact_filter_value(
+                    filters,
+                    ("full_length", "series"),
+                    ("Полный метр", "Сериал"),
+                ),
+                callback_data="library:filters:format",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text=text.FILTER_CATEGORY_GROUP,
+                callback_data="library:filters:category",
+            ),
+            InlineKeyboardButton(
+                text=_compact_filter_value(
+                    filters,
+                    ("movie", "anime", "cartoon"),
+                    ("Кино", "Аниме", "Мульт"),
+                ),
                 callback_data="library:filters:category",
             ),
         ],
@@ -46,13 +70,26 @@ def library_keyboard(
                 callback_data="library:filters:status",
             ),
             InlineKeyboardButton(
-                text=text.FILTER_RATING_GROUP,
-                callback_data="library:filters:rating",
+                text=_compact_filter_value(
+                    filters,
+                    ("completed", "planned", "unfinished", "ongoing"),
+                    ("Готово", "Хочу", "Не досм.", "Выходит"),
+                ),
+                callback_data="library:filters:status",
             ),
         ],
         [
             InlineKeyboardButton(
                 text=text.FILTER_SORT_GROUP,
+                callback_data="library:filters:sort",
+            ),
+            InlineKeyboardButton(
+                text={
+                    "recent": "Дата",
+                    "rating": "Моя оценка",
+                    "tmdb_rating": "Оценка TMDB",
+                    "title": "Название",
+                }.get(sort_order, "Дата"),
                 callback_data="library:filters:sort",
             ),
         ],
@@ -76,16 +113,25 @@ def library_keyboard(
     if pagination:
         rows.append(pagination)
 
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=text.RESET_FILTERS,
-                callback_data="library:filter:all",
-            )
-        ]
-    )
     rows.append([InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _compact_filter_value(
+    filters: dict[str, bool],
+    names: tuple[str, ...],
+    labels: tuple[str, ...],
+) -> str:
+    selected = [
+        label for name, label in zip(names, labels, strict=True) if filters.get(name)
+    ]
+    if len(selected) == len(names):
+        return "Все"
+    if len(selected) == 1:
+        return selected[0]
+    if not selected:
+        return "Нет"
+    return str(len(selected))
 
 
 def _library_filter_group_keyboard(
@@ -114,10 +160,6 @@ def _library_filter_group_keyboard(
                 ("unfinished", text.FILTER_UNFINISHED),
                 ("ongoing", text.FILTER_ONGOING),
             ),
-        ),
-        "rating": (
-            "rating_all",
-            (("rated", text.FILTER_RATED), ("unrated", text.FILTER_UNRATED)),
         ),
     }
     if group == "sort":

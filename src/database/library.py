@@ -17,20 +17,16 @@ LIBRARY_FILTER_NAMES = frozenset(
         "planned",
         "unfinished",
         "ongoing",
-        "rated",
-        "unrated",
     }
 )
 LIBRARY_SORT_ORDERS = frozenset({"recent", "rating", "tmdb_rating", "title"})
 FORMAT_FILTERS = frozenset({"full_length", "series"})
 TYPE_FILTERS = frozenset({"movie", "anime", "cartoon"})
 STATUS_FILTERS = frozenset({"completed", "planned", "unfinished", "ongoing"})
-RATING_FILTERS = frozenset({"rated", "unrated"})
 FILTER_GROUPS = {
     "format_all": ("full_length", "series"),
     "category_all": ("movie", "anime", "cartoon"),
     "status_all": ("completed", "planned", "unfinished", "ongoing"),
-    "rating_all": ("rated", "unrated"),
 }
 
 
@@ -86,8 +82,7 @@ async def update_user_library_filter(
                 SET full_length = 1, series = 1,
                     movie = 1, anime = 1, cartoon = 1,
                     completed = 1, planned = 1,
-                    unfinished = 1, ongoing = 1,
-                    rated = 1, unrated = 1
+                    unfinished = 1, ongoing = 1
                 WHERE user_id = ?
                 """,
                 (user_id,),
@@ -102,7 +97,7 @@ async def update_user_library_filter(
             elif filter_name in STATUS_FILTERS:
                 group = ("completed", "planned", "unfinished", "ongoing")
             else:
-                group = ("rated", "unrated")
+                raise ValueError("Unknown library filter")
 
             async with connection.execute(
                 "SELECT * FROM user_library_filters WHERE user_id = ?",
@@ -160,8 +155,6 @@ async def list_user_library(
         filters.get(name, False)
         for name in ("completed", "planned", "unfinished", "ongoing")
     )
-    rating_unfiltered = filters.get("rated", False) and filters.get("unrated", False)
-
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             f"""
@@ -189,8 +182,6 @@ async def list_user_library(
                                OR m.tmdb_status IN (
                                    'Returning Series', 'Planned', 'In Production'
                                ))))
-              AND (? OR (? AND um.user_rating IS NOT NULL)
-                     OR (? AND um.user_rating IS NULL))
             ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,
@@ -206,9 +197,6 @@ async def list_user_library(
                 filters.get("planned", False),
                 filters.get("unfinished", False),
                 filters.get("ongoing", False),
-                rating_unfiltered,
-                filters.get("rated", False),
-                filters.get("unrated", False),
                 limit,
                 offset,
             ),

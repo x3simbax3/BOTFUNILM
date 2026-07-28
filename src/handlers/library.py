@@ -163,7 +163,7 @@ async def open_library_page(
     if sort_order not in {"recent", "rating", "tmdb_rating", "title"}:
         sort_order = "recent"
     filter_group = data.get("library_filter_group")
-    if filter_group not in {"format", "category", "status", "rating", "sort"}:
+    if filter_group not in {"format", "category", "status", "sort"}:
         filter_group = None
 
     try:
@@ -191,7 +191,6 @@ async def open_library_page(
             bot_user.username,
             page * LIBRARY_PAGE_SIZE,
             sort_order,
-            filters,
         ),
         parse_mode="HTML",
         reply_markup=library_keyboard(
