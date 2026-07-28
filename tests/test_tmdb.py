@@ -241,6 +241,15 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         data = {
             "number_of_seasons": 2,
             "number_of_episodes": 10,
+            "status": "Returning Series",
+            "in_production": True,
+            "poster_path": "/poster.jpg",
+            "vote_average": 8.7,
+            "next_episode_to_air": {
+                "season_number": 3,
+                "episode_number": 1,
+                "air_date": "2026-09-15",
+            },
             "seasons": [
                 {"season_number": 0, "name": "Specials", "episode_count": 25},
                 {"season_number": 1, "name": "Season 1", "episode_count": 6},
@@ -261,6 +270,13 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(details.number_of_seasons, 2)
         self.assertEqual(details.number_of_episodes, 10)
+        self.assertEqual(details.status, "Returning Series")
+        self.assertTrue(details.in_production)
+        self.assertEqual(details.next_episode_to_air.season_number, 3)
+        self.assertEqual(details.next_episode_to_air.episode_number, 1)
+        self.assertEqual(details.next_episode_to_air.air_date, "2026-09-15")
+        self.assertEqual(details.poster_path, "/poster.jpg")
+        self.assertEqual(details.rating, 8.7)
         self.assertEqual(
             [
                 (season.season_number, season.episode_count)

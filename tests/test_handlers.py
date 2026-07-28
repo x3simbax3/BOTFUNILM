@@ -27,6 +27,7 @@ from src.services import media as media_service
 from src.tmdb import (
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
+    TmdbEpisodeAirInfo,
     TmdbError,
     TmdbNotConfiguredError,
     TmdbNotFoundError,
@@ -236,6 +237,111 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             f"{TMDB_IMAGE_URL}/poster.jpg",
         )
         self.assertIn("TMDB · <b>8.7/10</b>", message.photo_answers[0]["caption"])
+
+    async def test_opening_active_series_refreshes_and_shows_next_episode(
+        self,
+    ) -> None:
+        message = MessageStub()
+        state = StateStub()
+        item = {
+            "id": 8,
+            "tmdb_id": 84,
+            "title": "Сериал",
+            "original_title": None,
+            "description": "Описание",
+            "poster_path": "/poster.jpg",
+            "content_format": "series",
+            "content_type": "movie",
+            "user_status": "watching",
+            "user_rating": None,
+            "rating": 8.0,
+            "release_date": None,
+            "first_air_date": "2025-01-01",
+            "number_of_seasons": 1,
+            "number_of_episodes": 8,
+            "episodes_watched": 4,
+            "library_users_count": 5,
+            "tmdb_status": "Returning Series",
+            "tmdb_in_production": 1,
+            "next_episode_air_date": "2026-08-01",
+            "next_episode_season_number": 1,
+            "next_episode_number": 8,
+        }
+        details = TmdbTvDetails(
+            number_of_seasons=2,
+            number_of_episodes=9,
+            seasons=[TmdbSeasonInfo(1, "Сезон 1", 8)],
+            status="Returning Series",
+            in_production=True,
+            next_episode_to_air=TmdbEpisodeAirInfo(2, 1, "2026-09-15"),
+            poster_path="/poster.jpg",
+            rating=8.0,
+        )
+
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_item",
+                AsyncMock(return_value=item),
+            ),
+            patch.object(
+                library_handlers,
+                "fetch_tv_details",
+                AsyncMock(return_value=details),
+            ) as fetch_release,
+            patch.object(
+                library_handlers,
+                "update_media_series_release_info",
+                AsyncMock(),
+            ) as update_release,
+        ):
+            await library_handlers.show_library_item(message, state, 123, 8)
+
+        fetch_release.assert_awaited_once_with(84)
+        update_release.assert_awaited_once_with(
+            8,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=2,
+            number_of_episodes=9,
+            poster_path=None,
+            rating=None,
+            next_episode_air_date="2026-09-15",
+            next_episode_season_number=2,
+            next_episode_number=1,
+        )
+        self.assertIn(
+            "Новый сезон · <b>2 сезон · 15.09.2026</b>",
+            message.photo_answers[0]["caption"],
+        )
+
+    async def test_opening_ended_series_does_not_refresh_release_info(self) -> None:
+        item = {
+            "id": 8,
+            "content_format": "series",
+            "tmdb_id": 84,
+            "poster_path": None,
+            "rating": None,
+            "tmdb_status": "Ended",
+            "tmdb_in_production": 0,
+        }
+
+        with (
+            patch.object(
+                library_handlers,
+                "fetch_tv_details",
+                AsyncMock(),
+            ) as fetch_release,
+            patch.object(
+                library_handlers,
+                "fetch_title_details",
+                AsyncMock(),
+            ) as fetch_metadata,
+        ):
+            await library_handlers._refresh_item_metadata(item)
+
+        fetch_release.assert_not_awaited()
+        fetch_metadata.assert_not_awaited()
 
     async def test_open_library_shows_only_first_ten_and_more_button(self) -> None:
         message = MessageStub()

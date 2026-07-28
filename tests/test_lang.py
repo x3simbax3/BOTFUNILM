@@ -161,6 +161,11 @@ class LocalizationTests(unittest.TestCase):
             "number_of_episodes": 10,
             "episodes_watched": 3,
             "library_users_count": 12,
+            "tmdb_status": "Returning Series",
+            "tmdb_in_production": 1,
+            "next_episode_air_date": "2026-08-17",
+            "next_episode_season_number": 2,
+            "next_episode_number": 6,
         }
 
         result = lang.library_item_text(item)
@@ -169,6 +174,10 @@ class LocalizationTests(unittest.TestCase):
         self.assertNotIn("Сериалы · Мультфильм", result)
         self.assertIn("Статус · <b>◉ Смотрю</b>", result)
         self.assertIn("Добавили · <b>12</b>", result)
+        self.assertIn(
+            "Следующая серия · <b>2 сезон, 6 серия · 17.08.2026</b>",
+            result,
+        )
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

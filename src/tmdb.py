@@ -26,6 +26,7 @@ from src.tmdb_matching import (
 )
 from src.tmdb_models import (
     TmdbAuthenticationError,
+    TmdbEpisodeAirInfo,
     TmdbError,
     TmdbNotConfiguredError,
     TmdbNotFoundError,
@@ -159,10 +160,39 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
             )
         )
 
+    raw_next_episode = data.get("next_episode_to_air")
+    next_episode = None
+    if isinstance(raw_next_episode, dict):
+        season_number = raw_next_episode.get("season_number")
+        episode_number = raw_next_episode.get("episode_number")
+        if (
+            type(season_number) is int
+            and season_number > 0
+            and type(episode_number) is int
+            and episode_number > 0
+        ):
+            air_date = raw_next_episode.get("air_date")
+            next_episode = TmdbEpisodeAirInfo(
+                season_number=season_number,
+                episode_number=episode_number,
+                air_date=air_date if isinstance(air_date, str) and air_date else None,
+            )
+
+    raw_status = data.get("status")
+    raw_in_production = data.get("in_production")
     return TmdbTvDetails(
         number_of_seasons=data.get("number_of_seasons", len(seasons)),
         number_of_episodes=data.get("number_of_episodes", 0),
         seasons=seasons,
+        status=raw_status if isinstance(raw_status, str) and raw_status else None,
+        in_production=(raw_in_production if type(raw_in_production) is bool else None),
+        next_episode_to_air=next_episode,
+        poster_path=(
+            data.get("poster_path")
+            if isinstance(data.get("poster_path"), str) and data.get("poster_path")
+            else None
+        ),
+        rating=_parse_rating(data.get("vote_average")),
     )
 
 
@@ -235,6 +265,7 @@ __all__ = (
     "STOP_WORDS",
     "TMDB_IMAGE_URL",
     "TmdbAuthenticationError",
+    "TmdbEpisodeAirInfo",
     "TmdbError",
     "TmdbNotConfiguredError",
     "TmdbNotFoundError",

@@ -14,6 +14,7 @@ from src.database.media import (
     find_media_by_title,
     get_media_by_tmdb,
     update_media_poster,
+    update_media_series_release_info,
     upsert_media,
 )
 from src.database.series import (
@@ -120,6 +121,57 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(row["poster_path"], "posters/tmdb_movie_42.jpg")
+
+    async def test_series_release_info_is_overwritten(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=45,
+            content_format="series",
+            content_type="movie",
+            title="Active series",
+            database_url=self.database_url,
+        )
+        await update_media_series_release_info(
+            media_id,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=2,
+            number_of_episodes=16,
+            poster_path=None,
+            rating=None,
+            next_episode_air_date="2026-08-10",
+            next_episode_season_number=2,
+            next_episode_number=5,
+            database_url=self.database_url,
+        )
+        await update_media_series_release_info(
+            media_id,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=2,
+            number_of_episodes=17,
+            poster_path="/new.jpg",
+            rating=8.4,
+            next_episode_air_date="2026-08-17",
+            next_episode_season_number=2,
+            next_episode_number=6,
+            database_url=self.database_url,
+        )
+
+        row = await get_media_by_tmdb(
+            45,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(row["tmdb_status"], "Returning Series")
+        self.assertEqual(row["tmdb_in_production"], 1)
+        self.assertEqual(row["number_of_episodes"], 17)
+        self.assertEqual(row["poster_path"], "/new.jpg")
+        self.assertEqual(row["rating"], 8.4)
+        self.assertEqual(row["next_episode_air_date"], "2026-08-17")
+        self.assertEqual(row["next_episode_season_number"], 2)
+        self.assertEqual(row["next_episode_number"], 6)
+        self.assertIsNotNone(row["tmdb_release_checked_at"])
 
     async def test_same_tmdb_id_is_allowed_for_different_classifications(self) -> None:
         movie_id = await upsert_media(

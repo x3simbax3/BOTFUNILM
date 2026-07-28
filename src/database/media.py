@@ -187,6 +187,50 @@ async def update_media_metadata(
         )
 
 
+async def update_media_series_release_info(
+    media_id: int,
+    *,
+    status: str | None,
+    in_production: bool | None,
+    number_of_seasons: int,
+    number_of_episodes: int,
+    poster_path: str | None,
+    rating: float | None,
+    next_episode_air_date: str | None,
+    next_episode_season_number: int | None,
+    next_episode_number: int | None,
+    database_url: str | None = None,
+) -> None:
+    """Overwrite cached TMDB release information after a card refresh."""
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            """
+            UPDATE media
+            SET tmdb_status = ?, tmdb_in_production = ?,
+                number_of_seasons = ?, number_of_episodes = ?,
+                poster_path = COALESCE(?, poster_path),
+                rating = COALESCE(?, rating),
+                next_episode_air_date = ?, next_episode_season_number = ?,
+                next_episode_number = ?,
+                tmdb_release_checked_at = CURRENT_TIMESTAMP,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                status,
+                in_production,
+                number_of_seasons,
+                number_of_episodes,
+                poster_path,
+                rating,
+                next_episode_air_date,
+                next_episode_season_number,
+                next_episode_number,
+                media_id,
+            ),
+        )
+
+
 def _last_row_id(cursor: aiosqlite.Cursor) -> int:
     if cursor.lastrowid is None:
         raise RuntimeError("Insert did not produce a row id")
@@ -199,4 +243,5 @@ __all__ = (
     "upsert_media",
     "update_media_metadata",
     "update_media_poster",
+    "update_media_series_release_info",
 )

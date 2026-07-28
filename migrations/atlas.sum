@@ -1,4 +1,4 @@
-h1:oR7fqFueiIX0LXVWqruLdXnXaJ9pSwUrPQkKfru29k0=
+h1:p5hW5A0f1GLzlmCQKne7OT/GgDUUINVd01v8Z0QVn+U=
 20260723193218_initial.sql h1:SZU4jnB0oVHMGUfJXn0mXO4JxP/xppIEOzs5VxJ+xGY=
 20260724120000_add_user_season_progress.sql h1:e0jJrJZ0RV8maVxut8TasWDVFtAngzo6igizH3KCfEw=
 20260724130000_split_media_classification.sql h1:cl/TOWC3ugxhdBoEF5SvfhELbjWzAEJpxhJHhdFAy2Y=
@@ -7,3 +7,4 @@ h1:oR7fqFueiIX0LXVWqruLdXnXaJ9pSwUrPQkKfru29k0=
 20260726120000_exclude_special_season_progress.sql h1:RsyTXiLyvX/ExWDrKcWgVdnFM6y0TvuB6mHxtvif4lc=
 20260727120000_add_library_status_filters.sql h1:vUC4/aybXjLrlvKPcUcLGzvFyHcrnNTYScNftHrzqPY=
 20260728120000_add_media_library_users_count.sql h1:O3F90EJ8PJkX0IXp8KDa4XicdQ5LIfFE8A7ppNxQvjA=
+20260728130000_add_series_release_info.sql h1:fsLirs0/GyNSVwcwKAMdj95MzVWMZpwhER79249WtBc=

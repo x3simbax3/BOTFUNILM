@@ -18,6 +18,21 @@ CREATE TABLE media (
                         CHECK (number_of_episodes IS NULL OR number_of_episodes >= 0),
     library_users_count INTEGER NOT NULL DEFAULT 0
                         CHECK (library_users_count >= 0),
+    tmdb_status         TEXT,
+    tmdb_in_production  INTEGER CHECK (
+                            tmdb_in_production IS NULL
+                            OR tmdb_in_production IN (0, 1)
+                        ),
+    next_episode_air_date TEXT,
+    next_episode_season_number INTEGER CHECK (
+                            next_episode_season_number IS NULL
+                            OR next_episode_season_number > 0
+                        ),
+    next_episode_number INTEGER CHECK (
+                            next_episode_number IS NULL
+                            OR next_episode_number > 0
+                        ),
+    tmdb_release_checked_at TEXT,
     status              TEXT,
     last_updated        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tmdb_id, content_format, content_type)

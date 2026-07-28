@@ -25,10 +25,22 @@ class TmdbSeasonInfo:
 
 
 @dataclass(frozen=True)
+class TmdbEpisodeAirInfo:
+    season_number: int
+    episode_number: int
+    air_date: str | None
+
+
+@dataclass(frozen=True)
 class TmdbTvDetails:
     number_of_seasons: int
     number_of_episodes: int
     seasons: list[TmdbSeasonInfo]
+    status: str | None = None
+    in_production: bool | None = None
+    next_episode_to_air: TmdbEpisodeAirInfo | None = None
+    poster_path: str | None = None
+    rating: float | None = None
 
 
 class TmdbError(Exception):
@@ -59,6 +71,7 @@ class TmdbNotFoundError(TmdbError):
 
 __all__ = (
     "TmdbAuthenticationError",
+    "TmdbEpisodeAirInfo",
     "TmdbError",
     "TmdbNotConfiguredError",
     "TmdbNotFoundError",

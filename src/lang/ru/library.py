@@ -1,3 +1,4 @@
+from datetime import date
 from html import escape
 
 from .common import DESCRIPTION_NOT_FOUND
@@ -17,6 +18,9 @@ USER_STATUS_ICONS = {
     "on_hold": "Ⅱ",
     "dropped": "×",
 }
+ACTIVE_TMDB_SERIES_STATUSES = frozenset(
+    {"Returning Series", "Planned", "In Production"}
+)
 LIBRARY_ITEM_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
@@ -128,6 +132,9 @@ def library_item_text(item, description: str | None = None) -> str:
         lines.append(f"Сезонов · <b>{item['number_of_seasons']}</b>")
     if item["number_of_episodes"] is not None:
         lines.append(f"Серий · <b>{item['number_of_episodes']}</b>")
+    release_line = _series_release_line(item)
+    if release_line is not None:
+        lines.append(release_line)
 
     description_text = (
         item["description"] or DESCRIPTION_NOT_FOUND
@@ -136,6 +143,37 @@ def library_item_text(item, description: str | None = None) -> str:
     )
     lines.extend(["", "<b>Описание</b>", escape(description_text)])
     return "\n".join(lines)
+
+
+def _series_release_line(item) -> str | None:
+    if _item_value(item, "content_format") != "series":
+        return None
+    in_production = _item_value(item, "tmdb_in_production")
+    status = _item_value(item, "tmdb_status")
+    if not bool(in_production) and status not in ACTIVE_TMDB_SERIES_STATUSES:
+        return None
+
+    season_number = _item_value(item, "next_episode_season_number")
+    episode_number = _item_value(item, "next_episode_number")
+    air_date = _format_air_date(_item_value(item, "next_episode_air_date"))
+    if type(season_number) is int and type(episode_number) is int:
+        date_suffix = f" · {air_date}" if air_date is not None else ""
+        if episode_number == 1:
+            return f"Новый сезон · <b>{season_number} сезон{date_suffix}</b>"
+        return (
+            "Следующая серия · "
+            f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
+        )
+    return "Новые серии · <b>дата пока неизвестна</b>"
+
+
+def _format_air_date(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value).strftime("%d.%m.%Y")
+    except ValueError:
+        return escape(value)
 
 
 __all__ = (

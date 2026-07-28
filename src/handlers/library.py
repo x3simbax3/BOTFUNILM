@@ -16,7 +16,10 @@ from src.database.library import (
     list_user_library,
     update_user_library_filter,
 )
-from src.database.media import update_media_metadata
+from src.database.media import (
+    update_media_metadata,
+    update_media_series_release_info,
+)
 from src.database.user_media import delete_user_media, set_user_media_status
 from src.fsm import MenuState
 from src.handlers.common import (
@@ -54,10 +57,13 @@ from src.lang import (
     rating_prompt_text,
 )
 from src.posters import poster_input
-from src.tmdb import TmdbError, fetch_title_details
+from src.tmdb import TmdbError, fetch_title_details, fetch_tv_details
 
 router = Router(name="library")
 LIBRARY_PAGE_SIZE = 10
+ACTIVE_TMDB_SERIES_STATUSES = frozenset(
+    {"Returning Series", "Planned", "In Production"}
+)
 
 
 @router.callback_query(F.data == "menu:library")
@@ -413,41 +419,106 @@ def _library_workflow_data(item) -> dict:
 
 
 async def _refresh_item_metadata(item):
-    """Repair missing TMDB rating or poster when an old item is opened."""
+    """Refresh missing artwork and current release data when an item is opened."""
     refreshed = dict(item)
     photo = poster_input(refreshed.get("poster_path"))
-    if refreshed.get("tmdb_id") in {None, 0} or (
-        photo is not None and refreshed.get("rating") is not None
-    ):
+    if refreshed.get("tmdb_id") in {None, 0}:
         return refreshed, photo
 
-    try:
-        details = await fetch_title_details(
-            int(refreshed["tmdb_id"]),
-            refreshed["content_format"],
-        )
-    except (TmdbError, ValueError):
-        return refreshed, photo
-
-    poster_path = None
-    if photo is None and details.poster_path:
-        poster_path = details.poster_path
-        refreshed["poster_path"] = poster_path
-        photo = poster_input(poster_path)
-    rating = None
-    if refreshed.get("rating") is None and details.rating is not None:
-        rating = details.rating
-        refreshed["rating"] = rating
-    if poster_path is not None or rating is not None:
+    series_refresh_attempted = _should_refresh_series_release(refreshed)
+    if series_refresh_attempted:
         try:
-            await update_media_metadata(
-                int(refreshed["id"]),
-                poster_path=poster_path,
-                rating=rating,
-            )
-        except aiosqlite.Error:
+            series_details = await fetch_tv_details(int(refreshed["tmdb_id"]))
+        except (TmdbError, ValueError):
             pass
+        else:
+            next_episode = series_details.next_episode_to_air
+            poster_path = None
+            if photo is None and series_details.poster_path:
+                poster_path = series_details.poster_path
+                refreshed["poster_path"] = poster_path
+                photo = poster_input(poster_path)
+            rating = None
+            if refreshed.get("rating") is None and series_details.rating is not None:
+                rating = series_details.rating
+                refreshed["rating"] = rating
+            release_values = {
+                "tmdb_status": series_details.status,
+                "tmdb_in_production": series_details.in_production,
+                "number_of_seasons": series_details.number_of_seasons,
+                "number_of_episodes": series_details.number_of_episodes,
+                "next_episode_air_date": (
+                    next_episode.air_date if next_episode is not None else None
+                ),
+                "next_episode_season_number": (
+                    next_episode.season_number if next_episode is not None else None
+                ),
+                "next_episode_number": (
+                    next_episode.episode_number if next_episode is not None else None
+                ),
+            }
+            refreshed.update(release_values)
+            try:
+                await update_media_series_release_info(
+                    int(refreshed["id"]),
+                    status=release_values["tmdb_status"],
+                    in_production=release_values["tmdb_in_production"],
+                    number_of_seasons=release_values["number_of_seasons"],
+                    number_of_episodes=release_values["number_of_episodes"],
+                    poster_path=poster_path,
+                    rating=rating,
+                    next_episode_air_date=release_values["next_episode_air_date"],
+                    next_episode_season_number=release_values[
+                        "next_episode_season_number"
+                    ],
+                    next_episode_number=release_values["next_episode_number"],
+                )
+            except aiosqlite.Error:
+                pass
+
+    if (
+        not series_refresh_attempted
+        and refreshed.get("content_format") != "series"
+        and (photo is None or refreshed.get("rating") is None)
+    ):
+        try:
+            details = await fetch_title_details(
+                int(refreshed["tmdb_id"]),
+                refreshed["content_format"],
+            )
+        except (TmdbError, ValueError):
+            pass
+        else:
+            poster_path = None
+            if photo is None and details.poster_path:
+                poster_path = details.poster_path
+                refreshed["poster_path"] = poster_path
+                photo = poster_input(poster_path)
+            rating = None
+            if refreshed.get("rating") is None and details.rating is not None:
+                rating = details.rating
+                refreshed["rating"] = rating
+            if poster_path is not None or rating is not None:
+                try:
+                    await update_media_metadata(
+                        int(refreshed["id"]),
+                        poster_path=poster_path,
+                        rating=rating,
+                    )
+                except aiosqlite.Error:
+                    pass
     return refreshed, photo
+
+
+def _should_refresh_series_release(item: dict) -> bool:
+    if item.get("content_format") != "series":
+        return False
+    if item.get("tmdb_in_production") is None:
+        return True
+    return (
+        bool(item.get("tmdb_in_production"))
+        or item.get("tmdb_status") in ACTIVE_TMDB_SERIES_STATUSES
+    )
 
 
 async def _show_library_error(
