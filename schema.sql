@@ -16,6 +16,8 @@ CREATE TABLE media (
                         CHECK (number_of_seasons IS NULL OR number_of_seasons >= 0),
     number_of_episodes  INTEGER
                         CHECK (number_of_episodes IS NULL OR number_of_episodes >= 0),
+    library_users_count INTEGER NOT NULL DEFAULT 0
+                        CHECK (library_users_count >= 0),
     status              TEXT,
     last_updated        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tmdb_id, content_format, content_type)
@@ -41,6 +43,10 @@ CREATE TABLE user_media (
 );
 
 CREATE INDEX ix_user_media_media_id ON user_media (media_id);
+
+-- Library count triggers are installed by
+-- migrations/20260728120000_add_media_library_users_count.sql. Atlas Community
+-- cannot currently represent SQLite triggers in a declarative schema.
 
 CREATE TABLE user_season_progress (
     user_id             INTEGER NOT NULL,

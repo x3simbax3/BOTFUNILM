@@ -61,6 +61,14 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("ix_media_status", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
         self.assertIn(("ix_user_season_progress_media_id", "index"), objects)
+        self.assertIn(
+            ("update_media_library_users_count_after_insert", "trigger"),
+            objects,
+        )
+        self.assertIn(
+            ("update_media_library_users_count_after_delete", "trigger"),
+            objects,
+        )
 
     async def test_upsert_media_inserts_and_updates(self) -> None:
         media_id = await upsert_media(
@@ -215,6 +223,68 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["status"], "completed")
         self.assertEqual(row["user_rating"], 9)
         self.assertEqual(row["episodes_watched"], 12)
+
+    async def test_media_library_users_count_tracks_additions_and_deletions(
+        self,
+    ) -> None:
+        media_id = await upsert_media(
+            tmdb_id=44,
+            content_format="full_length",
+            content_type="movie",
+            title="Popular movie",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="planned",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=456,
+            media_id=media_id,
+            status="completed",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="completed",
+            database_url=self.database_url,
+        )
+
+        media = await get_media_by_tmdb(
+            44,
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["library_users_count"], 2)
+
+        self.assertTrue(
+            await delete_user_media(123, media_id, database_url=self.database_url)
+        )
+        self.assertFalse(
+            await delete_user_media(123, media_id, database_url=self.database_url)
+        )
+        media = await get_media_by_tmdb(
+            44,
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["library_users_count"], 1)
+
+        self.assertTrue(
+            await delete_user_media(456, media_id, database_url=self.database_url)
+        )
+        media = await get_media_by_tmdb(
+            44,
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["library_users_count"], 0)
 
     async def test_library_item_status_rating_and_deletion_can_be_changed(self) -> None:
         media_id = await upsert_media(

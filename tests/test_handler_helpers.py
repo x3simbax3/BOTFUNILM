@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import AsyncMock
+
+from aiogram.exceptions import TelegramBadRequest
 
 from src.handlers import common, menu
 
@@ -57,6 +60,34 @@ class HandlerHelpersTests(unittest.TestCase):
                 "tmdb_guess_message_id": 123,
             },
         )
+
+
+class EditMessageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_identical_message_is_a_safe_noop(self) -> None:
+        message = AsyncMock()
+        message.photo = []
+        message.edit_text.side_effect = TelegramBadRequest(
+            method=AsyncMock(),
+            message="Bad Request: message is not modified",
+        )
+
+        await common.edit_message(message, "Same text")
+
+        message.edit_text.assert_awaited_once()
+
+    async def test_other_bad_requests_are_not_hidden(self) -> None:
+        message = AsyncMock()
+        message.photo = []
+        error = TelegramBadRequest(
+            method=AsyncMock(),
+            message="Bad Request: message can't be edited",
+        )
+        message.edit_text.side_effect = error
+
+        with self.assertRaises(TelegramBadRequest) as raised:
+            await common.edit_message(message, "New text")
+
+        self.assertIs(raised.exception, error)
 
 
 class ActiveTmdbGuessTests(unittest.IsolatedAsyncioTestCase):

@@ -3,7 +3,7 @@
 import aiosqlite
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 
 from src.callback_data import (
     parse_library_filter_callback,
@@ -173,6 +173,7 @@ async def open_library_page(
             len(items) > LIBRARY_PAGE_SIZE,
             sort_order,
         ),
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
     await callback.answer()
 

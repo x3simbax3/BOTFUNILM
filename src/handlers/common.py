@@ -1,8 +1,8 @@
 """Shared presentation helpers for Telegram handlers."""
 
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 
 from src.lang import DESCRIPTION_NOT_FOUND, tmdb_guess_text
 
@@ -15,20 +15,29 @@ async def edit_message(
     text: str,
     parse_mode: str | None = None,
     reply_markup=None,
+    link_preview_options: LinkPreviewOptions | None = None,
 ) -> None:
-    if message.photo:
-        await message.edit_caption(
-            caption=text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup,
-        )
-        return
+    try:
+        if message.photo:
+            await message.edit_caption(
+                caption=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+            return
 
-    await message.edit_text(
-        text,
-        parse_mode=parse_mode,
-        reply_markup=reply_markup,
-    )
+        edit_options = {
+            "parse_mode": parse_mode,
+            "reply_markup": reply_markup,
+        }
+        if link_preview_options is not None:
+            edit_options["link_preview_options"] = link_preview_options
+        await message.edit_text(text, **edit_options)
+    except TelegramBadRequest as error:
+        # Repeatedly pressing an already active inline button can render the
+        # exact same message. Telegram reports that harmless no-op as an error.
+        if "message is not modified" not in error.message.lower():
+            raise
 
 
 async def replace_message(
@@ -36,17 +45,26 @@ async def replace_message(
     text: str,
     parse_mode: str | None = None,
     reply_markup=None,
+    link_preview_options: LinkPreviewOptions | None = None,
 ) -> None:
     if message.photo:
         await message.delete()
-        await message.answer(
-            text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup,
-        )
+        answer_options = {
+            "parse_mode": parse_mode,
+            "reply_markup": reply_markup,
+        }
+        if link_preview_options is not None:
+            answer_options["link_preview_options"] = link_preview_options
+        await message.answer(text, **answer_options)
         return
 
-    await edit_message(message, text, parse_mode, reply_markup)
+    await edit_message(
+        message,
+        text,
+        parse_mode,
+        reply_markup,
+        link_preview_options,
+    )
 
 
 async def delete_message_safely(message: Message) -> bool:

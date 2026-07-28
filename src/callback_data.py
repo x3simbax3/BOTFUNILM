@@ -37,9 +37,10 @@ _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
 _SEASON_RE = re.compile(r"season:(done|all|[1-9][0-9]{0,4})\Z", re.ASCII)
 _EPISODE_RE = re.compile(
-    r"ep:(?:done|back|([1-9][0-9]{0,4}):([1-9][0-9]{0,5}))\Z",
+    r"ep:(?:done|back|noop|([1-9][0-9]{0,4}):([1-9][0-9]{0,5}))\Z",
     re.ASCII,
 )
+_EPISODE_PAGE_RE = re.compile(r"ep:page:(0|[1-9][0-9]{0,3})\Z", re.ASCII)
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,11 @@ class BackCallback:
 class EpisodeCallback:
     season_number: int
     episodes_watched: int
+
+
+@dataclass(frozen=True)
+class EpisodePageCallback:
+    page: int
 
 
 def parse_format_callback(data: str) -> FormatCallback | None:
@@ -150,11 +156,16 @@ def parse_season_callback(data: str) -> int | str | None:
     return season_number if season_number <= MAX_SEASON_NUMBER else None
 
 
-def parse_episode_callback(data: str) -> EpisodeCallback | str | None:
+def parse_episode_callback(
+    data: str,
+) -> EpisodeCallback | EpisodePageCallback | str | None:
+    page_match = _EPISODE_PAGE_RE.fullmatch(data)
+    if page_match:
+        return EpisodePageCallback(int(page_match.group(1)))
     match = _EPISODE_RE.fullmatch(data)
     if not match:
         return None
-    if data in {"ep:done", "ep:back"}:
+    if data in {"ep:done", "ep:back", "ep:noop"}:
         return data.removeprefix("ep:")
     season_number, episodes_watched = (int(value) for value in match.groups())
     if season_number > MAX_SEASON_NUMBER or episodes_watched > MAX_EPISODE_COUNT:

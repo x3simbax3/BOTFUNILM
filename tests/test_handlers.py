@@ -158,6 +158,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             "number_of_seasons": None,
             "number_of_episodes": None,
             "episodes_watched": None,
+            "library_users_count": 3,
         }
 
         with patch.object(
@@ -193,6 +194,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             "number_of_seasons": None,
             "number_of_episodes": None,
             "episodes_watched": None,
+            "library_users_count": 3,
         }
         details = TmdbTitle(
             "Матрица",
@@ -275,6 +277,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1.", rendered["text"])
         self.assertIn("10.", rendered["text"])
         self.assertNotIn("Title 11", rendered["text"])
+        self.assertTrue(rendered["link_preview_options"].is_disabled)
         callbacks = [
             button.callback_data
             for row in rendered["reply_markup"].inline_keyboard
@@ -942,6 +945,29 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_episode_page_navigation_keeps_current_season(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("ep:page:1", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Сериал",
+                "current_season": 1,
+                "seasons_data": [
+                    {"season_number": 1, "name": "Сезон 1", "episode_count": 120}
+                ],
+                "watched_by_season": {"1": 75},
+            }
+        )
+
+        await series_handlers.handle_episode_selection(callback, state)
+
+        self.assertEqual(state.data["current_season"], 1)
+        rendered = message.edit_text_calls[0]
+        rows = rendered["reply_markup"].inline_keyboard
+        self.assertEqual(rows[1][0].callback_data, "ep:1:51")
+        self.assertEqual([button.text for button in rows[11]], ["‹", "2/3", "›"])
+        self.assertEqual(callback.answers, [{"text": None}])
+
     async def test_all_seasons_selection_fills_complete_progress(self) -> None:
         message = MessageStub()
         callback = CallbackStub("season:all", message)

@@ -19,9 +19,10 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(locale.keyboards.MAIN_ADD, "＋\u00a0Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
-    def test_start_text_keeps_decorative_heading_on_one_line(self) -> None:
+    def test_start_text_uses_asymmetric_action_heading(self) -> None:
         self.assertNotIn("(˶ᵔ ᵕ ᵔ˶)", lang.START_TEXT)
-        self.assertIn("┈┈┈  <b>Выбери действие</b>  ┈┈┈", lang.START_TEXT)
+        self.assertIn("╭ <b>Куда дальше?</b>", lang.START_TEXT)
+        self.assertIn("╰ <i>Выбери действие ниже</i>", lang.START_TEXT)
 
     def test_selected_cartoon_series_is_named_multiseries(self) -> None:
         result = lang.selected_type_text("add", "series", "cartoon")
@@ -93,7 +94,11 @@ class LocalizationTests(unittest.TestCase):
             '<a href="https://t.me/BotFunilmBot?start=media_7">21. Tom &amp; Jerry</a>',
             result,
         )
-        self.assertIn("<i>По дате</i>", result)
+        self.assertIn("╭ <b>Моя библиотека</b>", result)
+        self.assertIn(
+            "╰ <i>Сортировка по дате · фильтры на кнопках ниже</i>",
+            result,
+        )
         self.assertEqual(result.count("┈┈┈┈┈┈┈┈┈┈┈┈┈"), 1)
 
         rating_result = lang.library_text(
@@ -107,7 +112,10 @@ class LocalizationTests(unittest.TestCase):
             "BotFunilmBot",
             sort_order="rating",
         )
-        self.assertIn("<i>По оценке</i>", rating_result)
+        self.assertIn(
+            "╰ <i>Сортировка по оценке · фильтры на кнопках ниже</i>",
+            rating_result,
+        )
 
     def test_library_text_shows_series_progress_status_and_rating(self) -> None:
         result = lang.library_text(
@@ -152,6 +160,7 @@ class LocalizationTests(unittest.TestCase):
             "number_of_seasons": 1,
             "number_of_episodes": 10,
             "episodes_watched": 3,
+            "library_users_count": 12,
         }
 
         result = lang.library_item_text(item)
@@ -159,6 +168,7 @@ class LocalizationTests(unittest.TestCase):
         self.assertIn("<i>Мультсериал</i>", result)
         self.assertNotIn("Сериалы · Мультфильм", result)
         self.assertIn("Статус · <b>◉ Смотрю</b>", result)
+        self.assertIn("Добавили · <b>12</b>", result)
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

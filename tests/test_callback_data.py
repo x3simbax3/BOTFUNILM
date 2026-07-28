@@ -3,6 +3,7 @@ import unittest
 from src.callback_data import (
     BackCallback,
     EpisodeCallback,
+    EpisodePageCallback,
     FormatCallback,
     TypeCallback,
     parse_back_callback,
@@ -73,6 +74,11 @@ class CallbackDataTests(unittest.TestCase):
         )
         self.assertEqual(parse_episode_callback("ep:done"), "done")
         self.assertEqual(parse_episode_callback("ep:back"), "back")
+        self.assertEqual(parse_episode_callback("ep:noop"), "noop")
+        self.assertEqual(
+            parse_episode_callback("ep:page:2"),
+            EpisodePageCallback(page=2),
+        )
 
     def test_rejects_noncanonical_or_out_of_range_numbers(self) -> None:
         invalid_callbacks = (
@@ -95,6 +101,7 @@ class CallbackDataTests(unittest.TestCase):
             (parse_episode_callback, "ep:01:2"),
             (parse_episode_callback, "ep:1:100001"),
             (parse_episode_callback, "ep:done:extra"),
+            (parse_episode_callback, "ep:page:01"),
         )
         for parser, value in invalid_callbacks:
             with self.subTest(value=value):

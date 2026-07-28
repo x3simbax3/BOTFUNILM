@@ -18,6 +18,7 @@ USER_STATUS_ICONS = {
     "dropped": "×",
 }
 LIBRARY_ITEM_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈"
+LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
 UNKNOWN_FILTER = "Неизвестный фильтр"
 FILTER_SAVE_FAILED = "Не удалось сохранить фильтр"
@@ -42,13 +43,17 @@ def library_text(
 ) -> str:
     if not items:
         return (
-            "┈┈┈  <b>Моя библиотека</b>  ┈┈┈\n"
-            "<i>Ничего не найдено</i>\n\n"
+            f"{LIBRARY_HEADING}\n"
+            "╰ <i>Ничего не найдено</i>\n\n"
             "Измени фильтры и попробуй снова."
         )
 
-    heading = "По оценке" if sort_order == "rating" else "По дате"
-    lines = ["┈┈┈  <b>Моя библиотека</b>  ┈┈┈", f"<i>{heading}</i>", ""]
+    heading = "по оценке" if sort_order == "rating" else "по дате"
+    lines = [
+        LIBRARY_HEADING,
+        f"╰ <i>Сортировка {heading} · фильтры на кнопках ниже</i>",
+        "",
+    ]
     for index, item in enumerate(items, start=offset + 1):
         if index > offset + 1:
             lines.append(LIBRARY_ITEM_DIVIDER)
@@ -116,6 +121,7 @@ def library_item_text(item, description: str | None = None) -> str:
     lines.extend(["", f"<b>{details_heading}</b>"])
     if item["rating"] is not None:
         lines.append(f"TMDB · <b>{item['rating']:.1f}/10</b>")
+    lines.append(f"Добавили · <b>{item['library_users_count']}</b>")
     if date_value:
         lines.append(f"Премьера · <b>{escape(date_value)}</b>")
     if item["number_of_seasons"] is not None:

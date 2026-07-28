@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery
 
 from src.callback_data import (
     EpisodeCallback,
+    EpisodePageCallback,
     parse_episode_callback,
     parse_season_callback,
 )
@@ -17,6 +18,7 @@ from src.database.media import get_media_by_tmdb
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.fsm import MenuState
 from src.keyboards import (
+    EPISODES_PAGE_SIZE,
     episodes_keyboard,
     main_menu_keyboard,
     season_list_keyboard,
@@ -228,6 +230,54 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
         return
 
     data = await state.get_data()
+    if isinstance(selection, EpisodePageCallback):
+        season_number = data.get("current_season")
+        season_info = next(
+            (
+                season
+                for season in data.get("seasons_data", [])
+                if season["season_number"] == season_number
+            ),
+            None,
+        )
+        if not season_info:
+            await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
+            return
+
+        total_pages = max(
+            1,
+            (season_info["episode_count"] + EPISODES_PAGE_SIZE - 1)
+            // EPISODES_PAGE_SIZE,
+        )
+        if selection.page >= total_pages:
+            await callback.answer(INVALID_EPISODE, show_alert=True)
+            return
+
+        try:
+            watched = _progress_from_state(data.get("watched_by_season", {}))
+        except SeriesProgressError:
+            await callback.answer(INVALID_PROGRESS_TRANSITION, show_alert=True)
+            return
+        await callback.message.edit_text(
+            episodes_prompt_text(
+                data.get("tmdb_title", ""),
+                season_info["name"],
+                season_info["episode_count"],
+                watched.get(season_number, 0),
+            ),
+            parse_mode="HTML",
+            reply_markup=episodes_keyboard(
+                season_info["episode_count"],
+                season_number,
+                selection.page,
+            ),
+        )
+        await callback.answer()
+        return
+
+    if selection == "noop":
+        await callback.answer()
+        return
     if selection == "back":
         try:
             watched = _progress_from_state(data.get("watched_by_season", {}))
