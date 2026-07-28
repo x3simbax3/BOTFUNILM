@@ -139,6 +139,7 @@ async def finish_library_rating_edit(
             callback.from_user.id,
             media_id,
             round(average),
+            rating_details=data.get("ratings"),
         )
         if not updated:
             raise RuntimeError("Library item disappeared")
@@ -167,6 +168,7 @@ async def finish_movie(
             media_id=media_id,
             status="completed",
             user_rating=round(average),
+            rating_details=data.get("ratings"),
         )
     except (aiosqlite.Error, RuntimeError):
         await callback.answer(

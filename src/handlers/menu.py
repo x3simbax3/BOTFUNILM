@@ -197,5 +197,9 @@ async def go_back(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 def clear_step_data(data: dict, target_step: str) -> None:
+    if target_step == "main":
+        data.clear()
+        return
+
     for field in MENU_TREE[target_step]["clear_fields"]:
         data.pop(field, None)

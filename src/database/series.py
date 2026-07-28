@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.database.ratings import replace_user_rating_details
 
 
 async def get_media_seasons(
@@ -54,6 +57,7 @@ async def save_user_series_progress(
     total_episodes: int,
     is_ongoing: bool = False,
     user_rating: int | None = None,
+    rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
 ) -> None:
     """Save season details and refresh the aggregate series progress atomically."""
@@ -83,6 +87,13 @@ async def save_user_series_progress(
             """,
             (user_id, media_id, user_rating),
         )
+        if rating_details is not None:
+            await replace_user_rating_details(
+                connection,
+                user_id,
+                media_id,
+                rating_details,
+            )
 
         await connection.execute(
             "DELETE FROM user_season_progress WHERE user_id = ? AND media_id = ?",

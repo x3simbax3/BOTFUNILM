@@ -516,6 +516,34 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(callback.answers, [{"text": "Выбор сохранен"}])
 
+    async def test_back_to_main_clears_all_scenario_data(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("back:main", message)
+        state = StateStub(
+            {
+                "action": "add",
+                "content_format": "series",
+                "content_type": "anime",
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "ratings": {"story": 9},
+                "seasons_data": [{"season_number": 1, "episode_count": 12}],
+                "watched_by_season": {1: 4},
+            }
+        )
+
+        await menu_handlers.go_back(callback, state)
+
+        self.assertEqual(state.data, {})
+        self.assertEqual(state.state, MenuState.choosing_action)
+        self.assertEqual(message.edit_text_calls[0]["text"], START_TEXT)
+        self.assertEqual(
+            message.edit_text_calls[0]["reply_markup"],
+            main_menu_keyboard(),
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
+
 
 class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
@@ -999,7 +1027,16 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:9", message)
-        state = StateStub({"media_id": 7, "library_rating_edit": True})
+        ratings = {
+            "acting": 8,
+            "story": 9,
+            "visuals": 8,
+            "sound": 9,
+            "overall": 9,
+        }
+        state = StateStub(
+            {"media_id": 7, "library_rating_edit": True, "ratings": ratings}
+        )
 
         with patch.object(
             rating_handlers,
@@ -1008,18 +1045,31 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
         ) as update_rating:
             await rating_handlers.finish_library_rating_edit(callback, state, 8.6)
 
-        update_rating.assert_awaited_once_with(123, 7, 9)
+        update_rating.assert_awaited_once_with(
+            123,
+            7,
+            9,
+            rating_details=ratings,
+        )
         self.assertFalse(state.data["library_rating_edit"])
         self.assertEqual(state.state, MenuState.choosing_action)
 
     async def test_finish_movie_saves_completed_media_and_returns_to_menu(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
+        ratings = {
+            "animation": 9,
+            "story": 8,
+            "characters": 9,
+            "sound": 8,
+            "overall": 9,
+        }
         state = StateStub(
             {
                 "tmdb_id": 42,
                 "tmdb_title": "Фильм",
                 "content_type": "cartoon",
+                "ratings": ratings,
             }
         )
 
@@ -1048,18 +1098,27 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             media_id=7,
             status="completed",
             user_rating=9,
+            rating_details=ratings,
         )
         self.assertEqual(state.state, MenuState.choosing_action)
 
     async def test_finish_movie_reuses_local_media(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
+        ratings = {
+            "acting": 8,
+            "story": 8,
+            "visuals": 8,
+            "sound": 8,
+            "overall": 8,
+        }
         state = StateStub(
             {
                 "media_id": 7,
                 "tmdb_id": 42,
                 "tmdb_title": "Фильм",
                 "content_type": "movie",
+                "ratings": ratings,
             }
         )
 
@@ -1075,6 +1134,7 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             media_id=7,
             status="completed",
             user_rating=8,
+            rating_details=ratings,
         )
 
 
@@ -1417,6 +1477,13 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "watched_by_season": {1: 8, 2: 2},
                 "episodes_watched_total": 10,
                 "rating_average": 8.6,
+                "ratings": {
+                    "acting": 9,
+                    "story": 8,
+                    "visuals": 9,
+                    "sound": 8,
+                    "overall": 9,
+                },
                 "is_ongoing": True,
                 "tmdb_series_status": "Returning Series",
                 "tmdb_series_in_production": True,
@@ -1491,6 +1558,13 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             total_episodes=10,
             is_ongoing=True,
             user_rating=9,
+            rating_details={
+                "acting": 9,
+                "story": 8,
+                "visuals": 9,
+                "sound": 8,
+                "overall": 9,
+            },
         )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertEqual(callback.answers, [{"text": None}])

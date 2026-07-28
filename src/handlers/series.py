@@ -477,6 +477,9 @@ async def finish_series_tracking(
             total_episodes=total,
             is_ongoing=is_ongoing,
             user_rating=round(average) if average is not None else None,
+            rating_details=(
+                None if data.get("library_progress_edit") else data.get("ratings")
+            ),
         )
     except (aiosqlite.Error, RuntimeError, ValueError):
         await callback.answer(

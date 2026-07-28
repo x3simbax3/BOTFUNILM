@@ -3,6 +3,7 @@
 import logging
 
 from aiogram import Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import ErrorEvent
 
 from src.lang import UNEXPECTED_ERROR_TEXT
@@ -12,18 +13,25 @@ router = Router(name="errors")
 
 
 @router.error()
-async def handle_unexpected_error(event: ErrorEvent) -> bool:
-    """Log an update failure, notify the user, and keep polling alive.
-
-    The current FSM context is deliberately left untouched so the user can
-    retry the failed action without losing the preceding conversation state.
-    """
+async def handle_unexpected_error(event: ErrorEvent, state: FSMContext) -> bool:
+    """Log an update failure, reset its FSM context, and keep polling alive."""
     exception = event.exception
     logger.error(
         "Unexpected error while processing update id=%s",
         event.update.update_id,
         exc_info=(type(exception), exception, exception.__traceback__),
     )
+
+    try:
+        await state.clear()
+    except Exception:
+        # A storage outage must not turn the error handler itself into another
+        # unhandled update failure.
+        logger.warning(
+            "Could not clear FSM state after failed update id=%s",
+            event.update.update_id,
+            exc_info=True,
+        )
 
     try:
         callback = event.update.callback_query

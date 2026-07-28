@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.database.ratings import replace_user_rating_details
 
 
 async def save_user_media(
@@ -14,6 +17,7 @@ async def save_user_media(
     status: str,
     user_rating: int | None = None,
     episodes_watched: int | None = None,
+    rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
 ) -> None:
     async with connection_scope(database_url) as connection:
@@ -30,6 +34,13 @@ async def save_user_media(
             """,
             (user_id, media_id, status, user_rating, episodes_watched),
         )
+        if rating_details is not None:
+            await replace_user_rating_details(
+                connection,
+                user_id,
+                media_id,
+                rating_details,
+            )
 
 
 async def get_user_media(
@@ -76,6 +87,7 @@ async def update_user_media_rating(
     media_id: int,
     user_rating: int,
     *,
+    rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
 ) -> bool:
     if type(user_rating) is not int or not 1 <= user_rating <= 10:
@@ -89,7 +101,15 @@ async def update_user_media_rating(
             """,
             (user_rating, user_id, media_id),
         )
-        return cursor.rowcount > 0
+        updated = cursor.rowcount > 0
+        if updated and rating_details is not None:
+            await replace_user_rating_details(
+                connection,
+                user_id,
+                media_id,
+                rating_details,
+            )
+        return updated
 
 
 async def delete_user_media(

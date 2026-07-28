@@ -79,6 +79,20 @@ CREATE TABLE user_media (
 
 CREATE INDEX ix_user_media_media_id ON user_media (media_id);
 
+CREATE TABLE user_media_rating_details (
+    user_id             INTEGER NOT NULL,
+    media_id            INTEGER NOT NULL,
+    criterion           TEXT NOT NULL CHECK (criterion IN (
+                            'acting', 'story', 'visuals', 'sound', 'overall',
+                            'animation', 'characters'
+                        )),
+    score               INTEGER NOT NULL CHECK (score BETWEEN 1 AND 10),
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, media_id, criterion),
+    FOREIGN KEY (user_id, media_id)
+        REFERENCES user_media (user_id, media_id) ON DELETE CASCADE
+);
+
 -- Library count triggers are installed by
 -- migrations/20260728120000_add_media_library_users_count.sql. Atlas Community
 -- cannot currently represent SQLite triggers in a declarative schema.

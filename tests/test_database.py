@@ -17,6 +17,7 @@ from src.database.media import (
     update_media_series_release_info,
     upsert_media,
 )
+from src.database.ratings import get_user_rating_details
 from src.database.series import (
     get_user_season_progress,
     save_user_series_progress,
@@ -57,6 +58,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(("media", "table"), objects)
         self.assertIn(("user_media", "table"), objects)
+        self.assertIn(("user_media_rating_details", "table"), objects)
         self.assertIn(("user_season_progress", "table"), objects)
         self.assertIn(("media_seasons", "table"), objects)
         self.assertIn(("user_library_filters", "table"), objects)
@@ -490,6 +492,120 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             await get_user_media(123, media_id, database_url=self.database_url)
         )
 
+    async def test_detailed_ratings_are_saved_and_replaced(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=143,
+            content_format="full_length",
+            content_type="movie",
+            title="Rated movie",
+            database_url=self.database_url,
+        )
+        initial_ratings = {
+            "acting": 8,
+            "story": 7,
+            "visuals": 9,
+            "sound": 8,
+            "overall": 9,
+        }
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="completed",
+            user_rating=8,
+            rating_details=initial_ratings,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            await get_user_rating_details(
+                123, media_id, database_url=self.database_url
+            ),
+            initial_ratings,
+        )
+
+        replacement = {
+            "animation": 10,
+            "story": 8,
+            "characters": 9,
+            "sound": 7,
+            "overall": 9,
+        }
+        self.assertTrue(
+            await update_user_media_rating(
+                123,
+                media_id,
+                9,
+                rating_details=replacement,
+                database_url=self.database_url,
+            )
+        )
+        self.assertEqual(
+            await get_user_rating_details(
+                123, media_id, database_url=self.database_url
+            ),
+            replacement,
+        )
+
+    async def test_invalid_detailed_rating_rolls_back_average_and_details(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=144,
+            content_format="full_length",
+            content_type="movie",
+            title="Rated movie",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="completed",
+            user_rating=7,
+            rating_details={"overall": 7},
+            database_url=self.database_url,
+        )
+
+        with self.assertRaises(ValueError):
+            await update_user_media_rating(
+                123,
+                media_id,
+                10,
+                rating_details={"unknown": 10},
+                database_url=self.database_url,
+            )
+
+        media = await get_user_media(123, media_id, database_url=self.database_url)
+        self.assertEqual(media["user_rating"], 7)
+        self.assertEqual(
+            await get_user_rating_details(
+                123, media_id, database_url=self.database_url
+            ),
+            {"overall": 7},
+        )
+
+    async def test_deleting_user_media_cascades_to_detailed_ratings(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=145,
+            content_format="full_length",
+            content_type="movie",
+            title="Rated movie",
+            database_url=self.database_url,
+        )
+        await save_user_media(
+            user_id=123,
+            media_id=media_id,
+            status="completed",
+            user_rating=8,
+            rating_details={"overall": 8},
+            database_url=self.database_url,
+        )
+        await delete_user_media(123, media_id, database_url=self.database_url)
+
+        self.assertEqual(
+            await get_user_rating_details(
+                123, media_id, database_url=self.database_url
+            ),
+            {},
+        )
+
     async def test_library_filters_are_persisted_per_user(self) -> None:
         defaults = await get_user_library_filters(123, database_url=self.database_url)
         changed = await update_user_library_filter(
@@ -857,6 +973,47 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [(row["season_number"], row["episodes_watched"]) for row in rows],
             [(1, 8), (2, 2)],
+        )
+
+    async def test_series_progress_update_preserves_detailed_ratings(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=146,
+            content_format="series",
+            content_type="movie",
+            title="Rated series",
+            database_url=self.database_url,
+        )
+        ratings = {
+            "acting": 8,
+            "story": 9,
+            "visuals": 7,
+            "sound": 8,
+            "overall": 9,
+        }
+        await save_user_series_progress(
+            user_id=123,
+            media_id=media_id,
+            seasons={1: 2},
+            total_episodes=10,
+            user_rating=8,
+            rating_details=ratings,
+            database_url=self.database_url,
+        )
+        await save_user_series_progress(
+            user_id=123,
+            media_id=media_id,
+            seasons={1: 3},
+            total_episodes=10,
+            user_rating=8,
+            rating_details=None,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            await get_user_rating_details(
+                123, media_id, database_url=self.database_url
+            ),
+            ratings,
         )
 
     async def test_caught_up_active_series_stays_watching(self) -> None:
