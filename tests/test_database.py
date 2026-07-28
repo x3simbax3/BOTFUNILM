@@ -133,6 +133,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
         await update_media_series_release_info(
             media_id,
+            user_id=123,
             status="Returning Series",
             in_production=True,
             number_of_seasons=2,
@@ -155,6 +156,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
         await update_media_series_release_info(
             media_id,
+            user_id=123,
             status="Returning Series",
             in_production=True,
             number_of_seasons=2,
@@ -215,6 +217,77 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             [tuple(season) for season in seasons],
             [(1, 12, 12), (2, 5, 1)],
         )
+
+    async def test_series_release_refresh_does_not_change_other_users(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=46,
+            content_format="series",
+            content_type="movie",
+            title="Shared series",
+            number_of_seasons=1,
+            number_of_episodes=10,
+            available_episode_count=10,
+            database_url=self.database_url,
+        )
+        for user_id in (123, 456):
+            await save_user_series_progress(
+                user_id=user_id,
+                media_id=media_id,
+                seasons={1: 8},
+                total_episodes=10,
+                database_url=self.database_url,
+            )
+        async with connection_scope(self.database_url) as connection:
+            await connection.execute(
+                """
+                UPDATE user_media
+                SET status = 'on_hold', last_watched_at = '2000-01-01 00:00:00'
+                WHERE user_id = 456 AND media_id = ?
+                """,
+                (media_id,),
+            )
+
+        await update_media_series_release_info(
+            media_id,
+            user_id=123,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=1,
+            number_of_episodes=10,
+            available_episode_count=5,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Season 1",
+                    "announced_episode_count": 10,
+                    "episode_count": 5,
+                }
+            ],
+            poster_path=None,
+            rating=None,
+            next_episode_air_date=None,
+            next_episode_season_number=None,
+            next_episode_number=None,
+            database_url=self.database_url,
+        )
+
+        initiating_user = await get_user_media(
+            123, media_id, database_url=self.database_url
+        )
+        other_user = await get_user_media(456, media_id, database_url=self.database_url)
+        initiating_progress = await get_user_season_progress(
+            123, media_id, database_url=self.database_url
+        )
+        other_progress = await get_user_season_progress(
+            456, media_id, database_url=self.database_url
+        )
+
+        self.assertEqual(initiating_user["episodes_watched"], 5)
+        self.assertEqual(initiating_progress[0]["episodes_watched"], 5)
+        self.assertEqual(other_user["episodes_watched"], 8)
+        self.assertEqual(other_user["status"], "on_hold")
+        self.assertEqual(other_user["last_watched_at"], "2000-01-01 00:00:00")
+        self.assertEqual(other_progress[0]["episodes_watched"], 8)
 
     async def test_same_tmdb_id_is_allowed_for_different_classifications(self) -> None:
         movie_id = await upsert_media(

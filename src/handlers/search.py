@@ -99,24 +99,16 @@ async def search_title(message: Message, state: FSMContext) -> None:
             if local_media is not None
             else None
         )
-        await status_msg.edit_text(TMDB_SEARCHING_REMOTE)
-        try:
+        if local_guess is not None:
+            guesses = [local_guess]
+        else:
+            await status_msg.edit_text(TMDB_SEARCHING_REMOTE)
             guesses = await find_title_candidates(
                 title_query,
                 content_format,
                 content_type,
                 limit=MAX_TITLE_CANDIDATES,
             )
-        except TmdbError:
-            if local_guess is None:
-                raise
-            guesses = [local_guess]
-
-        if local_guess is not None:
-            guesses = [
-                local_guess if guess.tmdb_id == local_guess.tmdb_id else guess
-                for guess in guesses
-            ]
     except aiosqlite.Error:
         await status_msg.edit_text(LOCAL_SEARCH_FAILED)
         return
@@ -412,6 +404,7 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
                 next_episode = series_details.next_episode_to_air
                 await update_media_series_release_info(
                     media_id,
+                    user_id=callback.from_user.id,
                     status=series_details.status,
                     in_production=series_details.in_production,
                     number_of_seasons=series_details.number_of_seasons,

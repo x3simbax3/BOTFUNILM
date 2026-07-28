@@ -7,6 +7,26 @@ import aiosqlite
 from src.database.connection import connection_scope
 
 
+async def get_media_seasons(
+    media_id: int,
+    *,
+    database_url: str | None = None,
+) -> list[aiosqlite.Row]:
+    """Return cached regular seasons for one catalogue entry."""
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT season_number, name,
+                   announced_episode_count, available_episode_count
+            FROM media_seasons
+            WHERE media_id = ?
+            ORDER BY season_number
+            """,
+            (media_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def get_user_season_progress(
     user_id: int,
     media_id: int,
@@ -133,4 +153,8 @@ def _validate_progress_values(seasons: dict[int, int], total_episodes: int) -> N
         raise ValueError("at least one watched episode is required")
 
 
-__all__ = ("get_user_season_progress", "save_user_series_progress")
+__all__ = (
+    "get_media_seasons",
+    "get_user_season_progress",
+    "save_user_series_progress",
+)

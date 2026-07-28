@@ -9,9 +9,15 @@ from src import tmdb
 
 
 class ResponseStub:
-    def __init__(self, status: int, data: dict | None = None) -> None:
+    def __init__(
+        self,
+        status: int,
+        data: dict | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status = status
         self.data = data or {}
+        self.headers = headers or {}
 
     async def __aenter__(self):
         return self
@@ -27,8 +33,10 @@ class SessionStub:
     def __init__(self, response: ResponseStub | None = None, error=None) -> None:
         self.response = response
         self.error = error
+        self.call_count = 0
 
     def get(self, *args, **kwargs):
+        self.call_count += 1
         if self.error:
             raise self.error
         return self.response
@@ -348,9 +356,11 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
 
         for status, error_type in cases:
             with self.subTest(status=status):
-                session = SessionStub(ResponseStub(status))
+                headers = {"Retry-After": "0"} if status == 429 else None
+                session = SessionStub(ResponseStub(status, headers=headers))
                 with self.assertRaises(error_type):
                     await tmdb._fetch_json(session, "https://tmdb.test", {})
+                self.assertEqual(session.call_count, 2 if status == 429 else 1)
 
     async def test_fetch_json_classifies_timeout_and_network_error(self) -> None:
         for error in (asyncio.TimeoutError(), aiohttp.ClientConnectionError()):

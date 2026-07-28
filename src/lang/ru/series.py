@@ -30,7 +30,7 @@ def series_tracking_text(
         for season in seasons
     )
     lines = [
-        f"┈┈┈  <b>{escape(title)}</b>  ┈┈┈",
+        f"━━━  <b>{escape(title)}</b>  ━━━",
         f"<i>{len(seasons)} сез. · вышло {available} из {announced} сер.</i>",
         "",
     ]
@@ -56,7 +56,7 @@ def episodes_prompt_text(
 ) -> str:
     remaining = _remaining_episodes(total_episodes, already_watched)
     return (
-        f"┈┈┈  <b>{escape(title)}</b>  ┈┈┈\n"
+        f"━━━  <b>{escape(title)}</b>  ━━━\n"
         f"<i>{escape(season_name)}</i>\n\n"
         f"Просмотрено · <b>{already_watched} из {total_episodes}</b>\n"
         f"Осталось · <b>{remaining}</b>\n\n"

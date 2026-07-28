@@ -35,7 +35,7 @@ def rating_prompt_text(
     total: int,
 ) -> str:
     return (
-        f"┈┈┈  ★ <b>{escape(title)}</b>  ┈┈┈\n"
+        f"━━━  ★ <b>{escape(title)}</b>  ━━━\n"
         f"<i>Критерий {category_number} из {total}</i>\n\n"
         f"<b>{category_name}</b>\n"
         "Выбери оценку от 1 до 10"
@@ -49,7 +49,7 @@ def rating_summary_text(
     categories: list[tuple[str, str]] | None = None,
 ) -> str:
     lines = [
-        f"┈┈┈  ✓ <b>{escape(title)}</b>  ┈┈┈",
+        f"━━━  ✓ <b>{escape(title)}</b>  ━━━",
         "<i>Оценка сохранена</i>",
         "",
     ]

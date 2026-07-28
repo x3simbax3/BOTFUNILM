@@ -21,7 +21,7 @@ USER_STATUS_ICONS = {
 ACTIVE_TMDB_SERIES_STATUSES = frozenset(
     {"Returning Series", "Planned", "In Production"}
 )
-LIBRARY_ITEM_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈"
+LIBRARY_ITEM_DIVIDER = "━━━━━━━━━━━━━"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
 UNKNOWN_FILTER = "Неизвестный фильтр"
@@ -112,7 +112,7 @@ def library_item_text(item, description: str | None = None) -> str:
     user_status = USER_STATUS_TITLES.get(item["user_status"], item["user_status"])
     date_value = item["release_date"] or item["first_air_date"]
 
-    lines = [f"┈┈┈  <b>{escape(item['title'])}</b>  ┈┈┈"]
+    lines = [f"━━━  <b>{escape(item['title'])}</b>  ━━━"]
     if item["original_title"] and item["original_title"] != item["title"]:
         lines.append(f"<i>{escape(item['original_title'])}</i>")
     lines.append(f"<i>{escape(media_kind)}</i>")

@@ -112,7 +112,7 @@ class CallbackStub:
         self.message = message
         self.from_user = SimpleNamespace(id=123)
         self.bot = SimpleNamespace(
-            get_me=AsyncMock(return_value=SimpleNamespace(username="BotFunilmBot"))
+            me=AsyncMock(return_value=SimpleNamespace(username="BotFunilmBot"))
         )
         self.answers = []
 
@@ -244,7 +244,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("TMDB · <b>8.7/10</b>", message.photo_answers[0]["caption"])
 
-    async def test_opening_active_series_refreshes_and_shows_next_episode(
+    async def test_opening_active_series_uses_cached_release_info(
         self,
     ) -> None:
         message = MessageStub()
@@ -273,17 +273,6 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             "next_episode_season_number": 1,
             "next_episode_number": 8,
         }
-        details = TmdbTvDetails(
-            number_of_seasons=2,
-            number_of_episodes=9,
-            seasons=[TmdbSeasonInfo(1, "Сезон 1", 8)],
-            status="Returning Series",
-            in_production=True,
-            next_episode_to_air=TmdbEpisodeAirInfo(2, 1, "2026-09-15"),
-            poster_path="/poster.jpg",
-            rating=8.0,
-        )
-
         with (
             patch.object(
                 library_handlers,
@@ -292,44 +281,15 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 library_handlers,
-                "fetch_tv_details",
-                AsyncMock(return_value=details),
-            ) as fetch_release,
-            patch.object(
-                library_handlers,
-                "update_media_series_release_info",
+                "fetch_title_details",
                 AsyncMock(),
-            ) as update_release,
+            ) as fetch_metadata,
         ):
             await library_handlers.show_library_item(message, state, 123, 8)
 
-        fetch_release.assert_awaited_once_with(
-            84,
-            include_episode_availability=True,
-        )
-        update_release.assert_awaited_once_with(
-            8,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=2,
-            number_of_episodes=9,
-            available_episode_count=8,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Сезон 1",
-                    "announced_episode_count": 8,
-                    "episode_count": 8,
-                }
-            ],
-            poster_path=None,
-            rating=None,
-            next_episode_air_date="2026-09-15",
-            next_episode_season_number=2,
-            next_episode_number=1,
-        )
+        fetch_metadata.assert_not_awaited()
         self.assertIn(
-            "Новый сезон · <b>2 сезон · 15.09.2026</b>",
+            "Следующая серия · <b>1 сезон, 8 серия · 01.08.2026</b>",
             message.photo_answers[0]["caption"],
         )
 
@@ -347,18 +307,12 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 library_handlers,
-                "fetch_tv_details",
-                AsyncMock(),
-            ) as fetch_release,
-            patch.object(
-                library_handlers,
                 "fetch_title_details",
                 AsyncMock(),
             ) as fetch_metadata,
         ):
             await library_handlers._refresh_item_metadata(item)
 
-        fetch_release.assert_not_awaited()
         fetch_metadata.assert_not_awaited()
 
     async def test_open_library_shows_only_first_ten_and_more_button(self) -> None:
@@ -687,12 +641,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         ) as tmdb_search:
             await search_handlers.search_title(message, state)
 
-        tmdb_search.assert_awaited_once_with(
-            "матрица",
-            "full_length",
-            "movie",
-            limit=5,
-        )
+        tmdb_search.assert_not_awaited()
         self.assertEqual(state.data["media_id"], 7)
         self.assertEqual(state.data["tmdb_id"], 42)
         self.assertEqual(state.data["tmdb_rating"], 8.2)
@@ -912,6 +861,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         save.assert_awaited_once_with(user_id=123, media_id=7, status="planned")
         update_release.assert_awaited_once_with(
             7,
+            user_id=123,
             status="Returning Series",
             in_production=True,
             number_of_seasons=1,
@@ -1350,6 +1300,66 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["episodes_watched_total"], 7)
         self.assertEqual(state.state, MenuState.tracking_series)
 
+    async def test_library_progress_edit_uses_cached_seasons_without_tmdb(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("library:item:edit:progress", message)
+        state = StateStub(
+            {
+                "library_progress_edit": True,
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "content_type": "movie",
+                "total_seasons": 2,
+                "announced_total_episodes": 12,
+                "tmdb_series_status": "Returning Series",
+                "tmdb_series_in_production": True,
+                "tmdb_next_episode_air_date": "2026-08-01",
+                "tmdb_next_episode_season_number": 2,
+                "tmdb_next_episode_number": 5,
+            }
+        )
+        cached_seasons = [
+            {
+                "season_number": 1,
+                "name": "Сезон 1",
+                "announced_episode_count": 8,
+                "available_episode_count": 8,
+            },
+            {
+                "season_number": 2,
+                "name": "Сезон 2",
+                "announced_episode_count": 4,
+                "available_episode_count": 2,
+            },
+        ]
+
+        with (
+            patch.object(
+                series_handlers,
+                "get_media_seasons",
+                AsyncMock(return_value=cached_seasons),
+            ) as get_seasons,
+            patch.object(
+                series_handlers,
+                "get_user_season_progress",
+                AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 3}]),
+            ),
+            patch.object(
+                series_handlers,
+                "fetch_tv_details",
+                AsyncMock(),
+            ) as fetch,
+        ):
+            await series_handlers.start_series_tracking(callback, state)
+
+        get_seasons.assert_awaited_once_with(7)
+        fetch.assert_not_awaited()
+        self.assertEqual(state.data["total_episodes"], 10)
+        self.assertEqual(state.data["announced_total_episodes"], 12)
+        self.assertEqual(state.data["watched_by_season"], {1: 3})
+        self.assertEqual(state.state, MenuState.tracking_series)
+
     async def test_active_series_clamps_progress_to_aired_episodes(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
@@ -1450,6 +1460,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         update_release.assert_awaited_once_with(
             7,
+            user_id=123,
             status="Returning Series",
             in_production=True,
             number_of_seasons=2,

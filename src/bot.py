@@ -39,6 +39,7 @@ async def main() -> None:
         raise RuntimeError("BOT_TOKEN is not set in config/.env")
 
     bot = Bot(token=BOT_TOKEN)
+    await bot.me()
     dp = create_dispatcher()
     dp.include_router(router)
 

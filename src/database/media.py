@@ -200,6 +200,7 @@ async def update_media_metadata(
 async def update_media_series_release_info(
     media_id: int,
     *,
+    user_id: int,
     status: str | None,
     in_production: bool | None,
     number_of_seasons: int,
@@ -213,7 +214,7 @@ async def update_media_series_release_info(
     next_episode_number: int | None,
     database_url: str | None = None,
 ) -> None:
-    """Overwrite cached TMDB release information after a card refresh."""
+    """Refresh shared release data and reconcile only the initiating user."""
     async with connection_scope(database_url) as connection:
         await connection.execute(
             """
@@ -259,7 +260,7 @@ async def update_media_series_release_info(
                       AND ms.season_number = user_season_progress.season_number
                 ),
                 last_watched_at = CURRENT_TIMESTAMP
-            WHERE media_id = ?
+            WHERE media_id = ? AND user_id = ?
               AND EXISTS (
                   SELECT 1 FROM media_seasons AS ms
                   WHERE ms.media_id = user_season_progress.media_id
@@ -268,7 +269,7 @@ async def update_media_series_release_info(
                         > ms.available_episode_count
               )
             """,
-            (media_id,),
+            (media_id, user_id),
         )
         active = bool(in_production) or status in {
             "Returning Series",
@@ -301,9 +302,9 @@ async def update_media_series_release_info(
                     ELSE 'watching'
                 END,
                 last_watched_at = CURRENT_TIMESTAMP
-            WHERE media_id = ?
+            WHERE media_id = ? AND user_id = ?
             """,
-            (active, available_episode_count, media_id),
+            (active, available_episode_count, media_id, user_id),
         )
         await connection.execute(
             """

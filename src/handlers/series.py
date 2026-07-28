@@ -15,7 +15,11 @@ from src.callback_data import (
     parse_season_callback,
 )
 from src.database.media import get_media_by_tmdb, update_media_series_release_info
-from src.database.series import get_user_season_progress, save_user_series_progress
+from src.database.series import (
+    get_media_seasons,
+    get_user_season_progress,
+    save_user_series_progress,
+)
 from src.fsm import MenuState
 from src.keyboards import (
     EPISODES_PAGE_SIZE,
@@ -60,33 +64,84 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
     tmdb_id = data.get("tmdb_id", 0)
     title = data.get("tmdb_title", "")
 
-    try:
-        details = await fetch_tv_details(
-            tmdb_id,
-            include_episode_availability=True,
-        )
-    except TmdbError:
-        await _leave_tracking(
-            callback,
-            state,
-            DETAILS_LOAD_FAILED,
-        )
-        return
-
-    seasons_data = [
-        {
-            "season_number": season.season_number,
-            "name": season.name,
-            "episode_count": (
-                season.available_episode_count
-                if season.available_episode_count is not None
-                else season.episode_count
+    if data.get("library_progress_edit"):
+        media_id = data.get("media_id")
+        try:
+            cached_seasons = (
+                await get_media_seasons(int(media_id)) if media_id is not None else []
+            )
+        except (aiosqlite.Error, TypeError, ValueError):
+            cached_seasons = []
+        if not cached_seasons:
+            await _leave_tracking(callback, state, DETAILS_LOAD_FAILED)
+            return
+        seasons_data = [
+            {
+                "season_number": int(season["season_number"]),
+                "name": season["name"],
+                "episode_count": int(season["available_episode_count"]),
+                "announced_episode_count": int(season["announced_episode_count"]),
+            }
+            for season in cached_seasons
+        ]
+        tracking_metadata = {
+            "total_seasons": data.get("total_seasons", len(seasons_data)),
+            "announced_total_episodes": data.get(
+                "announced_total_episodes",
+                sum(season["announced_episode_count"] for season in seasons_data),
             ),
-            "announced_episode_count": season.episode_count,
+            "is_ongoing": _is_ongoing(
+                data.get("tmdb_series_status"),
+                data.get("tmdb_series_in_production"),
+            ),
+            "tmdb_series_status": data.get("tmdb_series_status"),
+            "tmdb_series_in_production": data.get("tmdb_series_in_production"),
+            "tmdb_next_episode_air_date": data.get("tmdb_next_episode_air_date"),
+            "tmdb_next_episode_season_number": data.get(
+                "tmdb_next_episode_season_number"
+            ),
+            "tmdb_next_episode_number": data.get("tmdb_next_episode_number"),
         }
-        for season in details.seasons
-        if season.season_number > 0 and season.episode_count > 0
-    ]
+    else:
+        try:
+            details = await fetch_tv_details(
+                tmdb_id,
+                include_episode_availability=True,
+            )
+        except TmdbError:
+            await _leave_tracking(callback, state, DETAILS_LOAD_FAILED)
+            return
+        seasons_data = [
+            {
+                "season_number": season.season_number,
+                "name": season.name,
+                "episode_count": (
+                    season.available_episode_count
+                    if season.available_episode_count is not None
+                    else season.episode_count
+                ),
+                "announced_episode_count": season.episode_count,
+            }
+            for season in details.seasons
+            if season.season_number > 0 and season.episode_count > 0
+        ]
+        next_episode = details.next_episode_to_air
+        tracking_metadata = {
+            "total_seasons": details.number_of_seasons,
+            "announced_total_episodes": details.number_of_episodes,
+            "is_ongoing": _is_ongoing(details.status, details.in_production),
+            "tmdb_series_status": details.status,
+            "tmdb_series_in_production": details.in_production,
+            "tmdb_next_episode_air_date": (
+                next_episode.air_date if next_episode is not None else None
+            ),
+            "tmdb_next_episode_season_number": (
+                next_episode.season_number if next_episode is not None else None
+            ),
+            "tmdb_next_episode_number": (
+                next_episode.episode_number if next_episode is not None else None
+            ),
+        }
 
     try:
         media_id = await _existing_media_id(data, tmdb_id)
@@ -130,27 +185,8 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
     await state.update_data(
         media_id=media_id,
         seasons_data=seasons_data,
-        total_seasons=details.number_of_seasons,
         total_episodes=total_episodes,
-        announced_total_episodes=details.number_of_episodes,
-        is_ongoing=_is_ongoing(details.status, details.in_production),
-        tmdb_series_status=details.status,
-        tmdb_series_in_production=details.in_production,
-        tmdb_next_episode_air_date=(
-            details.next_episode_to_air.air_date
-            if details.next_episode_to_air is not None
-            else None
-        ),
-        tmdb_next_episode_season_number=(
-            details.next_episode_to_air.season_number
-            if details.next_episode_to_air is not None
-            else None
-        ),
-        tmdb_next_episode_number=(
-            details.next_episode_to_air.episode_number
-            if details.next_episode_to_air is not None
-            else None
-        ),
+        **tracking_metadata,
         watched_by_season=watched,
         current_season=None,
         episodes_watched_total=sum(watched.values()),
@@ -159,7 +195,7 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         series_tracking_text(
             title,
             seasons_data,
-            is_ongoing=_is_ongoing(details.status, details.in_production),
+            is_ongoing=tracking_metadata["is_ongoing"],
         ),
         parse_mode="HTML",
         reply_markup=season_list_keyboard(seasons_data, watched),
@@ -421,6 +457,7 @@ async def finish_series_tracking(
         )
         await update_media_series_release_info(
             media_id,
+            user_id=callback.from_user.id,
             status=data.get("tmdb_series_status"),
             in_production=data.get("tmdb_series_in_production"),
             number_of_seasons=data.get("total_seasons", 0),

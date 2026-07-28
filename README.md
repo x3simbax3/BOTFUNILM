@@ -127,6 +127,10 @@ SQLite-база и постеры находятся в именованном v
 | `DEBUG` | подробное логирование | `false` |
 | `TMDB_URL` | адрес совместимого TMDB API | `https://api.themoviedb.org/3` |
 | `TMDB_LANG` | язык данных TMDB | `ru-RU` |
+| `TMDB_MAX_CONCURRENCY` | максимум одновременных запросов TMDB | `5` |
+| `TMDB_MAX_REQUESTS_PER_SECOND` | максимум запросов TMDB в секунду | `20` |
+| `TMDB_QUEUE_TIMEOUT_SECONDS` | максимальное ожидание очереди TMDB | `5` |
+| `TMDB_RATE_LIMIT_COOLDOWN_SECONDS` | пауза после ответа TMDB `429` | `2` |
 | `MEDIA_ROOT` | каталог загруженных постеров | `media` |
 | `REDIS_URL` | адрес Redis; пустое значение включает FSM в памяти | пусто |
 | `FSM_TTL_SECONDS` | срок жизни незавершённого FSM-диалога | `86400` |

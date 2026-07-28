@@ -17,10 +17,7 @@ from src.database.library import (
     list_user_library,
     update_user_library_filter,
 )
-from src.database.media import (
-    update_media_metadata,
-    update_media_series_release_info,
-)
+from src.database.media import update_media_metadata
 from src.database.user_media import delete_user_media, set_user_media_status
 from src.fsm import MenuState
 from src.handlers.common import (
@@ -58,13 +55,10 @@ from src.lang import (
     rating_prompt_text,
 )
 from src.posters import poster_input
-from src.tmdb import TmdbError, fetch_title_details, fetch_tv_details
+from src.tmdb import TmdbError, fetch_title_details
 
 router = Router(name="library")
 LIBRARY_PAGE_SIZE = 10
-ACTIVE_TMDB_SERIES_STATUSES = frozenset(
-    {"Returning Series", "Planned", "In Production"}
-)
 
 
 @router.callback_query(F.data == "menu:library")
@@ -175,7 +169,7 @@ async def open_library_page(
             offset=page * LIBRARY_PAGE_SIZE,
             sort_order=sort_order,
         )
-        bot_user = await callback.bot.get_me()
+        bot_user = await callback.bot.me()
         if not bot_user.username:
             raise RuntimeError("Bot username is unavailable")
     except (aiosqlite.Error, RuntimeError):
@@ -322,6 +316,7 @@ async def change_library_item_progress(
             **_library_workflow_data(item),
             rating_average=item["user_rating"],
             library_rating_edit=False,
+            library_progress_edit=True,
         )
         await delete_message_safely(callback.message)
         await start_series_tracking(callback, state)
@@ -443,106 +438,25 @@ def _library_workflow_data(item) -> dict:
         "tmdb_release_date": item["release_date"] or item["first_air_date"],
         "content_format": item["content_format"],
         "content_type": item["content_type"],
+        "total_seasons": item["number_of_seasons"],
+        "announced_total_episodes": item["number_of_episodes"],
+        "tmdb_series_status": item["tmdb_status"],
+        "tmdb_series_in_production": item["tmdb_in_production"],
+        "tmdb_next_episode_air_date": item["next_episode_air_date"],
+        "tmdb_next_episode_season_number": item["next_episode_season_number"],
+        "tmdb_next_episode_number": item["next_episode_number"],
     }
 
 
 async def _refresh_item_metadata(item):
-    """Refresh missing artwork and current release data when an item is opened."""
+    """Repair missing movie artwork without refreshing series on card open."""
     refreshed = dict(item)
     photo = poster_input(refreshed.get("poster_path"))
     if refreshed.get("tmdb_id") in {None, 0}:
         return refreshed, photo
 
-    series_refresh_attempted = _should_refresh_series_release(refreshed)
-    if series_refresh_attempted:
-        try:
-            series_details = await fetch_tv_details(
-                int(refreshed["tmdb_id"]),
-                include_episode_availability=True,
-            )
-        except (TmdbError, ValueError):
-            pass
-        else:
-            next_episode = series_details.next_episode_to_air
-            poster_path = None
-            if photo is None and series_details.poster_path:
-                poster_path = series_details.poster_path
-                refreshed["poster_path"] = poster_path
-                photo = poster_input(poster_path)
-            rating = None
-            if refreshed.get("rating") is None and series_details.rating is not None:
-                rating = series_details.rating
-                refreshed["rating"] = rating
-            release_values = {
-                "tmdb_status": series_details.status,
-                "tmdb_in_production": series_details.in_production,
-                "number_of_seasons": series_details.number_of_seasons,
-                "number_of_episodes": series_details.number_of_episodes,
-                "available_episode_count": sum(
-                    season.available_episode_count
-                    if season.available_episode_count is not None
-                    else season.episode_count
-                    for season in series_details.seasons
-                ),
-                "next_episode_air_date": (
-                    next_episode.air_date if next_episode is not None else None
-                ),
-                "next_episode_season_number": (
-                    next_episode.season_number if next_episode is not None else None
-                ),
-                "next_episode_number": (
-                    next_episode.episode_number if next_episode is not None else None
-                ),
-            }
-            seasons = [
-                {
-                    "season_number": season.season_number,
-                    "name": season.name,
-                    "announced_episode_count": season.episode_count,
-                    "episode_count": (
-                        season.available_episode_count
-                        if season.available_episode_count is not None
-                        else season.episode_count
-                    ),
-                }
-                for season in series_details.seasons
-                if season.season_number > 0
-            ]
-            refreshed.update(release_values)
-            if refreshed.get("episodes_watched") is not None:
-                refreshed["episodes_watched"] = min(
-                    int(refreshed["episodes_watched"]),
-                    release_values["available_episode_count"],
-                )
-                if release_values["available_episode_count"] == 0:
-                    refreshed["user_status"] = "planned"
-                elif bool(series_details.in_production) or (
-                    series_details.status in ACTIVE_TMDB_SERIES_STATUSES
-                ):
-                    refreshed["user_status"] = "watching"
-            try:
-                await update_media_series_release_info(
-                    int(refreshed["id"]),
-                    status=release_values["tmdb_status"],
-                    in_production=release_values["tmdb_in_production"],
-                    number_of_seasons=release_values["number_of_seasons"],
-                    number_of_episodes=release_values["number_of_episodes"],
-                    available_episode_count=release_values["available_episode_count"],
-                    seasons=seasons,
-                    poster_path=poster_path,
-                    rating=rating,
-                    next_episode_air_date=release_values["next_episode_air_date"],
-                    next_episode_season_number=release_values[
-                        "next_episode_season_number"
-                    ],
-                    next_episode_number=release_values["next_episode_number"],
-                )
-            except aiosqlite.Error:
-                pass
-
     if (
-        not series_refresh_attempted
-        and refreshed.get("content_format") != "series"
+        refreshed.get("content_format") != "series"
         and (photo is None or refreshed.get("rating") is None)
     ):
         try:
@@ -572,17 +486,6 @@ async def _refresh_item_metadata(item):
                 except aiosqlite.Error:
                     pass
     return refreshed, photo
-
-
-def _should_refresh_series_release(item: dict) -> bool:
-    if item.get("content_format") != "series":
-        return False
-    if item.get("tmdb_in_production") is None:
-        return True
-    return (
-        bool(item.get("tmdb_in_production"))
-        or item.get("tmdb_status") in ACTIVE_TMDB_SERIES_STATUSES
-    )
 
 
 async def _show_library_error(

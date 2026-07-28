@@ -99,7 +99,7 @@ class LocalizationTests(unittest.TestCase):
             "╰ <i>Сортировка по дате</i>",
             result,
         )
-        self.assertEqual(result.count("┈┈┈┈┈┈┈┈┈┈┈┈┈"), 1)
+        self.assertEqual(result.count("━━━━━━━━━━━━━"), 1)
 
         rating_result = lang.library_text(
             [
