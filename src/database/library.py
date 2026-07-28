@@ -15,12 +15,23 @@ LIBRARY_FILTER_NAMES = frozenset(
         "cartoon",
         "completed",
         "planned",
+        "unfinished",
+        "ongoing",
+        "rated",
+        "unrated",
     }
 )
-LIBRARY_SORT_ORDERS = frozenset({"recent", "rating"})
+LIBRARY_SORT_ORDERS = frozenset({"recent", "rating", "tmdb_rating", "title"})
 FORMAT_FILTERS = frozenset({"full_length", "series"})
 TYPE_FILTERS = frozenset({"movie", "anime", "cartoon"})
-STATUS_FILTERS = frozenset({"completed", "planned"})
+STATUS_FILTERS = frozenset({"completed", "planned", "unfinished", "ongoing"})
+RATING_FILTERS = frozenset({"rated", "unrated"})
+FILTER_GROUPS = {
+    "format_all": ("full_length", "series"),
+    "category_all": ("movie", "anime", "cartoon"),
+    "status_all": ("completed", "planned", "unfinished", "ongoing"),
+    "rating_all": ("rated", "unrated"),
+}
 
 
 async def get_user_library_filters(
@@ -31,18 +42,8 @@ async def get_user_library_filters(
     async with connection_scope(database_url) as connection:
         await connection.execute(
             """
-            INSERT OR IGNORE INTO user_library_filters
-                (user_id, completed, planned)
-            VALUES (?, 1, 0)
-            """,
-            (user_id,),
-        )
-        # Normalize rows created with the old all-statuses default.
-        await connection.execute(
-            """
-            UPDATE user_library_filters
-            SET planned = 0
-            WHERE user_id = ? AND completed = 1 AND planned = 1
+            INSERT OR IGNORE INTO user_library_filters (user_id)
+            VALUES (?)
             """,
             (user_id,),
         )
@@ -63,15 +64,18 @@ async def update_user_library_filter(
     *,
     database_url: str | None = None,
 ) -> dict[str, bool]:
-    if filter_name != "all" and filter_name not in LIBRARY_FILTER_NAMES:
+    if (
+        filter_name != "all"
+        and filter_name not in LIBRARY_FILTER_NAMES
+        and filter_name not in FILTER_GROUPS
+    ):
         raise ValueError("Unknown library filter")
 
     async with connection_scope(database_url) as connection:
         await connection.execute(
             """
-            INSERT OR IGNORE INTO user_library_filters
-                (user_id, completed, planned)
-            VALUES (?, 1, 0)
+            INSERT OR IGNORE INTO user_library_filters (user_id)
+            VALUES (?)
             """,
             (user_id,),
         )
@@ -81,18 +85,24 @@ async def update_user_library_filter(
                 UPDATE user_library_filters
                 SET full_length = 1, series = 1,
                     movie = 1, anime = 1, cartoon = 1,
-                    completed = 1, planned = 0
+                    completed = 1, planned = 1,
+                    unfinished = 1, ongoing = 1,
+                    rated = 1, unrated = 1
                 WHERE user_id = ?
                 """,
                 (user_id,),
             )
         else:
-            if filter_name in FORMAT_FILTERS:
+            if filter_name in FILTER_GROUPS:
+                group = FILTER_GROUPS[filter_name]
+            elif filter_name in FORMAT_FILTERS:
                 group = ("full_length", "series")
             elif filter_name in TYPE_FILTERS:
                 group = ("movie", "anime", "cartoon")
+            elif filter_name in STATUS_FILTERS:
+                group = ("completed", "planned", "unfinished", "ongoing")
             else:
-                group = ("completed", "planned")
+                group = ("rated", "unrated")
 
             async with connection.execute(
                 "SELECT * FROM user_library_filters WHERE user_id = ?",
@@ -102,11 +112,8 @@ async def update_user_library_filter(
             if current is None:
                 raise RuntimeError("Library filters were not created")
 
-            # Formats and types can return to an unfiltered group. A watch
-            # status is mandatory, so clicking it keeps it selected.
-            restore_group = (
-                filter_name not in STATUS_FILTERS
-                and bool(current[filter_name])
+            restore_group = filter_name in FILTER_GROUPS or (
+                bool(current[filter_name])
                 and sum(bool(current[name]) for name in group) == 1
             )
             values = [True if restore_group else name == filter_name for name in group]
@@ -140,15 +147,20 @@ async def list_user_library(
     if sort_order not in LIBRARY_SORT_ORDERS:
         raise ValueError("Unknown library sort order")
 
-    order_by = (
-        "um.user_rating IS NULL, um.user_rating DESC, "
-        "m.rating IS NULL, m.rating DESC, um.added_at DESC, m.id DESC"
-        if sort_order == "rating"
-        else "um.added_at DESC, m.id DESC"
+    order_by = {
+        "recent": "um.added_at DESC, m.id DESC",
+        "rating": (
+            "um.user_rating IS NULL, um.user_rating DESC, "
+            "m.rating IS NULL, m.rating DESC, um.added_at DESC, m.id DESC"
+        ),
+        "tmdb_rating": ("m.rating IS NULL, m.rating DESC, um.added_at DESC, m.id DESC"),
+        "title": "m.title COLLATE NOCASE, m.id DESC",
+    }[sort_order]
+    status_unfiltered = all(
+        filters.get(name, False)
+        for name in ("completed", "planned", "unfinished", "ongoing")
     )
-    status_unfiltered = filters.get("completed", False) and filters.get(
-        "planned", False
-    )
+    rating_unfiltered = filters.get("rated", False) and filters.get("unrated", False)
 
     async with connection_scope(database_url) as connection:
         async with connection.execute(
@@ -163,9 +175,22 @@ async def list_user_library(
               AND ((? AND m.content_type = 'movie')
                    OR (? AND m.content_type = 'anime')
                    OR (? AND m.content_type = 'cartoon'))
-              AND (? OR (? AND (um.status = 'completed'
-                                OR COALESCE(um.episodes_watched, 0) > 0))
-                     OR (? AND um.status = 'planned'))
+              AND (?
+                   OR (? AND um.status = 'completed')
+                   OR (? AND um.status = 'planned')
+                   OR (? AND m.content_format = 'series'
+                          AND um.status = 'watching'
+                          AND COALESCE(um.episodes_watched, 0) > 0
+                          AND COALESCE(um.episodes_watched, 0)
+                              < COALESCE(m.available_episode_count,
+                                         m.number_of_episodes, 0))
+                   OR (? AND m.content_format = 'series'
+                          AND (COALESCE(m.tmdb_in_production, 0) = 1
+                               OR m.tmdb_status IN (
+                                   'Returning Series', 'Planned', 'In Production'
+                               ))))
+              AND (? OR (? AND um.user_rating IS NOT NULL)
+                     OR (? AND um.user_rating IS NULL))
             ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,
@@ -179,6 +204,11 @@ async def list_user_library(
                 status_unfiltered,
                 filters.get("completed", False),
                 filters.get("planned", False),
+                filters.get("unfinished", False),
+                filters.get("ongoing", False),
+                rating_unfiltered,
+                filters.get("rated", False),
+                filters.get("unrated", False),
                 limit,
                 offset,
             ),

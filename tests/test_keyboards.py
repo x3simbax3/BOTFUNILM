@@ -25,6 +25,10 @@ class KeyboardsTests(unittest.TestCase):
             "cartoon": True,
             "completed": True,
             "planned": False,
+            "unfinished": False,
+            "ongoing": False,
+            "rated": True,
+            "unrated": True,
         }
 
         keyboard = keyboards.library_keyboard(filters, page=1, has_more=True)
@@ -32,24 +36,21 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(
             callback_rows(keyboard),
             [
-                ["library:sort:recent", "library:sort:rating"],
-                ["library:filter:series", "library:filter:full_length"],
                 [
-                    "library:filter:movie",
-                    "library:filter:anime",
-                    "library:filter:cartoon",
+                    "library:filters:format",
+                    "library:filters:category",
                 ],
-                ["library:filter:completed", "library:filter:planned"],
-                ["library:filter:all"],
+                ["library:filters:status", "library:filters:rating"],
+                ["library:filters:sort"],
                 ["library:page:0", "library:page:2"],
+                ["library:filter:all"],
                 ["back:main"],
             ],
         )
-        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✓\u00a0По дате")
-        self.assertEqual(keyboard.inline_keyboard[1][0].text, "✓\u00a0Сериалы")
-        self.assertEqual(keyboard.inline_keyboard[1][1].text, "Полный метр")
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "▤\u00a0Формат")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "◇\u00a0Категория")
         self.assertEqual(
-            [button.text for button in keyboard.inline_keyboard[-2]],
+            [button.text for button in keyboard.inline_keyboard[-3]],
             ["‹\u00a0Пред. страница", "След. страница\u00a0›"],
         )
 
@@ -65,12 +66,8 @@ class KeyboardsTests(unittest.TestCase):
         }
 
         keyboard = keyboards.library_keyboard(filters, page=0, has_more=False)
-        labels = [button.text for row in keyboard.inline_keyboard for button in row]
-
-        self.assertEqual(
-            [label for label in labels if label.startswith("✓")],
-            ["✓\u00a0По дате", "✓\u00a0Просмотрено"],
-        )
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "▤\u00a0Формат")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "◇\u00a0Категория")
 
     def test_filter_groups_show_only_one_selected_option(self) -> None:
         keyboard = keyboards.library_keyboard(
@@ -86,15 +83,9 @@ class KeyboardsTests(unittest.TestCase):
             page=0,
             has_more=False,
         )
-        labels = [button.text for row in keyboard.inline_keyboard for button in row]
-
-        self.assertIn("✓\u00a0Сериалы", labels)
-        self.assertIn("✓\u00a0Аниме", labels)
-        self.assertNotIn("✓\u00a0Полный метр", labels)
-        self.assertNotIn("✓\u00a0Кино", labels)
-        self.assertNotIn("✓\u00a0Мультфильмы", labels)
-        self.assertNotIn("✓\u00a0Просмотрено", labels)
-        self.assertIn("✓\u00a0Хочу посмотреть", labels)
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "▤\u00a0Формат")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "◇\u00a0Категория")
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "◉\u00a0Прогресс")
 
     def test_rating_sort_has_compact_selected_button(self) -> None:
         filters = {
@@ -114,7 +105,50 @@ class KeyboardsTests(unittest.TestCase):
             sort_order="rating",
         )
 
-        self.assertEqual(keyboard.inline_keyboard[0][1].text, "✓\u00a0По оценке")
+        self.assertEqual(
+            keyboard.inline_keyboard[2][0].text,
+            "↕\u00a0Сортировка",
+        )
+
+    def test_category_filter_is_wrapped_in_submenu(self) -> None:
+        filters = {
+            "movie": False,
+            "anime": True,
+            "cartoon": False,
+        }
+
+        keyboard = keyboards.library_keyboard(
+            filters,
+            page=0,
+            has_more=False,
+            filter_group="category",
+        )
+
+        self.assertEqual(
+            callback_rows(keyboard),
+            [
+                ["library:filter:category_all"],
+                ["library:filter:movie"],
+                ["library:filter:anime"],
+                ["library:filter:cartoon"],
+                ["library:filters:back"],
+            ],
+        )
+        self.assertEqual(keyboard.inline_keyboard[2][0].text, "✓\u00a0Аниме")
+
+    def test_all_category_marks_only_the_all_button(self) -> None:
+        keyboard = keyboards.library_keyboard(
+            {"movie": True, "anime": True, "cartoon": True},
+            page=0,
+            has_more=False,
+            filter_group="category",
+        )
+
+        labels = [button.text for row in keyboard.inline_keyboard for button in row]
+        self.assertEqual(
+            [label for label in labels if label.startswith("✓")],
+            ["✓\u00a0Все"],
+        )
 
     def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
         self.assertEqual(
@@ -201,6 +235,24 @@ class KeyboardsTests(unittest.TestCase):
         self.assertEqual(
             callback_rows(keyboard),
             [["season:all"], ["season:1"], ["season:done"]],
+        )
+
+    def test_future_season_is_not_selectable(self) -> None:
+        keyboard = keyboards.season_list_keyboard(
+            [
+                {
+                    "season_number": 2,
+                    "name": "Сезон 2",
+                    "episode_count": 0,
+                    "announced_episode_count": 12,
+                }
+            ],
+            {},
+        )
+
+        self.assertEqual(
+            callback_rows(keyboard),
+            [["season:all"], ["ep:noop"], ["season:done"]],
         )
 
     def test_rating_keyboard_has_back_button(self) -> None:

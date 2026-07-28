@@ -58,6 +58,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("media", "table"), objects)
         self.assertIn(("user_media", "table"), objects)
         self.assertIn(("user_season_progress", "table"), objects)
+        self.assertIn(("media_seasons", "table"), objects)
         self.assertIn(("user_library_filters", "table"), objects)
         self.assertIn(("ix_media_status", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
@@ -136,6 +137,15 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             in_production=True,
             number_of_seasons=2,
             number_of_episodes=16,
+            available_episode_count=12,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Season 1",
+                    "announced_episode_count": 12,
+                    "episode_count": 12,
+                }
+            ],
             poster_path=None,
             rating=None,
             next_episode_air_date="2026-08-10",
@@ -149,6 +159,21 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             in_production=True,
             number_of_seasons=2,
             number_of_episodes=17,
+            available_episode_count=13,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Season 1",
+                    "announced_episode_count": 12,
+                    "episode_count": 12,
+                },
+                {
+                    "season_number": 2,
+                    "name": "Season 2",
+                    "announced_episode_count": 5,
+                    "episode_count": 1,
+                },
+            ],
             poster_path="/new.jpg",
             rating=8.4,
             next_episode_air_date="2026-08-17",
@@ -166,12 +191,30 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["tmdb_status"], "Returning Series")
         self.assertEqual(row["tmdb_in_production"], 1)
         self.assertEqual(row["number_of_episodes"], 17)
+        self.assertEqual(row["available_episode_count"], 13)
         self.assertEqual(row["poster_path"], "/new.jpg")
         self.assertEqual(row["rating"], 8.4)
         self.assertEqual(row["next_episode_air_date"], "2026-08-17")
         self.assertEqual(row["next_episode_season_number"], 2)
         self.assertEqual(row["next_episode_number"], 6)
         self.assertIsNotNone(row["tmdb_release_checked_at"])
+
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                """
+                SELECT season_number, announced_episode_count,
+                       available_episode_count
+                FROM media_seasons
+                WHERE media_id = ?
+                ORDER BY season_number
+                """,
+                (media_id,),
+            ) as cursor:
+                seasons = await cursor.fetchall()
+        self.assertEqual(
+            [tuple(season) for season in seasons],
+            [(1, 12, 12), (2, 5, 1)],
+        )
 
     async def test_same_tmdb_id_is_allowed_for_different_classifications(self) -> None:
         movie_id = await upsert_media(
@@ -384,17 +427,15 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         other_user = await get_user_library_filters(456, database_url=self.database_url)
 
         self.assertTrue(defaults["completed"])
-        self.assertFalse(defaults["planned"])
-        self.assertTrue(
-            all(value for name, value in defaults.items() if name != "planned")
-        )
+        self.assertTrue(defaults["planned"])
+        self.assertTrue(all(defaults.values()))
         self.assertTrue(changed["anime"])
         self.assertFalse(changed["movie"])
         self.assertFalse(changed["cartoon"])
         self.assertTrue(changed["series"])
         self.assertTrue(changed["full_length"])
         self.assertTrue(other_user["completed"])
-        self.assertFalse(other_user["planned"])
+        self.assertTrue(other_user["planned"])
 
     async def test_library_filters_are_exclusive_within_each_group(self) -> None:
         series = await update_user_library_filter(
@@ -428,10 +469,8 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(planned["planned"])
         self.assertFalse(planned["completed"])
         self.assertTrue(reset["completed"])
-        self.assertFalse(reset["planned"])
-        self.assertTrue(
-            all(value for name, value in reset.items() if name != "planned")
-        )
+        self.assertTrue(reset["planned"])
+        self.assertTrue(all(reset.values()))
 
     async def test_clicking_selected_filter_restores_its_group(self) -> None:
         for filter_name, group in (
@@ -453,13 +492,13 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(selected[filter_name])
                 self.assertTrue(all(restored[name] for name in group))
 
-    async def test_clicking_selected_status_keeps_it_selected(self) -> None:
+    async def test_clicking_selected_status_restores_all_statuses(self) -> None:
         selected = await update_user_library_filter(
             123,
             "planned",
             database_url=self.database_url,
         )
-        unchanged = await update_user_library_filter(
+        restored = await update_user_library_filter(
             123,
             "planned",
             database_url=self.database_url,
@@ -467,7 +506,12 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(selected["planned"])
         self.assertFalse(selected["completed"])
-        self.assertEqual(unchanged, selected)
+        self.assertTrue(
+            all(
+                restored[name]
+                for name in ("completed", "planned", "unfinished", "ongoing")
+            )
+        )
 
     async def test_library_can_be_filtered_by_watch_status(self) -> None:
         completed_id = await upsert_media(
@@ -489,6 +533,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             content_format="series",
             content_type="movie",
             title="Начато",
+            number_of_episodes=10,
             database_url=self.database_url,
         )
         await save_user_media(
@@ -536,8 +581,37 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             {row["title"] for row in watched_rows},
-            {"Просмотрено", "Начато"},
+            {"Просмотрено"},
         )
+
+        unfinished_filters = await update_user_library_filter(
+            123,
+            "unfinished",
+            database_url=self.database_url,
+        )
+        unfinished_rows = await list_user_library(
+            123,
+            unfinished_filters,
+            database_url=self.database_url,
+        )
+        self.assertEqual([row["title"] for row in unfinished_rows], ["Начато"])
+
+        async with connection_scope(self.database_url) as connection:
+            await connection.execute(
+                "UPDATE media SET tmdb_status = 'Returning Series' WHERE id = ?",
+                (watching_id,),
+            )
+        ongoing_filters = await update_user_library_filter(
+            123,
+            "ongoing",
+            database_url=self.database_url,
+        )
+        ongoing_rows = await list_user_library(
+            123,
+            ongoing_filters,
+            database_url=self.database_url,
+        )
+        self.assertEqual([row["title"] for row in ongoing_rows], ["Начато"])
 
     async def test_library_is_filtered_and_paginated_newest_first(self) -> None:
         for index in range(25):
@@ -711,6 +785,34 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             [(row["season_number"], row["episodes_watched"]) for row in rows],
             [(1, 8), (2, 2)],
         )
+
+    async def test_caught_up_active_series_stays_watching(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=43,
+            content_format="series",
+            content_type="movie",
+            title="Active TV",
+            number_of_episodes=12,
+            available_episode_count=5,
+            database_url=self.database_url,
+        )
+        await save_user_series_progress(
+            user_id=123,
+            media_id=media_id,
+            seasons={1: 5},
+            total_episodes=5,
+            is_ongoing=True,
+            database_url=self.database_url,
+        )
+
+        progress = await get_user_media(
+            123,
+            media_id,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(progress["episodes_watched"], 5)
+        self.assertEqual(progress["status"], "watching")
 
     async def test_deleting_user_media_cascades_to_season_progress(self) -> None:
         media_id = await upsert_media(

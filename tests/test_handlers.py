@@ -82,6 +82,8 @@ class MessageStub:
         self.photo = []
         self.deleted = False
         self.from_user = SimpleNamespace(id=123)
+        self.chat = SimpleNamespace(id=123)
+        self.bot = SimpleNamespace(delete_message=AsyncMock())
 
     async def answer(self, text: str, **kwargs) -> SentMessageStub:
         stub = SentMessageStub(100 + len(self.answers) + len(self.photo_answers))
@@ -142,7 +144,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_start_deep_link_opens_owned_library_item(self) -> None:
         message = MessageStub(text="/start media_7")
-        state = StateStub()
+        state = StateStub({"library_message_id": 55})
         item = {
             "id": 7,
             "title": "Матрица",
@@ -172,6 +174,10 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.state, MenuState.viewing_media)
         self.assertIn("Матрица", message.answers[0]["text"])
         self.assertIn("Описание", message.answers[0]["text"])
+        message.bot.delete_message.assert_awaited_once_with(
+            chat_id=123,
+            message_id=55,
+        )
 
     async def test_opening_old_item_repairs_missing_poster_and_tmdb_rating(
         self,
@@ -297,13 +303,25 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         ):
             await library_handlers.show_library_item(message, state, 123, 8)
 
-        fetch_release.assert_awaited_once_with(84)
+        fetch_release.assert_awaited_once_with(
+            84,
+            include_episode_availability=True,
+        )
         update_release.assert_awaited_once_with(
             8,
             status="Returning Series",
             in_production=True,
             number_of_seasons=2,
             number_of_episodes=9,
+            available_episode_count=8,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "announced_episode_count": 8,
+                    "episode_count": 8,
+                }
+            ],
             poster_path=None,
             rating=None,
             next_episode_air_date="2026-09-15",
@@ -391,6 +409,7 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertIn("library:page:1", callbacks)
         self.assertEqual(state.data["library_sort"], "recent")
+        self.assertEqual(state.data["library_message_id"], 10)
         self.assertEqual(state.state, MenuState.viewing_library)
 
     async def test_sort_buttons_select_rating_and_recent_order(self) -> None:
@@ -410,6 +429,26 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state.data["library_sort"], "recent")
 
         self.assertEqual(open_page.await_count, 2)
+
+    async def test_library_filter_group_opens_and_returns_to_compact_menu(
+        self,
+    ) -> None:
+        state = StateStub({"library_page": 2})
+        category = CallbackStub("library:filters:category", MessageStub())
+        back = CallbackStub("library:filters:back", MessageStub())
+
+        with patch.object(
+            library_handlers,
+            "open_library_page",
+            AsyncMock(),
+        ) as open_page:
+            await library_handlers.open_library_filter_group(category, state)
+            self.assertEqual(state.data["library_filter_group"], "category")
+            await library_handlers.open_library_filter_group(back, state)
+
+        self.assertIsNone(state.data["library_filter_group"])
+        self.assertEqual(open_page.await_count, 2)
+        open_page.assert_awaited_with(back, state, 2)
 
     async def test_clicking_selected_sort_keeps_its_selection(self) -> None:
         callback = CallbackStub("library:sort:rating", MessageStub())
@@ -837,6 +876,14 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "content_type": "anime",
             }
         )
+        details = TmdbTvDetails(
+            number_of_seasons=1,
+            number_of_episodes=12,
+            seasons=[TmdbSeasonInfo(1, "Сезон 1", 12, 4)],
+            status="Returning Series",
+            in_production=True,
+            next_episode_to_air=TmdbEpisodeAirInfo(1, 5, "2026-08-01"),
+        )
 
         with (
             patch.object(
@@ -849,10 +896,41 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "save_user_media",
                 AsyncMock(),
             ) as save,
+            patch.object(
+                search_handlers,
+                "fetch_tv_details",
+                AsyncMock(return_value=details),
+            ),
+            patch.object(
+                search_handlers,
+                "update_media_series_release_info",
+                AsyncMock(),
+            ) as update_release,
         ):
             await search_handlers.choose_watch_status(callback, state)
 
         save.assert_awaited_once_with(user_id=123, media_id=7, status="planned")
+        update_release.assert_awaited_once_with(
+            7,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=1,
+            number_of_episodes=12,
+            available_episode_count=4,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "announced_episode_count": 12,
+                    "episode_count": 4,
+                }
+            ],
+            poster_path=None,
+            rating=None,
+            next_episode_air_date="2026-08-01",
+            next_episode_season_number=1,
+            next_episode_number=5,
+        )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertNotIn("ratings", state.data)
 
@@ -1214,7 +1292,14 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             state.data["seasons_data"],
-            [{"season_number": 1, "name": "Сезон 1", "episode_count": 8}],
+            [
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "episode_count": 8,
+                    "announced_episode_count": 8,
+                }
+            ],
         )
         self.assertEqual(state.data["watched_by_season"], {1: 3})
         self.assertEqual(state.data["total_episodes"], 8)
@@ -1265,6 +1350,46 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["episodes_watched_total"], 7)
         self.assertEqual(state.state, MenuState.tracking_series)
 
+    async def test_active_series_clamps_progress_to_aired_episodes(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:8", message)
+        state = StateStub(
+            {
+                "media_id": 7,
+                "tmdb_id": 42,
+                "tmdb_title": "Сериал",
+                "content_type": "movie",
+            }
+        )
+        details = TmdbTvDetails(
+            number_of_seasons=1,
+            number_of_episodes=12,
+            seasons=[TmdbSeasonInfo(1, "Сезон 1", 12, 5)],
+            status="Returning Series",
+            in_production=True,
+        )
+
+        with (
+            patch.object(
+                series_handlers,
+                "fetch_tv_details",
+                AsyncMock(return_value=details),
+            ) as fetch,
+            patch.object(
+                series_handlers,
+                "get_user_season_progress",
+                AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 12}]),
+            ),
+        ):
+            await series_handlers.start_series_tracking(callback, state)
+
+        fetch.assert_awaited_once_with(42, include_episode_availability=True)
+        self.assertEqual(state.data["total_episodes"], 5)
+        self.assertEqual(state.data["announced_total_episodes"], 12)
+        self.assertEqual(state.data["watched_by_season"], {1: 5})
+        self.assertTrue(state.data["is_ongoing"])
+        self.assertIn("вышло 5 из 12 сер.", message.answers[0]["text"])
+
     async def test_finish_series_saves_progress_and_returns_to_menu(self) -> None:
         message = MessageStub()
         callback = CallbackStub("season:done", message)
@@ -1282,6 +1407,12 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "watched_by_season": {1: 8, 2: 2},
                 "episodes_watched_total": 10,
                 "rating_average": 8.6,
+                "is_ongoing": True,
+                "tmdb_series_status": "Returning Series",
+                "tmdb_series_in_production": True,
+                "tmdb_next_episode_air_date": "2026-08-01",
+                "tmdb_next_episode_season_number": 2,
+                "tmdb_next_episode_number": 3,
             }
         )
 
@@ -1296,6 +1427,11 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "save_user_series_progress",
                 AsyncMock(),
             ) as save,
+            patch.object(
+                series_handlers,
+                "update_media_series_release_info",
+                AsyncMock(),
+            ) as update_release,
         ):
             await series_handlers.finish_series_tracking(callback, state)
 
@@ -1310,12 +1446,39 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             first_air_date=None,
             number_of_seasons=2,
             number_of_episodes=10,
+            available_episode_count=10,
+        )
+        update_release.assert_awaited_once_with(
+            7,
+            status="Returning Series",
+            in_production=True,
+            number_of_seasons=2,
+            number_of_episodes=10,
+            available_episode_count=10,
+            seasons=[
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "episode_count": 8,
+                },
+                {
+                    "season_number": 2,
+                    "name": "Сезон 2",
+                    "episode_count": 2,
+                },
+            ],
+            poster_path=None,
+            rating=None,
+            next_episode_air_date="2026-08-01",
+            next_episode_season_number=2,
+            next_episode_number=3,
         )
         save.assert_awaited_once_with(
             user_id=123,
             media_id=7,
             seasons={1: 8, 2: 2},
             total_episodes=10,
+            is_ongoing=True,
             user_rating=9,
         )
         self.assertEqual(state.state, MenuState.choosing_action)

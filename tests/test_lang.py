@@ -96,7 +96,7 @@ class LocalizationTests(unittest.TestCase):
         )
         self.assertIn("╭ <b>Моя библиотека</b>", result)
         self.assertIn(
-            "╰ <i>Сортировка по дате · фильтры на кнопках ниже</i>",
+            "╰ <i>Сортировка по дате</i>",
             result,
         )
         self.assertEqual(result.count("┈┈┈┈┈┈┈┈┈┈┈┈┈"), 1)
@@ -113,8 +113,34 @@ class LocalizationTests(unittest.TestCase):
             sort_order="rating",
         )
         self.assertIn(
-            "╰ <i>Сортировка по оценке · фильтры на кнопках ниже</i>",
+            "╰ <i>Сортировка по моей оценке</i>",
             rating_result,
+        )
+
+    def test_library_text_shows_active_filters_at_bottom(self) -> None:
+        result = lang.library_text(
+            [{"id": 7, "title": "Сериал", "content_format": "series"}],
+            "BotFunilmBot",
+            filters={
+                "full_length": False,
+                "series": True,
+                "movie": False,
+                "anime": True,
+                "cartoon": False,
+                "completed": False,
+                "planned": False,
+                "unfinished": True,
+                "ongoing": False,
+                "rated": True,
+                "unrated": True,
+            },
+        )
+
+        self.assertTrue(
+            result.endswith(
+                "<b>Фильтры</b> · Сериалы · Аниме · Не досмотрено\n"
+                "<i>Сортировка · по дате</i>"
+            )
         )
 
     def test_library_text_shows_series_progress_status_and_rating(self) -> None:
@@ -178,6 +204,24 @@ class LocalizationTests(unittest.TestCase):
             "Следующая серия · <b>2 сезон, 6 серия · 17.08.2026</b>",
             result,
         )
+        self.assertIn("🔴 <b>Сейчас выходит</b>", result)
+
+    def test_active_series_tracking_shows_aired_and_announced_totals(self) -> None:
+        result = lang.series_tracking_text(
+            "Сериал",
+            [
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "episode_count": 5,
+                    "announced_episode_count": 12,
+                }
+            ],
+            is_ongoing=True,
+        )
+
+        self.assertIn("вышло 5 из 12 сер.", result)
+        self.assertIn("🔴 <b>Сейчас выходит</b>", result)
 
     def test_series_text_rejects_progress_above_total(self) -> None:
         with self.assertRaises(ValueError):

@@ -32,6 +32,7 @@ async def save_user_series_progress(
     media_id: int,
     seasons: dict[int, int],
     total_episodes: int,
+    is_ongoing: bool = False,
     user_rating: int | None = None,
     database_url: str | None = None,
 ) -> None:
@@ -70,7 +71,7 @@ async def save_user_series_progress(
         await connection.execute(
             """
             UPDATE media
-            SET number_of_episodes = ?, last_updated = CURRENT_TIMESTAMP
+            SET available_episode_count = ?, last_updated = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (total_episodes, media_id),
@@ -100,7 +101,9 @@ async def save_user_series_progress(
 
         if episodes_watched == 0:
             status = "planned"
-        elif total_episodes > 0 and episodes_watched == total_episodes:
+        elif (
+            not is_ongoing and total_episodes > 0 and episodes_watched == total_episodes
+        ):
             status = "completed"
         else:
             status = "watching"

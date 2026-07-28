@@ -14,7 +14,7 @@ from src.callback_data import (
     parse_episode_callback,
     parse_season_callback,
 )
-from src.database.media import get_media_by_tmdb
+from src.database.media import get_media_by_tmdb, update_media_series_release_info
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.fsm import MenuState
 from src.keyboards import (
@@ -34,6 +34,7 @@ from src.lang import (
     PROGRESS_LOAD_FAILED,
     PROGRESS_SAVE_FAILED,
     SAVED_PROGRESS_INVALID,
+    SEASON_NOT_AVAILABLE,
     SEASON_NOT_FOUND,
     episodes_prompt_text,
     series_tracking_text,
@@ -49,6 +50,9 @@ from src.services import (
 from src.tmdb import TmdbError, fetch_tv_details
 
 router = Router(name="series")
+ACTIVE_TMDB_SERIES_STATUSES = frozenset(
+    {"Returning Series", "Planned", "In Production"}
+)
 
 
 async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> None:
@@ -57,7 +61,10 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
     title = data.get("tmdb_title", "")
 
     try:
-        details = await fetch_tv_details(tmdb_id)
+        details = await fetch_tv_details(
+            tmdb_id,
+            include_episode_availability=True,
+        )
     except TmdbError:
         await _leave_tracking(
             callback,
@@ -70,7 +77,12 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         {
             "season_number": season.season_number,
             "name": season.name,
-            "episode_count": season.episode_count,
+            "episode_count": (
+                season.available_episode_count
+                if season.available_episode_count is not None
+                else season.episode_count
+            ),
+            "announced_episode_count": season.episode_count,
         }
         for season in details.seasons
         if season.season_number > 0 and season.episode_count > 0
@@ -100,6 +112,12 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
             if int(row["season_number"]) != 0
         }
         total_episodes = sum(season_episode_limits(seasons_data).values())
+        limits = season_episode_limits(seasons_data)
+        watched = {
+            season_number: min(episodes_watched, limits[season_number])
+            for season_number, episodes_watched in watched.items()
+            if season_number in limits and limits[season_number] > 0
+        }
         watched = validate_series_progress(watched, seasons_data, total_episodes)
     except SeriesProgressError:
         await _leave_tracking(
@@ -114,12 +132,35 @@ async def start_series_tracking(callback: CallbackQuery, state: FSMContext) -> N
         seasons_data=seasons_data,
         total_seasons=details.number_of_seasons,
         total_episodes=total_episodes,
+        announced_total_episodes=details.number_of_episodes,
+        is_ongoing=_is_ongoing(details.status, details.in_production),
+        tmdb_series_status=details.status,
+        tmdb_series_in_production=details.in_production,
+        tmdb_next_episode_air_date=(
+            details.next_episode_to_air.air_date
+            if details.next_episode_to_air is not None
+            else None
+        ),
+        tmdb_next_episode_season_number=(
+            details.next_episode_to_air.season_number
+            if details.next_episode_to_air is not None
+            else None
+        ),
+        tmdb_next_episode_number=(
+            details.next_episode_to_air.episode_number
+            if details.next_episode_to_air is not None
+            else None
+        ),
         watched_by_season=watched,
         current_season=None,
         episodes_watched_total=sum(watched.values()),
     )
     await callback.message.answer(
-        series_tracking_text(title, seasons_data),
+        series_tracking_text(
+            title,
+            seasons_data,
+            is_ongoing=_is_ongoing(details.status, details.in_production),
+        ),
         parse_mode="HTML",
         reply_markup=season_list_keyboard(seasons_data, watched),
     )
@@ -180,7 +221,11 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
             current_season=None,
         )
         await callback.message.edit_text(
-            series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+            series_tracking_text(
+                data.get("tmdb_title", ""),
+                seasons_data,
+                is_ongoing=bool(data.get("is_ongoing")),
+            ),
             parse_mode="HTML",
             reply_markup=season_list_keyboard(seasons_data, watched),
         )
@@ -198,6 +243,9 @@ async def handle_season_selection(callback: CallbackQuery, state: FSMContext) ->
     )
     if not season_info:
         await callback.answer(SEASON_NOT_FOUND)
+        return
+    if season_info["episode_count"] == 0:
+        await callback.answer(SEASON_NOT_AVAILABLE, show_alert=True)
         return
 
     try:
@@ -287,7 +335,11 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
         seasons_data = data.get("seasons_data", [])
         await state.update_data(current_season=None)
         await callback.message.edit_text(
-            series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+            series_tracking_text(
+                data.get("tmdb_title", ""),
+                seasons_data,
+                is_ongoing=bool(data.get("is_ongoing")),
+            ),
             parse_mode="HTML",
             reply_markup=season_list_keyboard(seasons_data, watched),
         )
@@ -318,7 +370,11 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
     )
     seasons_data = data.get("seasons_data", [])
     await callback.message.edit_text(
-        series_tracking_text(data.get("tmdb_title", ""), seasons_data),
+        series_tracking_text(
+            data.get("tmdb_title", ""),
+            seasons_data,
+            is_ongoing=bool(data.get("is_ongoing")),
+        ),
         parse_mode="HTML",
         reply_markup=season_list_keyboard(seasons_data, watched),
     )
@@ -335,6 +391,8 @@ async def finish_series_tracking(
     data = await state.get_data()
     title = data.get("tmdb_title", "")
     total = data.get("total_episodes", 0)
+    announced_total = data.get("announced_total_episodes", total)
+    is_ongoing = bool(data.get("is_ongoing"))
     average = data.get("rating_average")
     try:
         watched = validate_series_progress(
@@ -358,13 +416,29 @@ async def finish_series_tracking(
             data,
             "series",
             number_of_seasons=data.get("total_seasons"),
-            number_of_episodes=total,
+            number_of_episodes=announced_total,
+            available_episode_count=total,
+        )
+        await update_media_series_release_info(
+            media_id,
+            status=data.get("tmdb_series_status"),
+            in_production=data.get("tmdb_series_in_production"),
+            number_of_seasons=data.get("total_seasons", 0),
+            number_of_episodes=announced_total,
+            available_episode_count=total,
+            seasons=data.get("seasons_data", []),
+            poster_path=None,
+            rating=None,
+            next_episode_air_date=data.get("tmdb_next_episode_air_date"),
+            next_episode_season_number=data.get("tmdb_next_episode_season_number"),
+            next_episode_number=data.get("tmdb_next_episode_number"),
         )
         await save_user_series_progress(
             user_id=callback.from_user.id,
             media_id=media_id,
             seasons=watched,
             total_episodes=total,
+            is_ongoing=is_ongoing,
             user_rating=round(average) if average is not None else None,
         )
     except (aiosqlite.Error, RuntimeError, ValueError):
@@ -376,7 +450,14 @@ async def finish_series_tracking(
 
     await state.update_data(watch_date=date.today().isoformat())
     await callback.message.edit_text(
-        tracking_complete_text(title, total, watched_total, average),
+        tracking_complete_text(
+            title,
+            total,
+            watched_total,
+            average,
+            is_ongoing=is_ongoing,
+            announced_episodes=announced_total,
+        ),
         parse_mode="HTML",
     )
     await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
@@ -406,3 +487,7 @@ def _progress_from_state(value: object) -> dict[int, int]:
             raise SeriesProgressError("Duplicate season in progress state")
         progress[season_number] = episodes_watched
     return progress
+
+
+def _is_ongoing(status: str | None, in_production: bool | None) -> bool:
+    return bool(in_production) or status in ACTIVE_TMDB_SERIES_STATUSES

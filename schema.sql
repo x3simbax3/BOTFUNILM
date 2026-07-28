@@ -16,6 +16,10 @@ CREATE TABLE media (
                         CHECK (number_of_seasons IS NULL OR number_of_seasons >= 0),
     number_of_episodes  INTEGER
                         CHECK (number_of_episodes IS NULL OR number_of_episodes >= 0),
+    available_episode_count INTEGER CHECK (
+                            available_episode_count IS NULL
+                            OR available_episode_count >= 0
+                        ),
     library_users_count INTEGER NOT NULL DEFAULT 0
                         CHECK (library_users_count >= 0),
     tmdb_status         TEXT,
@@ -39,6 +43,22 @@ CREATE TABLE media (
 );
 
 CREATE INDEX ix_media_status ON media (status);
+
+CREATE TABLE media_seasons (
+    media_id                  INTEGER NOT NULL,
+    season_number             INTEGER NOT NULL CHECK (season_number > 0),
+    name                      TEXT NOT NULL,
+    announced_episode_count   INTEGER NOT NULL
+                              CHECK (announced_episode_count >= 0),
+    available_episode_count   INTEGER NOT NULL CHECK (
+                                  available_episode_count >= 0
+                                  AND available_episode_count
+                                      <= announced_episode_count
+                              ),
+    last_updated              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (media_id, season_number),
+    FOREIGN KEY (media_id) REFERENCES media (id) ON DELETE CASCADE
+);
 
 CREATE TABLE user_media (
     user_id             INTEGER NOT NULL,
@@ -92,5 +112,9 @@ CREATE TABLE user_library_filters (
     cartoon             INTEGER NOT NULL DEFAULT 1 CHECK (cartoon IN (0, 1)),
     completed           INTEGER NOT NULL DEFAULT 1 CHECK (completed IN (0, 1)),
     planned             INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),
+    unfinished          INTEGER NOT NULL DEFAULT 1 CHECK (unfinished IN (0, 1)),
+    ongoing             INTEGER NOT NULL DEFAULT 1 CHECK (ongoing IN (0, 1)),
+    rated               INTEGER NOT NULL DEFAULT 1 CHECK (rated IN (0, 1)),
+    unrated             INTEGER NOT NULL DEFAULT 1 CHECK (unrated IN (0, 1)),
     PRIMARY KEY (user_id)
 );

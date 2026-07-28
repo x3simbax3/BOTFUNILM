@@ -78,10 +78,16 @@ async def upsert_media(
     first_air_date: str | None = None,
     number_of_seasons: int | None = None,
     number_of_episodes: int | None = None,
+    available_episode_count: int | None = None,
     status: str | None = None,
     database_url: str | None = None,
 ) -> int:
     """Insert media or refresh an existing TMDB-backed record."""
+    resolved_available_episode_count = (
+        available_episode_count
+        if available_episode_count is not None
+        else number_of_episodes
+    )
     values = (
         tmdb_id,
         content_format,
@@ -95,6 +101,7 @@ async def upsert_media(
         first_air_date,
         number_of_seasons,
         number_of_episodes,
+        resolved_available_episode_count,
         status,
     )
 
@@ -106,8 +113,9 @@ async def upsert_media(
                     tmdb_id, content_format, content_type, title,
                     original_title, description,
                     poster_path, rating, release_date, first_air_date,
-                    number_of_seasons, number_of_episodes, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    number_of_seasons, number_of_episodes,
+                    available_episode_count, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 values,
             ) as cursor:
@@ -119,8 +127,9 @@ async def upsert_media(
                 tmdb_id, content_format, content_type, title,
                 original_title, description,
                 poster_path, rating, release_date, first_air_date,
-                number_of_seasons, number_of_episodes, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                number_of_seasons, number_of_episodes,
+                available_episode_count, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tmdb_id, content_format, content_type) DO UPDATE SET
                 title = excluded.title,
                 original_title = excluded.original_title,
@@ -131,6 +140,7 @@ async def upsert_media(
                 first_air_date = excluded.first_air_date,
                 number_of_seasons = excluded.number_of_seasons,
                 number_of_episodes = excluded.number_of_episodes,
+                available_episode_count = excluded.available_episode_count,
                 status = excluded.status,
                 last_updated = CURRENT_TIMESTAMP
             """,
@@ -194,6 +204,8 @@ async def update_media_series_release_info(
     in_production: bool | None,
     number_of_seasons: int,
     number_of_episodes: int,
+    available_episode_count: int,
+    seasons: list[dict],
     poster_path: str | None,
     rating: float | None,
     next_episode_air_date: str | None,
@@ -208,6 +220,11 @@ async def update_media_series_release_info(
             UPDATE media
             SET tmdb_status = ?, tmdb_in_production = ?,
                 number_of_seasons = ?, number_of_episodes = ?,
+                available_episode_count = MAX(?, COALESCE((
+                    SELECT MAX(episodes_watched)
+                    FROM user_media
+                    WHERE media_id = ?
+                ), 0)),
                 poster_path = COALESCE(?, poster_path),
                 rating = COALESCE(?, rating),
                 next_episode_air_date = ?, next_episode_season_number = ?,
@@ -221,6 +238,8 @@ async def update_media_series_release_info(
                 in_production,
                 number_of_seasons,
                 number_of_episodes,
+                available_episode_count,
+                media_id,
                 poster_path,
                 rating,
                 next_episode_air_date,
@@ -228,6 +247,111 @@ async def update_media_series_release_info(
                 next_episode_number,
                 media_id,
             ),
+        )
+        await _replace_media_seasons(connection, media_id, seasons)
+        await connection.execute(
+            """
+            UPDATE user_season_progress
+            SET episodes_watched = (
+                    SELECT ms.available_episode_count
+                    FROM media_seasons AS ms
+                    WHERE ms.media_id = user_season_progress.media_id
+                      AND ms.season_number = user_season_progress.season_number
+                ),
+                last_watched_at = CURRENT_TIMESTAMP
+            WHERE media_id = ?
+              AND EXISTS (
+                  SELECT 1 FROM media_seasons AS ms
+                  WHERE ms.media_id = user_season_progress.media_id
+                    AND ms.season_number = user_season_progress.season_number
+                    AND user_season_progress.episodes_watched
+                        > ms.available_episode_count
+              )
+            """,
+            (media_id,),
+        )
+        active = bool(in_production) or status in {
+            "Returning Series",
+            "Planned",
+            "In Production",
+        }
+        await connection.execute(
+            """
+            UPDATE user_media
+            SET episodes_watched = COALESCE((
+                    SELECT SUM(usp.episodes_watched)
+                    FROM user_season_progress AS usp
+                    WHERE usp.user_id = user_media.user_id
+                      AND usp.media_id = user_media.media_id
+                ), 0),
+                status = CASE
+                    WHEN COALESCE((
+                        SELECT SUM(usp.episodes_watched)
+                        FROM user_season_progress AS usp
+                        WHERE usp.user_id = user_media.user_id
+                          AND usp.media_id = user_media.media_id
+                    ), 0) = 0 THEN 'planned'
+                    WHEN ? THEN 'watching'
+                    WHEN COALESCE((
+                        SELECT SUM(usp.episodes_watched)
+                        FROM user_season_progress AS usp
+                        WHERE usp.user_id = user_media.user_id
+                          AND usp.media_id = user_media.media_id
+                    ), 0) = ? THEN 'completed'
+                    ELSE 'watching'
+                END,
+                last_watched_at = CURRENT_TIMESTAMP
+            WHERE media_id = ?
+            """,
+            (active, available_episode_count, media_id),
+        )
+        await connection.execute(
+            """
+            UPDATE media
+            SET available_episode_count = ?
+            WHERE id = ?
+            """,
+            (available_episode_count, media_id),
+        )
+
+
+async def replace_media_seasons(
+    media_id: int,
+    seasons: list[dict],
+    *,
+    database_url: str | None = None,
+) -> None:
+    """Replace cached season availability from one TMDB response."""
+    async with connection_scope(database_url) as connection:
+        await _replace_media_seasons(connection, media_id, seasons)
+
+
+async def _replace_media_seasons(
+    connection: aiosqlite.Connection,
+    media_id: int,
+    seasons: list[dict],
+) -> None:
+    await connection.execute(
+        "DELETE FROM media_seasons WHERE media_id = ?", (media_id,)
+    )
+    if seasons:
+        await connection.executemany(
+            """
+            INSERT INTO media_seasons (
+                media_id, season_number, name,
+                announced_episode_count, available_episode_count
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    media_id,
+                    season["season_number"],
+                    season["name"],
+                    season.get("announced_episode_count", season["episode_count"]),
+                    season["episode_count"],
+                )
+                for season in seasons
+            ],
         )
 
 
@@ -240,6 +364,7 @@ def _last_row_id(cursor: aiosqlite.Cursor) -> int:
 __all__ = (
     "find_media_by_title",
     "get_media_by_tmdb",
+    "replace_media_seasons",
     "upsert_media",
     "update_media_metadata",
     "update_media_poster",

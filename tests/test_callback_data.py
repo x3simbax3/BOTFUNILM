@@ -10,6 +10,7 @@ from src.callback_data import (
     parse_episode_callback,
     parse_format_callback,
     parse_library_filter_callback,
+    parse_library_filter_group_callback,
     parse_library_page_callback,
     parse_library_sort_callback,
     parse_rating_callback,
@@ -42,6 +43,14 @@ class CallbackDataTests(unittest.TestCase):
         )
         self.assertEqual(parse_library_sort_callback("library:sort:rating"), "rating")
         self.assertEqual(parse_library_sort_callback("library:sort:recent"), "recent")
+        self.assertEqual(
+            parse_library_filter_group_callback("library:filters:category"),
+            "category",
+        )
+        self.assertEqual(
+            parse_library_sort_callback("library:sort:tmdb_rating"),
+            "tmdb_rating",
+        )
 
     def test_rejects_unknown_values_and_extra_segments(self) -> None:
         invalid_callbacks = (
@@ -56,6 +65,7 @@ class CallbackDataTests(unittest.TestCase):
             (parse_library_filter_callback, "library:filter:anime:extra"),
             (parse_library_sort_callback, "library:sort:unknown"),
             (parse_library_sort_callback, "library:sort:rating:extra"),
+            (parse_library_filter_group_callback, "library:filters:unknown"),
         )
         for parser, value in invalid_callbacks:
             with self.subTest(value=value):

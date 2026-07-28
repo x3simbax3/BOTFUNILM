@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 
 from src.callback_data import (
     parse_library_filter_callback,
+    parse_library_filter_group_callback,
     parse_library_page_callback,
     parse_library_sort_callback,
 )
@@ -69,8 +70,25 @@ ACTIVE_TMDB_SERIES_STATUSES = frozenset(
 @router.callback_query(F.data == "menu:library")
 async def open_library(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
-        await state.update_data(library_sort="recent")
+        await state.update_data(library_sort="recent", library_filter_group=None)
         await open_library_page(callback, state, 0)
+
+
+@router.callback_query(F.data.startswith("library:filters:"))
+async def open_library_filter_group(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.data or not callback.message:
+        return
+
+    group = parse_library_filter_group_callback(callback.data)
+    if group is None:
+        await callback.answer(UNKNOWN_FILTER, show_alert=True)
+        return
+    await state.update_data(library_filter_group=None if group == "back" else group)
+    data = await state.get_data()
+    await open_library_page(callback, state, int(data.get("library_page", 0)))
 
 
 @router.callback_query(F.data.startswith("library:filter:"))
@@ -92,7 +110,7 @@ async def change_library_filter(callback: CallbackQuery, state: FSMContext) -> N
         return
 
     if filter_name == "all":
-        await state.update_data(library_sort="recent")
+        await state.update_data(library_sort="recent", library_filter_group=None)
     await open_library_page(callback, state, 0)
 
 
@@ -142,8 +160,11 @@ async def open_library_page(
 
     data = await state.get_data()
     sort_order = data.get("library_sort", "recent")
-    if sort_order not in {"recent", "rating"}:
+    if sort_order not in {"recent", "rating", "tmdb_rating", "title"}:
         sort_order = "recent"
+    filter_group = data.get("library_filter_group")
+    if filter_group not in {"format", "category", "status", "rating", "sort"}:
+        filter_group = None
 
     try:
         filters = await get_user_library_filters(callback.from_user.id)
@@ -162,15 +183,15 @@ async def open_library_page(
         return
 
     visible_items = items[:LIBRARY_PAGE_SIZE]
-    await state.update_data(library_page=page, library_sort=sort_order)
     await state.set_state(MenuState.viewing_library)
-    await replace_message(
+    library_message = await replace_message(
         callback.message,
         library_text(
             visible_items,
             bot_user.username,
             page * LIBRARY_PAGE_SIZE,
             sort_order,
+            filters,
         ),
         parse_mode="HTML",
         reply_markup=library_keyboard(
@@ -178,8 +199,15 @@ async def open_library_page(
             page,
             len(items) > LIBRARY_PAGE_SIZE,
             sort_order,
+            filter_group,
         ),
         link_preview_options=LinkPreviewOptions(is_disabled=True),
+    )
+    await state.update_data(
+        library_page=page,
+        library_sort=sort_order,
+        library_message_id=library_message.message_id,
+        library_filter_group=filter_group,
     )
     await callback.answer()
 
@@ -189,16 +217,16 @@ async def show_library_item(
     state: FSMContext,
     user_id: int,
     media_id: int,
-) -> None:
+) -> bool:
     try:
         item = await get_user_library_item(user_id, media_id)
     except aiosqlite.Error:
         await _show_library_error(message, state, ITEM_OPEN_FAILED)
-        return
+        return False
 
     if item is None:
         await _show_library_error(message, state, ITEM_NOT_FOUND)
-        return
+        return False
 
     item, photo = await _refresh_item_metadata(item)
     text = library_item_caption(item)
@@ -211,6 +239,7 @@ async def show_library_item(
     )
     await state.update_data(media_id=media_id, library_page=0)
     await state.set_state(MenuState.viewing_media)
+    return True
 
 
 @router.callback_query(MenuState.viewing_media, F.data == "library:item:edit")
@@ -428,7 +457,10 @@ async def _refresh_item_metadata(item):
     series_refresh_attempted = _should_refresh_series_release(refreshed)
     if series_refresh_attempted:
         try:
-            series_details = await fetch_tv_details(int(refreshed["tmdb_id"]))
+            series_details = await fetch_tv_details(
+                int(refreshed["tmdb_id"]),
+                include_episode_availability=True,
+            )
         except (TmdbError, ValueError):
             pass
         else:
@@ -447,6 +479,12 @@ async def _refresh_item_metadata(item):
                 "tmdb_in_production": series_details.in_production,
                 "number_of_seasons": series_details.number_of_seasons,
                 "number_of_episodes": series_details.number_of_episodes,
+                "available_episode_count": sum(
+                    season.available_episode_count
+                    if season.available_episode_count is not None
+                    else season.episode_count
+                    for season in series_details.seasons
+                ),
                 "next_episode_air_date": (
                     next_episode.air_date if next_episode is not None else None
                 ),
@@ -457,7 +495,32 @@ async def _refresh_item_metadata(item):
                     next_episode.episode_number if next_episode is not None else None
                 ),
             }
+            seasons = [
+                {
+                    "season_number": season.season_number,
+                    "name": season.name,
+                    "announced_episode_count": season.episode_count,
+                    "episode_count": (
+                        season.available_episode_count
+                        if season.available_episode_count is not None
+                        else season.episode_count
+                    ),
+                }
+                for season in series_details.seasons
+                if season.season_number > 0
+            ]
             refreshed.update(release_values)
+            if refreshed.get("episodes_watched") is not None:
+                refreshed["episodes_watched"] = min(
+                    int(refreshed["episodes_watched"]),
+                    release_values["available_episode_count"],
+                )
+                if release_values["available_episode_count"] == 0:
+                    refreshed["user_status"] = "planned"
+                elif bool(series_details.in_production) or (
+                    series_details.status in ACTIVE_TMDB_SERIES_STATUSES
+                ):
+                    refreshed["user_status"] = "watching"
             try:
                 await update_media_series_release_info(
                     int(refreshed["id"]),
@@ -465,6 +528,8 @@ async def _refresh_item_metadata(item):
                     in_production=release_values["tmdb_in_production"],
                     number_of_seasons=release_values["number_of_seasons"],
                     number_of_episodes=release_values["number_of_episodes"],
+                    available_episode_count=release_values["available_episode_count"],
+                    seasons=seasons,
                     poster_path=poster_path,
                     rating=rating,
                     next_episode_air_date=release_values["next_episode_air_date"],

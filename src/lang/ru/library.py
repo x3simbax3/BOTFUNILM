@@ -44,18 +44,25 @@ def library_text(
     bot_username: str,
     offset: int = 0,
     sort_order: str = "recent",
+    filters: dict[str, bool] | None = None,
 ) -> str:
     if not items:
         return (
             f"{LIBRARY_HEADING}\n"
             "╰ <i>Ничего не найдено</i>\n\n"
-            "Измени фильтры и попробуй снова."
+            "Измени фильтры и попробуй снова.\n\n"
+            f"{_active_filters_text(filters, sort_order)}"
         )
 
-    heading = "по оценке" if sort_order == "rating" else "по дате"
+    heading = {
+        "recent": "по дате",
+        "rating": "по моей оценке",
+        "tmdb_rating": "по оценке TMDB",
+        "title": "по названию",
+    }.get(sort_order, "по дате")
     lines = [
         LIBRARY_HEADING,
-        f"╰ <i>Сортировка {heading} · фильтры на кнопках ниже</i>",
+        f"╰ <i>Сортировка {heading}</i>",
         "",
     ]
     for index, item in enumerate(items, start=offset + 1):
@@ -64,7 +71,47 @@ def library_text(
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
         lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
         lines.append(_library_item_summary(item))
+    lines.extend(["", _active_filters_text(filters, sort_order)])
     return "\n".join(lines)
+
+
+def _active_filters_text(
+    filters: dict[str, bool] | None,
+    sort_order: str,
+) -> str:
+    if filters is None:
+        return "<b>Фильтры</b> · Все"
+    groups = (
+        (
+            ("full_length", "Полный метр"),
+            ("series", "Сериалы"),
+        ),
+        (
+            ("movie", "Кино"),
+            ("anime", "Аниме"),
+            ("cartoon", "Мультфильмы"),
+        ),
+        (
+            ("completed", "Просмотрено"),
+            ("planned", "Хочу посмотреть"),
+            ("unfinished", "Не досмотрено"),
+            ("ongoing", "Сейчас выходит"),
+        ),
+        (("rated", "С оценкой"), ("unrated", "Без оценки")),
+    )
+    selected: list[str] = []
+    for group in groups:
+        active = [label for name, label in group if filters.get(name, False)]
+        if len(active) != len(group):
+            selected.extend(active or ["Ничего"])
+    filter_text = " · ".join(selected) if selected else "Все"
+    sort_text = {
+        "recent": "по дате",
+        "rating": "по моей оценке",
+        "tmdb_rating": "по TMDB",
+        "title": "по названию",
+    }.get(sort_order, "по дате")
+    return f"<b>Фильтры</b> · {escape(filter_text)}\n<i>Сортировка · {sort_text}</i>"
 
 
 def _library_item_summary(item) -> str:
@@ -72,7 +119,9 @@ def _library_item_summary(item) -> str:
     status_value = _item_value(item, "user_status")
     if _item_value(item, "content_format") == "series":
         watched = _item_value(item, "episodes_watched", 0) or 0
-        total = _item_value(item, "number_of_episodes")
+        total = _item_value(item, "available_episode_count")
+        if total is None:
+            total = _item_value(item, "number_of_episodes")
         progress = (
             f"{watched} из {total} серий" if total is not None else f"{watched} серий"
         )
@@ -115,9 +164,12 @@ def library_item_text(item, description: str | None = None) -> str:
     lines.append(f"Статус · <b>{status_icon} {escape(user_status)}</b>")
     if item["number_of_episodes"] is not None:
         watched = item["episodes_watched"] or 0
-        lines.append(
-            f"Прогресс · <b>{watched} из {item['number_of_episodes']} серий</b>"
+        progress_total = _item_value(
+            item,
+            "available_episode_count",
+            item["number_of_episodes"],
         )
+        lines.append(f"Прогресс · <b>{watched} из {progress_total} вышедших серий</b>")
     if item["user_rating"] is not None:
         lines.append(f"Оценка · <b>{item['user_rating']}/10</b>")
 
@@ -131,7 +183,13 @@ def library_item_text(item, description: str | None = None) -> str:
     if item["number_of_seasons"] is not None:
         lines.append(f"Сезонов · <b>{item['number_of_seasons']}</b>")
     if item["number_of_episodes"] is not None:
-        lines.append(f"Серий · <b>{item['number_of_episodes']}</b>")
+        available = _item_value(item, "available_episode_count")
+        if available is not None and available != item["number_of_episodes"]:
+            lines.append(
+                f"Серий · <b>вышло {available} из {item['number_of_episodes']}</b>"
+            )
+        else:
+            lines.append(f"Серий · <b>{item['number_of_episodes']}</b>")
     release_line = _series_release_line(item)
     if release_line is not None:
         lines.append(release_line)
@@ -159,12 +217,15 @@ def _series_release_line(item) -> str | None:
     if type(season_number) is int and type(episode_number) is int:
         date_suffix = f" · {air_date}" if air_date is not None else ""
         if episode_number == 1:
-            return f"Новый сезон · <b>{season_number} сезон{date_suffix}</b>"
-        return (
-            "Следующая серия · "
-            f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
-        )
-    return "Новые серии · <b>дата пока неизвестна</b>"
+            detail = f"Новый сезон · <b>{season_number} сезон{date_suffix}</b>"
+        else:
+            detail = (
+                "Следующая серия · "
+                f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
+            )
+    else:
+        detail = "Новые серии · <b>дата пока неизвестна</b>"
+    return f"🔴 <b>Сейчас выходит</b>\n{detail}"
 
 
 def _format_air_date(value) -> str | None:

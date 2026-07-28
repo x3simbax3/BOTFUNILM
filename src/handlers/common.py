@@ -46,7 +46,7 @@ async def replace_message(
     parse_mode: str | None = None,
     reply_markup=None,
     link_preview_options: LinkPreviewOptions | None = None,
-) -> None:
+) -> Message:
     if message.photo:
         await message.delete()
         answer_options = {
@@ -55,8 +55,7 @@ async def replace_message(
         }
         if link_preview_options is not None:
             answer_options["link_preview_options"] = link_preview_options
-        await message.answer(text, **answer_options)
-        return
+        return await message.answer(text, **answer_options)
 
     await edit_message(
         message,
@@ -65,6 +64,7 @@ async def replace_message(
         reply_markup,
         link_preview_options,
     )
+    return message
 
 
 async def delete_message_safely(message: Message) -> bool:

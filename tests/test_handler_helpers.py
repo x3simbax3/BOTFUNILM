@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from aiogram.exceptions import TelegramBadRequest
@@ -88,6 +89,17 @@ class EditMessageTests(unittest.IsolatedAsyncioTestCase):
             await common.edit_message(message, "New text")
 
         self.assertIs(raised.exception, error)
+
+    async def test_replacing_photo_returns_new_message(self) -> None:
+        replacement = SimpleNamespace(message_id=101)
+        message = AsyncMock()
+        message.photo = ["poster"]
+        message.answer.return_value = replacement
+
+        result = await common.replace_message(message, "Library")
+
+        self.assertIs(result, replacement)
+        message.delete.assert_awaited_once_with()
 
 
 class ActiveTmdbGuessTests(unittest.IsolatedAsyncioTestCase):

@@ -5,6 +5,7 @@ the established ``src.tmdb`` API stable for handlers and other callers.
 """
 
 import logging
+from datetime import date
 
 import aiohttp
 
@@ -130,7 +131,11 @@ async def find_title_candidates(
     raise TmdbNotFoundError(original_query)
 
 
-async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
+async def fetch_tv_details(
+    tv_id: int,
+    *,
+    include_episode_availability: bool = False,
+) -> TmdbTvDetails:
     """Fetch regular season and episode counts for a TV series.
 
     TMDB stores specials and bonus material in season 0, but excludes them from
@@ -147,46 +152,60 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
     if not data:
         raise TmdbError("Не удалось получить информацию о сериале")
 
-    seasons = []
+    raw_regular_seasons = []
     for raw_season in data.get("seasons") or []:
         season_number = raw_season.get("season_number", 0)
         if season_number <= 0:
             continue
-        seasons.append(
-            TmdbSeasonInfo(
-                season_number=season_number,
-                name=raw_season.get("name", default_season_name(season_number)),
-                episode_count=raw_season.get("episode_count", 0),
-            )
-        )
+        raw_regular_seasons.append(raw_season)
 
-    raw_next_episode = data.get("next_episode_to_air")
-    next_episode = None
-    if isinstance(raw_next_episode, dict):
-        season_number = raw_next_episode.get("season_number")
-        episode_number = raw_next_episode.get("episode_number")
-        if (
-            type(season_number) is int
-            and season_number > 0
-            and type(episode_number) is int
-            and episode_number > 0
-        ):
-            air_date = raw_next_episode.get("air_date")
-            next_episode = TmdbEpisodeAirInfo(
-                season_number=season_number,
-                episode_number=episode_number,
-                air_date=air_date if isinstance(air_date, str) and air_date else None,
-            )
+    next_episode = _parse_episode_air_info(data.get("next_episode_to_air"))
+    last_episode = _parse_episode_air_info(data.get("last_episode_to_air"))
 
     raw_status = data.get("status")
     raw_in_production = data.get("in_production")
+    status = raw_status if isinstance(raw_status, str) and raw_status else None
+    in_production = raw_in_production if type(raw_in_production) is bool else None
+    active = bool(in_production) or status in {
+        "Returning Series",
+        "Planned",
+        "In Production",
+    }
+    seasons = [
+        TmdbSeasonInfo(
+            season_number=raw_season["season_number"],
+            name=raw_season.get(
+                "name",
+                default_season_name(raw_season["season_number"]),
+            ),
+            episode_count=raw_season.get("episode_count", 0),
+            available_episode_count=_infer_available_episode_count(
+                raw_season["season_number"],
+                raw_season.get("episode_count", 0),
+                active=active,
+                next_episode=next_episode,
+                last_episode=last_episode,
+            ),
+        )
+        for raw_season in raw_regular_seasons
+    ]
+    if include_episode_availability and active:
+        seasons = await _refresh_active_season_availability(
+            session,
+            url,
+            seasons,
+            next_episode=next_episode,
+            last_episode=last_episode,
+        )
+
     return TmdbTvDetails(
         number_of_seasons=data.get("number_of_seasons", len(seasons)),
         number_of_episodes=data.get("number_of_episodes", 0),
         seasons=seasons,
-        status=raw_status if isinstance(raw_status, str) and raw_status else None,
-        in_production=(raw_in_production if type(raw_in_production) is bool else None),
+        status=status,
+        in_production=in_production,
         next_episode_to_air=next_episode,
+        last_episode_to_air=last_episode,
         poster_path=(
             data.get("poster_path")
             if isinstance(data.get("poster_path"), str) and data.get("poster_path")
@@ -194,6 +213,108 @@ async def fetch_tv_details(tv_id: int) -> TmdbTvDetails:
         ),
         rating=_parse_rating(data.get("vote_average")),
     )
+
+
+def _parse_episode_air_info(value: object) -> TmdbEpisodeAirInfo | None:
+    if not isinstance(value, dict):
+        return None
+    season_number = value.get("season_number")
+    episode_number = value.get("episode_number")
+    if (
+        type(season_number) is not int
+        or season_number <= 0
+        or type(episode_number) is not int
+        or episode_number <= 0
+    ):
+        return None
+    air_date = value.get("air_date")
+    return TmdbEpisodeAirInfo(
+        season_number=season_number,
+        episode_number=episode_number,
+        air_date=air_date if isinstance(air_date, str) and air_date else None,
+    )
+
+
+def _infer_available_episode_count(
+    season_number: int,
+    episode_count: int,
+    *,
+    active: bool,
+    next_episode: TmdbEpisodeAirInfo | None,
+    last_episode: TmdbEpisodeAirInfo | None,
+) -> int:
+    if not active:
+        return episode_count
+    if next_episode is not None:
+        if season_number < next_episode.season_number:
+            return episode_count
+        if season_number == next_episode.season_number:
+            return min(episode_count, next_episode.episode_number - 1)
+        return 0
+    if last_episode is not None:
+        if season_number < last_episode.season_number:
+            return episode_count
+        if season_number == last_episode.season_number:
+            return min(episode_count, last_episode.episode_number)
+        return 0
+    return episode_count
+
+
+async def _refresh_active_season_availability(
+    session: aiohttp.ClientSession,
+    series_url: str,
+    seasons: list[TmdbSeasonInfo],
+    *,
+    next_episode: TmdbEpisodeAirInfo | None,
+    last_episode: TmdbEpisodeAirInfo | None,
+) -> list[TmdbSeasonInfo]:
+    boundary_candidates = [
+        episode.season_number
+        for episode in (last_episode, next_episode)
+        if episode is not None
+    ]
+    boundary = min(
+        boundary_candidates,
+        default=max((season.season_number for season in seasons), default=1),
+    )
+    refreshed = []
+    today = date.today()
+    for season in seasons:
+        if season.season_number < boundary:
+            refreshed.append(season)
+            continue
+        try:
+            season_data = await _fetch_json(
+                session,
+                f"{series_url}/season/{season.season_number}",
+                {"language": TMDB_LANG},
+            )
+        except TmdbError:
+            refreshed.append(season)
+            continue
+        available = sum(
+            1
+            for episode in season_data.get("episodes") or []
+            if _episode_has_aired(episode.get("air_date"), today)
+        )
+        refreshed.append(
+            TmdbSeasonInfo(
+                season_number=season.season_number,
+                name=season.name,
+                episode_count=season.episode_count,
+                available_episode_count=min(season.episode_count, available),
+            )
+        )
+    return refreshed
+
+
+def _episode_has_aired(value: object, today: date) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        return date.fromisoformat(value) <= today
+    except ValueError:
+        return False
 
 
 async def fetch_title_details(tmdb_id: int, content_format: str) -> TmdbTitle:

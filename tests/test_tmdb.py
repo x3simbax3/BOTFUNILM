@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
@@ -284,6 +285,57 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
             ],
             [(1, 6), (2, 4)],
         )
+
+    async def test_active_series_counts_only_aired_episodes(self) -> None:
+        series_data = {
+            "number_of_seasons": 1,
+            "number_of_episodes": 12,
+            "status": "Returning Series",
+            "in_production": True,
+            "last_episode_to_air": {
+                "season_number": 1,
+                "episode_number": 5,
+                "air_date": "2026-07-20",
+            },
+            "next_episode_to_air": {
+                "season_number": 1,
+                "episode_number": 6,
+                "air_date": "2026-08-03",
+            },
+            "seasons": [{"season_number": 1, "name": "Season 1", "episode_count": 12}],
+        }
+        season_data = {
+            "episodes": [
+                {"episode_number": episode, "air_date": "2026-07-20"}
+                for episode in range(1, 6)
+            ]
+            + [
+                {"episode_number": episode, "air_date": "2026-08-03"}
+                for episode in range(6, 13)
+            ]
+        }
+        fetch = AsyncMock(side_effect=[series_data, season_data])
+
+        with (
+            patch.object(tmdb, "TMDB_API", "token"),
+            patch.object(
+                tmdb,
+                "get_http_session",
+                AsyncMock(return_value=SessionStub()),
+            ),
+            patch.object(tmdb, "_fetch_json", fetch),
+            patch.object(tmdb, "date") as mocked_date,
+        ):
+            mocked_date.today.return_value = date(2026, 7, 28)
+            mocked_date.fromisoformat.side_effect = date.fromisoformat
+            details = await tmdb.fetch_tv_details(
+                42,
+                include_episode_availability=True,
+            )
+
+        self.assertEqual(details.number_of_episodes, 12)
+        self.assertEqual(details.seasons[0].episode_count, 12)
+        self.assertEqual(details.seasons[0].available_episode_count, 5)
 
     async def test_fetch_json_classifies_http_errors(self) -> None:
         cases = (

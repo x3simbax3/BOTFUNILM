@@ -20,9 +20,20 @@ VALID_LIBRARY_FILTERS = frozenset(
         "cartoon",
         "completed",
         "planned",
+        "unfinished",
+        "ongoing",
+        "rated",
+        "unrated",
+        "format_all",
+        "category_all",
+        "status_all",
+        "rating_all",
     }
 )
-VALID_LIBRARY_SORTS = frozenset({"recent", "rating"})
+VALID_LIBRARY_SORTS = frozenset({"recent", "rating", "tmdb_rating", "title"})
+VALID_LIBRARY_FILTER_GROUPS = frozenset(
+    {"format", "category", "status", "rating", "sort", "back"}
+)
 
 MAX_LIBRARY_PAGE = 100_000
 MAX_SEASON_NUMBER = 10_000
@@ -32,7 +43,10 @@ _FORMAT_RE = re.compile(r"format:([^:]+):([^:]+)\Z", re.ASCII)
 _TYPE_RE = re.compile(r"type:([^:]+):([^:]+):([^:]+)\Z", re.ASCII)
 _BACK_RE = re.compile(r"back:([^:]+)(?::([^:]+))?(?::([^:]+))?\Z", re.ASCII)
 _LIBRARY_FILTER_RE = re.compile(r"library:filter:([^:]+)\Z", re.ASCII)
-_LIBRARY_SORT_RE = re.compile(r"library:sort:(recent|rating)\Z", re.ASCII)
+_LIBRARY_FILTER_GROUP_RE = re.compile(r"library:filters:([^:]+)\Z", re.ASCII)
+_LIBRARY_SORT_RE = re.compile(
+    r"library:sort:(recent|rating|tmdb_rating|title)\Z", re.ASCII
+)
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
 _SEASON_RE = re.compile(r"season:(done|all|[1-9][0-9]{0,4})\Z", re.ASCII)
@@ -128,6 +142,13 @@ def parse_library_filter_callback(data: str) -> str | None:
 def parse_library_sort_callback(data: str) -> str | None:
     match = _LIBRARY_SORT_RE.fullmatch(data)
     if not match or match.group(1) not in VALID_LIBRARY_SORTS:
+        return None
+    return match.group(1)
+
+
+def parse_library_filter_group_callback(data: str) -> str | None:
+    match = _LIBRARY_FILTER_GROUP_RE.fullmatch(data)
+    if not match or match.group(1) not in VALID_LIBRARY_FILTER_GROUPS:
         return None
     return match.group(1)
 

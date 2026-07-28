@@ -13,6 +13,7 @@ async def ensure_media(
     *,
     number_of_seasons: int | None = None,
     number_of_episodes: int | None = None,
+    available_episode_count: int | None = None,
 ) -> int:
     """Return an existing media id or create/update its catalogue record."""
     media_id = data.get("media_id")
@@ -41,6 +42,8 @@ async def ensure_media(
         media_details["number_of_seasons"] = number_of_seasons
     if number_of_episodes is not None:
         media_details["number_of_episodes"] = number_of_episodes
+    if content_format == "series" and available_episode_count is not None:
+        media_details["available_episode_count"] = available_episode_count
     if data.get("tmdb_rating") is not None:
         media_details["rating"] = data["tmdb_rating"]
 

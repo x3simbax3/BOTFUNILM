@@ -6,6 +6,7 @@ PROGRESS_LOAD_FAILED = "Не удалось загрузить сохранён�
 SAVED_PROGRESS_INVALID = "Сохранённый прогресс сериала некорректен. Попробуй позже."
 INVALID_SEASON = "Некорректный сезон"
 SEASON_NOT_FOUND = "Сезон не найден"
+SEASON_NOT_AVAILABLE = "В этом сезоне пока нет вышедших серий"
 INVALID_EPISODE = "Некорректный эпизод"
 INVALID_PROGRESS_TRANSITION = "Некорректный переход прогресса"
 INVALID_PROGRESS = "Некорректный прогресс сериала. Выбери эпизоды заново."
@@ -17,16 +18,32 @@ def default_season_name(season_number: int) -> str:
     return f"Сезон {season_number}"
 
 
-def series_tracking_text(title: str, seasons: list[dict]) -> str:
-    total = sum(season["episode_count"] for season in seasons)
+def series_tracking_text(
+    title: str,
+    seasons: list[dict],
+    *,
+    is_ongoing: bool = False,
+) -> str:
+    available = sum(season["episode_count"] for season in seasons)
+    announced = sum(
+        season.get("announced_episode_count", season["episode_count"])
+        for season in seasons
+    )
     lines = [
         f"┈┈┈  <b>{escape(title)}</b>  ┈┈┈",
-        f"<i>{len(seasons)} сез. · {total} сер.</i>",
+        f"<i>{len(seasons)} сез. · вышло {available} из {announced} сер.</i>",
         "",
-        "<b>Прогресс по сезонам</b>",
     ]
+    if is_ongoing:
+        lines.extend(["🔴 <b>Сейчас выходит</b>", ""])
+    lines.append("<b>Прогресс по сезонам</b>")
     for season in seasons:
-        lines.append(f"{escape(season['name'])} · {season['episode_count']} сер.")
+        season_available = season["episode_count"]
+        season_announced = season.get("announced_episode_count", season_available)
+        lines.append(
+            f"{escape(season['name'])} · вышло "
+            f"{season_available} из {season_announced} сер."
+        )
     lines.append("\nВыбери сезон")
     return "\n".join(lines)
 
@@ -52,16 +69,27 @@ def tracking_complete_text(
     total_episodes: int,
     watched_episodes: int,
     average: float | None,
+    *,
+    is_ongoing: bool = False,
+    announced_episodes: int | None = None,
 ) -> str:
     remaining = _remaining_episodes(total_episodes, watched_episodes)
-    status = "Завершён" if remaining == 0 else f"В процессе · осталось {remaining}"
+    if is_ongoing and remaining == 0:
+        status = "Все вышедшие серии просмотрены"
+    else:
+        status = "Завершён" if remaining == 0 else f"В процессе · осталось {remaining}"
+    total_text = (
+        f"{total_episodes} вышло из {announced_episodes}"
+        if announced_episodes is not None and announced_episodes != total_episodes
+        else str(total_episodes)
+    )
     rating_line = (
         f"Моя оценка · <b>{average:.1f}/10</b>\n" if average is not None else ""
     )
     return (
         "✓ <b>Прогресс сохранён</b>\n\n"
         f"▣\u00a0<b>{escape(title)}</b>\n"
-        f"Просмотрено · <b>{watched_episodes} из {total_episodes}</b>\n"
+        f"Просмотрено · <b>{watched_episodes} из {total_text}</b>\n"
         f"Статус · <b>{status}</b>\n"
         f"{rating_line}"
         f"<i>{date.today().strftime('%d.%m.%Y')}</i>"
@@ -90,6 +118,7 @@ __all__ = (
     "PROGRESS_SAVE_FAILED",
     "SAVED_PROGRESS_INVALID",
     "SEASON_NOT_FOUND",
+    "SEASON_NOT_AVAILABLE",
     "default_season_name",
     "episodes_prompt_text",
     "series_tracking_text",

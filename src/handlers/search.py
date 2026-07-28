@@ -9,6 +9,7 @@ from src.database.media import (
     find_media_by_title,
     get_media_by_tmdb,
     update_media_poster,
+    update_media_series_release_info,
 )
 from src.database.user_media import get_user_media, save_user_media
 from src.fsm import MenuState
@@ -61,6 +62,7 @@ from src.tmdb import (
     TmdbRateLimitError,
     TmdbTitle,
     TmdbUnavailableError,
+    fetch_tv_details,
     find_title_candidates,
 )
 
@@ -382,7 +384,54 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
     if status == "planned":
         data = await state.get_data()
         try:
-            media_id = await ensure_media(data, data.get("content_format", ""))
+            series_details = None
+            if data.get("content_format") == "series":
+                try:
+                    series_details = await fetch_tv_details(
+                        data.get("tmdb_id", 0),
+                        include_episode_availability=True,
+                    )
+                except TmdbError:
+                    pass
+            seasons = _series_seasons_data(series_details)
+            available_episodes = sum(season["episode_count"] for season in seasons)
+            media_id = await ensure_media(
+                data,
+                data.get("content_format", ""),
+                number_of_seasons=(
+                    series_details.number_of_seasons if series_details else None
+                ),
+                number_of_episodes=(
+                    series_details.number_of_episodes if series_details else None
+                ),
+                available_episode_count=(
+                    available_episodes if series_details else None
+                ),
+            )
+            if series_details is not None:
+                next_episode = series_details.next_episode_to_air
+                await update_media_series_release_info(
+                    media_id,
+                    status=series_details.status,
+                    in_production=series_details.in_production,
+                    number_of_seasons=series_details.number_of_seasons,
+                    number_of_episodes=series_details.number_of_episodes,
+                    available_episode_count=available_episodes,
+                    seasons=seasons,
+                    poster_path=None,
+                    rating=None,
+                    next_episode_air_date=(
+                        next_episode.air_date if next_episode is not None else None
+                    ),
+                    next_episode_season_number=(
+                        next_episode.season_number if next_episode is not None else None
+                    ),
+                    next_episode_number=(
+                        next_episode.episode_number
+                        if next_episode is not None
+                        else None
+                    ),
+                )
             await save_user_media(
                 user_id=callback.from_user.id,
                 media_id=media_id,
@@ -416,6 +465,25 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
     )
     await state.set_state(MenuState.rating_category)
     await callback.answer()
+
+
+def _series_seasons_data(details) -> list[dict]:
+    if details is None:
+        return []
+    return [
+        {
+            "season_number": season.season_number,
+            "name": season.name,
+            "announced_episode_count": season.episode_count,
+            "episode_count": (
+                season.available_episode_count
+                if season.available_episode_count is not None
+                else season.episode_count
+            ),
+        }
+        for season in details.seasons
+        if season.season_number > 0
+    ]
 
 
 @router.callback_query(MenuState.confirming_tmdb_guess, F.data == "tmdb_guess:no")

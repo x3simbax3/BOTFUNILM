@@ -24,84 +24,36 @@ def library_keyboard(
     page: int,
     has_more: bool,
     sort_order: str = "recent",
+    filter_group: str | None = None,
 ) -> InlineKeyboardMarkup:
-    format_unfiltered = filters.get("series", False) and filters.get(
-        "full_length", False
-    )
-    type_unfiltered = all(
-        filters.get(name, False) for name in ("movie", "anime", "cartoon")
-    )
-
-    def filter_selected(name: str) -> bool:
-        if name in {"series", "full_length"}:
-            unfiltered = format_unfiltered
-        elif name in {"movie", "anime", "cartoon"}:
-            unfiltered = type_unfiltered
-        else:
-            return filters.get(name, False)
-        return not unfiltered and filters.get(name, False)
+    if filter_group is not None:
+        return _library_filter_group_keyboard(filters, sort_order, filter_group)
 
     rows = [
         [
             InlineKeyboardButton(
-                text=text.selected(
-                    text.FILTER_RECENT,
-                    sort_order == "recent",
-                ),
-                callback_data="library:sort:recent",
+                text=text.FILTER_FORMAT_GROUP,
+                callback_data="library:filters:format",
             ),
             InlineKeyboardButton(
-                text=text.selected(text.SORT_RATING, sort_order == "rating"),
-                callback_data="library:sort:rating",
+                text=text.FILTER_CATEGORY_GROUP,
+                callback_data="library:filters:category",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_SERIES, filter_selected("series")),
-                callback_data="library:filter:series",
+                text=text.FILTER_STATUS_GROUP,
+                callback_data="library:filters:status",
             ),
             InlineKeyboardButton(
-                text=text.selected(
-                    text.FILTER_FULL_LENGTH,
-                    filter_selected("full_length"),
-                ),
-                callback_data="library:filter:full_length",
+                text=text.FILTER_RATING_GROUP,
+                callback_data="library:filters:rating",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=text.selected(text.FILTER_MOVIES, filter_selected("movie")),
-                callback_data="library:filter:movie",
-            ),
-            InlineKeyboardButton(
-                text=text.selected(text.FILTER_ANIME, filter_selected("anime")),
-                callback_data="library:filter:anime",
-            ),
-            InlineKeyboardButton(
-                text=text.selected(text.FILTER_CARTOONS, filter_selected("cartoon")),
-                callback_data="library:filter:cartoon",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text=text.selected(
-                    text.FILTER_COMPLETED,
-                    filter_selected("completed"),
-                ),
-                callback_data="library:filter:completed",
-            ),
-            InlineKeyboardButton(
-                text=text.selected(
-                    text.FILTER_PLANNED,
-                    filter_selected("planned"),
-                ),
-                callback_data="library:filter:planned",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text=text.RESET_FILTERS,
-                callback_data="library:filter:all",
+                text=text.FILTER_SORT_GROUP,
+                callback_data="library:filters:sort",
             ),
         ],
     ]
@@ -124,7 +76,97 @@ def library_keyboard(
     if pagination:
         rows.append(pagination)
 
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.RESET_FILTERS,
+                callback_data="library:filter:all",
+            )
+        ]
+    )
     rows.append([InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _library_filter_group_keyboard(
+    filters: dict[str, bool],
+    sort_order: str,
+    group: str,
+) -> InlineKeyboardMarkup:
+    definitions = {
+        "format": (
+            "format_all",
+            (("full_length", text.FILTER_FULL_LENGTH), ("series", text.FILTER_SERIES)),
+        ),
+        "category": (
+            "category_all",
+            (
+                ("movie", text.FILTER_MOVIES),
+                ("anime", text.FILTER_ANIME),
+                ("cartoon", text.FILTER_CARTOONS),
+            ),
+        ),
+        "status": (
+            "status_all",
+            (
+                ("completed", text.FILTER_COMPLETED),
+                ("planned", text.FILTER_PLANNED),
+                ("unfinished", text.FILTER_UNFINISHED),
+                ("ongoing", text.FILTER_ONGOING),
+            ),
+        ),
+        "rating": (
+            "rating_all",
+            (("rated", text.FILTER_RATED), ("unrated", text.FILTER_UNRATED)),
+        ),
+    }
+    if group == "sort":
+        options = (
+            ("recent", text.FILTER_RECENT),
+            ("rating", text.SORT_RATING),
+            ("tmdb_rating", text.SORT_TMDB_RATING),
+            ("title", text.SORT_TITLE),
+        )
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=text.selected(label, sort_order == value),
+                    callback_data=f"library:sort:{value}",
+                )
+            ]
+            for value, label in options
+        ]
+    else:
+        reset_name, options = definitions[group]
+        all_selected = all(filters.get(name, False) for name, _ in options)
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=text.selected(text.FILTER_ALL, all_selected),
+                    callback_data=f"library:filter:{reset_name}",
+                )
+            ]
+        ]
+        rows.extend(
+            [
+                InlineKeyboardButton(
+                    text=text.selected(
+                        label,
+                        not all_selected and filters.get(name, False),
+                    ),
+                    callback_data=f"library:filter:{name}",
+                )
+            ]
+            for name, label in options
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.FILTERS_BACK,
+                callback_data="library:filters:back",
+            )
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -446,12 +488,16 @@ def season_list_keyboard(
         name = s["name"]
         ep_count = s["episode_count"]
         done = watched.get(num, 0)
-        button_text = text.season_progress(name, done, ep_count)
+        announced = s.get("announced_episode_count", ep_count)
+        if ep_count == 0 and announced > 0:
+            button_text = f"{name} · ещё не вышел"
+        else:
+            button_text = text.season_progress(name, done, ep_count)
         buttons.append(
             [
                 InlineKeyboardButton(
                     text=button_text,
-                    callback_data=f"season:{num}",
+                    callback_data=f"season:{num}" if ep_count > 0 else "ep:noop",
                 ),
             ]
         )

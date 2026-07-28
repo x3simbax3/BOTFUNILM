@@ -1,6 +1,7 @@
 """Main menu, content selection and backward navigation handlers."""
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -66,10 +67,20 @@ MENU_TREE = {
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
+    previous_data = dict(await state.get_data())
     await state.clear()
     media_id = media_id_from_start(message.text)
     if media_id is not None:
-        await show_library_item(message, state, message.from_user.id, media_id)
+        opened = await show_library_item(message, state, message.from_user.id, media_id)
+        library_message_id = previous_data.get("library_message_id")
+        if opened and type(library_message_id) is int and library_message_id > 0:
+            try:
+                await message.bot.delete_message(
+                    chat_id=message.chat.id,
+                    message_id=library_message_id,
+                )
+            except TelegramAPIError:
+                pass
         return
 
     await state.set_state(MenuState.choosing_action)

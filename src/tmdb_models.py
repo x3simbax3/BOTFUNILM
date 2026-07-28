@@ -22,6 +22,7 @@ class TmdbSeasonInfo:
     season_number: int
     name: str
     episode_count: int
+    available_episode_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class TmdbTvDetails:
     status: str | None = None
     in_production: bool | None = None
     next_episode_to_air: TmdbEpisodeAirInfo | None = None
+    last_episode_to_air: TmdbEpisodeAirInfo | None = None
     poster_path: str | None = None
     rating: float | None = None
 
