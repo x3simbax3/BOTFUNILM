@@ -455,9 +455,8 @@ async def _refresh_item_metadata(item):
     if refreshed.get("tmdb_id") in {None, 0}:
         return refreshed, photo
 
-    if (
-        refreshed.get("content_format") != "series"
-        and (photo is None or refreshed.get("rating") is None)
+    if refreshed.get("content_format") != "series" and (
+        photo is None or refreshed.get("rating") is None
     ):
         try:
             details = await fetch_title_details(

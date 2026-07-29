@@ -19,9 +19,7 @@ TMDB_API = os.getenv("TMDB_API", "")
 TMDB_URL = os.getenv("TMDB_URL", "https://api.themoviedb.org/3")
 TMDB_LANG = os.getenv("TMDB_LANG", "ru-RU")
 TMDB_MAX_CONCURRENCY = int(os.getenv("TMDB_MAX_CONCURRENCY", "5"))
-TMDB_MAX_REQUESTS_PER_SECOND = int(
-    os.getenv("TMDB_MAX_REQUESTS_PER_SECOND", "20")
-)
+TMDB_MAX_REQUESTS_PER_SECOND = int(os.getenv("TMDB_MAX_REQUESTS_PER_SECOND", "20"))
 TMDB_QUEUE_TIMEOUT_SECONDS = float(os.getenv("TMDB_QUEUE_TIMEOUT_SECONDS", "5"))
 TMDB_RATE_LIMIT_COOLDOWN_SECONDS = float(
     os.getenv("TMDB_RATE_LIMIT_COOLDOWN_SECONDS", "2")
