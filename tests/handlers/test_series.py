@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from src.fsm import MenuState
 from src.handlers import series as series_handlers
 from src.services import media as media_service
+from src.services import series_metadata, series_tracking
 from src.tmdb import TmdbSeasonInfo, TmdbTvDetails
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
@@ -70,7 +71,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            series_handlers,
+            series_tracking,
             "save_user_series_progress",
             AsyncMock(),
         ) as save:
@@ -159,12 +160,12 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                series_handlers,
+                series_metadata,
                 "fetch_tv_details",
                 AsyncMock(return_value=details),
             ),
             patch.object(
-                series_handlers,
+                series_tracking,
                 "get_user_season_progress",
                 AsyncMock(return_value=saved_progress),
             ),
@@ -214,12 +215,12 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                series_handlers,
+                series_metadata,
                 "fetch_tv_details",
                 AsyncMock(return_value=details),
             ),
             patch.object(
-                series_handlers,
+                series_tracking,
                 "get_user_season_progress",
                 AsyncMock(return_value=saved_progress),
             ) as get_progress,
@@ -267,17 +268,17 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                series_handlers,
+                series_metadata,
                 "get_media_seasons",
                 AsyncMock(return_value=cached_seasons),
             ) as get_seasons,
             patch.object(
-                series_handlers,
+                series_tracking,
                 "get_user_season_progress",
                 AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 3}]),
             ),
             patch.object(
-                series_handlers,
+                series_metadata,
                 "fetch_tv_details",
                 AsyncMock(),
             ) as fetch,
@@ -312,12 +313,12 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                series_handlers,
+                series_metadata,
                 "fetch_tv_details",
                 AsyncMock(return_value=details),
             ) as fetch,
             patch.object(
-                series_handlers,
+                series_tracking,
                 "get_user_season_progress",
                 AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 12}]),
             ),
@@ -371,12 +372,12 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=7),
             ) as upsert,
             patch.object(
-                series_handlers,
+                series_tracking,
                 "save_user_series_progress",
                 AsyncMock(),
             ) as save,
             patch.object(
-                series_handlers,
+                series_tracking,
                 "update_media_series_release_info",
                 AsyncMock(),
             ) as update_release,

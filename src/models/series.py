@@ -59,16 +59,27 @@ class SeriesSeason:
 
 
 @dataclass(frozen=True)
+class SeriesEpisode:
+    season_number: int
+    episode_number: int
+    air_date: str | None
+
+
+@dataclass(frozen=True)
 class SeriesReleaseSnapshot:
     number_of_seasons: int
     number_of_episodes: int
-    seasons: Sequence[SeriesSeason]
+    seasons: tuple[SeriesSeason, ...]
     status: str | None = None
     in_production: bool | None = None
-    next_episode_to_air: Any | None = None
-    last_episode_to_air: Any | None = None
+    next_episode_to_air: SeriesEpisode | None = None
+    last_episode_to_air: SeriesEpisode | None = None
     poster_path: str | None = None
     rating: float | None = None
+
+    def __post_init__(self) -> None:
+        """Freeze season collections even when callers provide a list."""
+        object.__setattr__(self, "seasons", tuple(self.seasons))
 
     @classmethod
     def from_library_item(
@@ -134,7 +145,7 @@ class SeriesReleaseSnapshot:
         return sum(season.aired_episode_count for season in self.regular_seasons)
 
     @property
-    def next_episode(self) -> Any | None:
+    def next_episode(self) -> SeriesEpisode | None:
         return self.next_episode_to_air
 
     @property
@@ -172,21 +183,14 @@ class SeriesReleaseSnapshot:
         }
 
 
-@dataclass(frozen=True)
-class _SeriesEpisode:
-    season_number: int
-    episode_number: int
-    air_date: str | None
-
-
 def _episode_from_values(
     season_number: object,
     episode_number: object,
     air_date: object,
-) -> _SeriesEpisode | None:
+) -> SeriesEpisode | None:
     if type(season_number) is not int or type(episode_number) is not int:
         return None
-    return _SeriesEpisode(
+    return SeriesEpisode(
         season_number=season_number,
         episode_number=episode_number,
         air_date=air_date if isinstance(air_date, str) else None,

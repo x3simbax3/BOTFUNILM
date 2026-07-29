@@ -5,6 +5,14 @@ from __future__ import annotations
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.database.media_search import find_media_by_title
+from src.database.series_release import (
+    replace_media_seasons as _replace_media_seasons,
+)
+from src.database.series_release import (
+    update_media_series_release_info as _update_media_series_release_info,
+)
+from src.models import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
 
 
 async def get_media_by_tmdb(
@@ -165,9 +173,80 @@ def _last_row_id(cursor: aiosqlite.Cursor) -> int:
     return int(cursor.lastrowid)
 
 
+async def replace_media_seasons(
+    media_id: int,
+    seasons: list[dict],
+    *,
+    database_url: str | None = None,
+) -> None:
+    """Compatibility wrapper for the former season-list API."""
+    snapshot = SeriesReleaseSnapshot(
+        number_of_seasons=len(seasons),
+        number_of_episodes=sum(
+            int(season.get("announced_episode_count", season["episode_count"]))
+            for season in seasons
+        ),
+        seasons=tuple(SeriesSeason.from_mapping(season) for season in seasons),
+    )
+    await _replace_media_seasons(media_id, snapshot, database_url=database_url)
+
+
+async def update_media_series_release_info(
+    media_id: int,
+    *,
+    user_id: int,
+    status: str | None,
+    in_production: bool | None,
+    number_of_seasons: int,
+    number_of_episodes: int,
+    available_episode_count: int,
+    seasons: list[dict],
+    poster_path: str | None,
+    rating: float | None,
+    next_episode_air_date: str | None,
+    next_episode_season_number: int | None,
+    next_episode_number: int | None,
+    database_url: str | None = None,
+) -> None:
+    """Compatibility wrapper for the former expanded release-info API."""
+    parsed_seasons = tuple(SeriesSeason.from_mapping(season) for season in seasons)
+    if sum(season.aired_episode_count for season in parsed_seasons) != (
+        available_episode_count
+    ):
+        raise ValueError("Season availability does not match the supplied total")
+    next_episode = (
+        SeriesEpisode(
+            season_number=next_episode_season_number,
+            episode_number=next_episode_number,
+            air_date=next_episode_air_date,
+        )
+        if next_episode_season_number is not None and next_episode_number is not None
+        else None
+    )
+    snapshot = SeriesReleaseSnapshot(
+        number_of_seasons=number_of_seasons,
+        number_of_episodes=number_of_episodes,
+        seasons=parsed_seasons,
+        status=status,
+        in_production=in_production,
+        next_episode_to_air=next_episode,
+        poster_path=poster_path,
+        rating=rating,
+    )
+    await _update_media_series_release_info(
+        media_id,
+        user_id=user_id,
+        snapshot=snapshot,
+        database_url=database_url,
+    )
+
+
 __all__ = (
+    "find_media_by_title",
     "get_media_by_tmdb",
+    "replace_media_seasons",
     "upsert_media",
     "update_media_metadata",
     "update_media_poster",
+    "update_media_series_release_info",
 )

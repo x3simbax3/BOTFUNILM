@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from src.models.series import SeriesReleaseSnapshot, SeriesSeason
+from src.models.series import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
 
 
 @dataclass(frozen=True)
@@ -19,13 +19,7 @@ class TmdbTitle:
     release_date: str | None = None
 
 
-@dataclass(frozen=True)
-class TmdbEpisodeAirInfo:
-    season_number: int
-    episode_number: int
-    air_date: str | None
-
-
+TmdbEpisodeAirInfo = SeriesEpisode
 TmdbSeasonInfo = SeriesSeason
 TmdbTvDetails = SeriesReleaseSnapshot
 

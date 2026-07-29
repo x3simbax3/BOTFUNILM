@@ -3,8 +3,10 @@ from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import search as search_handlers
+from src.handlers.search import candidates as candidate_handlers
 from src.lang import TMDB_SEARCHING, TMDB_TOO_LONG
 from src.services import media as media_service
+from src.services import planned_media, title_search
 from src.tmdb import (
     TMDB_IMAGE_URL,
     TmdbAuthenticationError,
@@ -24,14 +26,14 @@ from tests.support.telegram import CallbackStub, MessageStub, StateStub
 class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         patcher = patch.object(
-            search_handlers,
+            title_search,
             "find_media_by_title",
             AsyncMock(return_value=None),
         )
         self.local_search = patcher.start()
         self.addCleanup(patcher.stop)
         poster_patcher = patch.object(
-            search_handlers,
+            title_search,
             "download_poster",
             AsyncMock(return_value=None),
         )
@@ -84,7 +86,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(return_value=[guess]),
         ):
@@ -103,7 +105,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица")
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(return_value=[guess]),
         ):
@@ -139,7 +141,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(return_value=[guess]),
         ) as tmdb_search:
@@ -160,7 +162,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         guess = TmdbTitle("Матрица", None, None, "Матрица", "Матрица", 42)
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(return_value=[guess]),
         ) as tmdb_search:
@@ -190,7 +192,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(side_effect=TmdbNotFoundError),
         ):
@@ -235,7 +237,7 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"content_format": "full_length"})
 
         with patch.object(
-            search_handlers,
+            title_search,
             "find_title_candidates",
             AsyncMock(side_effect=error_class),
         ):
@@ -282,7 +284,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"tmdb_guess_message_id": 100})
 
         with patch.object(
-            search_handlers,
+            candidate_handlers,
             "delete_message_safely",
             AsyncMock(return_value=False),
         ):
@@ -305,7 +307,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            search_handlers,
+            candidate_handlers,
             "_already_in_library",
             AsyncMock(return_value=True),
         ):
@@ -345,17 +347,17 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=7),
             ),
             patch.object(
-                search_handlers,
+                planned_media,
                 "save_user_media",
                 AsyncMock(),
             ) as save,
             patch.object(
-                search_handlers,
+                planned_media,
                 "fetch_tv_details",
                 AsyncMock(return_value=details),
             ),
             patch.object(
-                search_handlers,
+                planned_media,
                 "update_media_series_release_info",
                 AsyncMock(),
             ) as update_release,
