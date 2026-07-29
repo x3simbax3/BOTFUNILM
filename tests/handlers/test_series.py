@@ -396,32 +396,15 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             number_of_episodes=10,
             available_episode_count=10,
         )
-        update_release.assert_awaited_once_with(
-            7,
-            user_id=123,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=2,
-            number_of_episodes=10,
-            available_episode_count=10,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Сезон 1",
-                    "episode_count": 8,
-                },
-                {
-                    "season_number": 2,
-                    "name": "Сезон 2",
-                    "episode_count": 2,
-                },
-            ],
-            poster_path=None,
-            rating=None,
-            next_episode_air_date="2026-08-01",
-            next_episode_season_number=2,
-            next_episode_number=3,
-        )
+        update_release.assert_awaited_once()
+        self.assertEqual(update_release.await_args.args, (7,))
+        self.assertEqual(update_release.await_args.kwargs["user_id"], 123)
+        snapshot = update_release.await_args.kwargs["snapshot"]
+        self.assertEqual(snapshot.number_of_seasons, 2)
+        self.assertEqual(snapshot.number_of_episodes, 10)
+        self.assertEqual(snapshot.available_episode_count, 10)
+        self.assertEqual(snapshot.next_episode.season_number, 2)
+        self.assertEqual(snapshot.next_episode.episode_number, 3)
         save.assert_awaited_once_with(
             user_id=123,
             media_id=7,

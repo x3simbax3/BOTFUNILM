@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from src.models.series import SeriesReleaseSnapshot, SeriesSeason
+
 
 @dataclass(frozen=True)
 class TmdbTitle:
@@ -18,31 +20,14 @@ class TmdbTitle:
 
 
 @dataclass(frozen=True)
-class TmdbSeasonInfo:
-    season_number: int
-    name: str
-    episode_count: int
-    available_episode_count: int | None = None
-
-
-@dataclass(frozen=True)
 class TmdbEpisodeAirInfo:
     season_number: int
     episode_number: int
     air_date: str | None
 
 
-@dataclass(frozen=True)
-class TmdbTvDetails:
-    number_of_seasons: int
-    number_of_episodes: int
-    seasons: list[TmdbSeasonInfo]
-    status: str | None = None
-    in_production: bool | None = None
-    next_episode_to_air: TmdbEpisodeAirInfo | None = None
-    last_episode_to_air: TmdbEpisodeAirInfo | None = None
-    poster_path: str | None = None
-    rating: float | None = None
+TmdbSeasonInfo = SeriesSeason
+TmdbTvDetails = SeriesReleaseSnapshot
 
 
 class TmdbError(Exception):

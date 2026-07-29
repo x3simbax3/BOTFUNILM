@@ -14,6 +14,7 @@ from src.callback_data import (
 from src.fsm import MenuState
 from src.handlers.common import replace_message
 from src.handlers.library import media_id_from_start, show_library_item
+from src.handlers.navigation import reset_to_main
 from src.keyboards import (
     content_type_keyboard,
     format_keyboard,
@@ -68,9 +69,9 @@ MENU_TREE = {
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
     previous_data = dict(await state.get_data())
-    await state.clear()
     media_id = media_id_from_start(message.text)
     if media_id is not None:
+        await state.clear()
         opened = await show_library_item(message, state, message.from_user.id, media_id)
         library_message_id = previous_data.get("library_message_id")
         if opened and type(library_message_id) is int and library_message_id > 0:
@@ -83,7 +84,7 @@ async def start(message: Message, state: FSMContext) -> None:
                 pass
         return
 
-    await state.set_state(MenuState.choosing_action)
+    await reset_to_main(state)
     await message.answer(
         START_TEXT,
         parse_mode="HTML",

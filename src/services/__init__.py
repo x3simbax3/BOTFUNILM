@@ -1,7 +1,7 @@
 """Application services shared by handlers."""
 
 from src.services.media import ensure_media
-from src.services.series import (
+from src.services.series_tracking import (
     SeriesProgressError,
     apply_episode_selection,
     season_episode_limits,

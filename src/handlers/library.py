@@ -27,6 +27,7 @@ from src.handlers.common import (
     edit_message,
     replace_message,
 )
+from src.handlers.navigation import reset_to_main
 from src.handlers.series import start_series_tracking
 from src.keyboards import (
     library_delete_keyboard,
@@ -54,6 +55,7 @@ from src.lang import (
     rating_categories,
     rating_prompt_text,
 )
+from src.models import MediaWorkflowData, SeriesReleaseSnapshot, current_media_id
 from src.posters import poster_input
 from src.tmdb import TmdbError, fetch_title_details
 
@@ -282,7 +284,7 @@ async def edit_library_item_rating(
         return
     categories = rating_categories(item["content_type"])
     await state.update_data(
-        **_library_workflow_data(item),
+        **MediaWorkflowData.from_library_item(item).to_fsm_dict(),
         ratings={},
         rating_index=0,
         library_rating_edit=True,
@@ -313,7 +315,8 @@ async def change_library_item_progress(
 
     if item["content_format"] == "series":
         await state.update_data(
-            **_library_workflow_data(item),
+            **MediaWorkflowData.from_library_item(item).to_fsm_dict(),
+            **SeriesReleaseSnapshot.from_library_item(item).to_fsm_dict(),
             rating_average=item["user_rating"],
             library_rating_edit=False,
             library_progress_edit=True,
@@ -381,8 +384,8 @@ async def delete_library_item(callback: CallbackQuery, state: FSMContext) -> Non
     if not callback.message:
         return
     data = await state.get_data()
-    media_id = data.get("media_id")
-    if type(media_id) is not int or media_id <= 0:
+    media_id = current_media_id(data)
+    if media_id is None:
         await callback.answer(ITEM_NOT_FOUND, show_alert=True)
         return
     try:
@@ -398,14 +401,14 @@ async def delete_library_item(callback: CallbackQuery, state: FSMContext) -> Non
         ITEM_DELETED,
         reply_markup=main_menu_keyboard(),
     )
-    await state.set_state(MenuState.choosing_action)
+    await reset_to_main(state)
     await callback.answer()
 
 
 async def _current_library_item(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    media_id = data.get("media_id")
-    if type(media_id) is not int or media_id <= 0:
+    media_id = current_media_id(data)
+    if media_id is None:
         await callback.answer(ITEM_NOT_FOUND, show_alert=True)
         return None
     try:
@@ -425,27 +428,6 @@ async def _edit_library_item_message(message: Message, item) -> None:
         parse_mode="HTML",
         reply_markup=library_item_keyboard(planned=item["user_status"] == "planned"),
     )
-
-
-def _library_workflow_data(item) -> dict:
-    return {
-        "media_id": int(item["id"]),
-        "tmdb_id": item["tmdb_id"],
-        "tmdb_title": item["title"],
-        "tmdb_description": item["description"],
-        "tmdb_poster_path": item["poster_path"],
-        "tmdb_original_title": item["original_title"],
-        "tmdb_release_date": item["release_date"] or item["first_air_date"],
-        "content_format": item["content_format"],
-        "content_type": item["content_type"],
-        "total_seasons": item["number_of_seasons"],
-        "announced_total_episodes": item["number_of_episodes"],
-        "tmdb_series_status": item["tmdb_status"],
-        "tmdb_series_in_production": item["tmdb_in_production"],
-        "tmdb_next_episode_air_date": item["next_episode_air_date"],
-        "tmdb_next_episode_season_number": item["next_episode_season_number"],
-        "tmdb_next_episode_number": item["next_episode_number"],
-    }
 
 
 async def _refresh_item_metadata(item):
@@ -493,7 +475,7 @@ async def _show_library_error(
     text: str,
 ) -> None:
     await message.answer(text, reply_markup=main_menu_keyboard())
-    await state.set_state(MenuState.choosing_action)
+    await reset_to_main(state)
 
 
 def media_id_from_start(text: str | None) -> int | None:

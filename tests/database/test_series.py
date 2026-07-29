@@ -1,16 +1,16 @@
 import sqlite3
 
 from src.database.connection import connection_scope
-from src.database.media import (
-    get_media_by_tmdb,
-    update_media_series_release_info,
-)
+from src.database.media import get_media_by_tmdb
 from src.database.ratings import get_user_rating_details
 from src.database.series import (
     get_user_season_progress,
     save_user_series_progress,
 )
+from src.database.series_release import update_media_series_release_info
 from src.database.user_media import get_user_media
+from src.models import SeriesReleaseSnapshot, SeriesSeason
+from src.tmdb_models import TmdbEpisodeAirInfo
 from tests.support.database import DatabaseTestCase
 
 
@@ -23,53 +23,32 @@ class SeriesTests(DatabaseTestCase):
         await update_media_series_release_info(
             media_id,
             user_id=123,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=2,
-            number_of_episodes=16,
-            available_episode_count=12,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Season 1",
-                    "announced_episode_count": 12,
-                    "episode_count": 12,
-                }
-            ],
-            poster_path=None,
-            rating=None,
-            next_episode_air_date="2026-08-10",
-            next_episode_season_number=2,
-            next_episode_number=5,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=2,
+                number_of_episodes=16,
+                seasons=[SeriesSeason(1, "Season 1", 12, 12)],
+                status="Returning Series",
+                in_production=True,
+                next_episode_to_air=TmdbEpisodeAirInfo(2, 5, "2026-08-10"),
+            ),
             database_url=self.database_url,
         )
         await update_media_series_release_info(
             media_id,
             user_id=123,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=2,
-            number_of_episodes=17,
-            available_episode_count=13,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Season 1",
-                    "announced_episode_count": 12,
-                    "episode_count": 12,
-                },
-                {
-                    "season_number": 2,
-                    "name": "Season 2",
-                    "announced_episode_count": 5,
-                    "episode_count": 1,
-                },
-            ],
-            poster_path="/new.jpg",
-            rating=8.4,
-            next_episode_air_date="2026-08-17",
-            next_episode_season_number=2,
-            next_episode_number=6,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=2,
+                number_of_episodes=17,
+                seasons=[
+                    SeriesSeason(1, "Season 1", 12, 12),
+                    SeriesSeason(2, "Season 2", 5, 1),
+                ],
+                status="Returning Series",
+                in_production=True,
+                next_episode_to_air=TmdbEpisodeAirInfo(2, 6, "2026-08-17"),
+                poster_path="/new.jpg",
+                rating=8.4,
+            ),
             database_url=self.database_url,
         )
 
@@ -136,24 +115,13 @@ class SeriesTests(DatabaseTestCase):
         await update_media_series_release_info(
             media_id,
             user_id=123,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=1,
-            number_of_episodes=10,
-            available_episode_count=5,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Season 1",
-                    "announced_episode_count": 10,
-                    "episode_count": 5,
-                }
-            ],
-            poster_path=None,
-            rating=None,
-            next_episode_air_date=None,
-            next_episode_season_number=None,
-            next_episode_number=None,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=1,
+                number_of_episodes=10,
+                seasons=[SeriesSeason(1, "Season 1", 10, 5)],
+                status="Returning Series",
+                in_production=True,
+            ),
             database_url=self.database_url,
         )
 

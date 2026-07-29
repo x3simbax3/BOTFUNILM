@@ -5,6 +5,7 @@ from __future__ import annotations
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.models import ACTIVE_SERIES_STATUSES
 
 LIBRARY_FILTER_NAMES = frozenset(
     {
@@ -20,6 +21,9 @@ LIBRARY_FILTER_NAMES = frozenset(
     }
 )
 LIBRARY_SORT_ORDERS = frozenset({"recent", "rating", "tmdb_rating", "title"})
+ACTIVE_SERIES_STATUS_SQL = ", ".join(
+    f"'{status}'" for status in sorted(ACTIVE_SERIES_STATUSES)
+)
 FORMAT_FILTERS = frozenset({"full_length", "series"})
 TYPE_FILTERS = frozenset({"movie", "anime", "cartoon"})
 STATUS_FILTERS = frozenset({"completed", "planned", "unfinished", "ongoing"})
@@ -179,9 +183,7 @@ async def list_user_library(
                                          m.number_of_episodes, 0))
                    OR (? AND m.content_format = 'series'
                           AND (COALESCE(m.tmdb_in_production, 0) = 1
-                               OR m.tmdb_status IN (
-                                   'Returning Series', 'Planned', 'In Production'
-                               ))))
+                               OR m.tmdb_status IN ({ACTIVE_SERIES_STATUS_SQL}))))
             ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,

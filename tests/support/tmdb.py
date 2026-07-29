@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch
 
-from src import tmdb
+from src import tmdb_search, tmdb_series
 
 
 class AsyncContextStub:
@@ -49,12 +49,19 @@ def mock_tmdb_api(
 ) -> Iterator[AsyncMock]:
     fetch_mock = fetch or AsyncMock(return_value=data)
     with (
-        patch.object(tmdb, "TMDB_API", "token"),
+        patch.object(tmdb_search, "TMDB_API", "token"),
+        patch.object(tmdb_series, "TMDB_API", "token"),
         patch.object(
-            tmdb,
+            tmdb_search,
             "get_http_session",
             AsyncMock(return_value=SessionStub()),
         ),
-        patch.object(tmdb, "_fetch_json", fetch_mock),
+        patch.object(
+            tmdb_series,
+            "get_http_session",
+            AsyncMock(return_value=SessionStub()),
+        ),
+        patch.object(tmdb_search, "fetch_json", fetch_mock),
+        patch.object(tmdb_series, "fetch_json", fetch_mock),
     ):
         yield fetch_mock

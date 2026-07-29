@@ -75,7 +75,7 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             9,
             rating_details=ratings,
         )
-        self.assertFalse(state.data["library_rating_edit"])
+        self.assertEqual(state.data, {})
         self.assertEqual(state.state, MenuState.choosing_action)
 
     async def test_finish_movie_saves_completed_media_and_returns_to_menu(self) -> None:

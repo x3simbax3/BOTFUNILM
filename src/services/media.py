@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from src.database.media import upsert_media
-from src.posters import download_poster
+from src.models import current_media_id
+from src.posters import download_poster, poster_input
 
 
 async def ensure_media(
@@ -16,12 +17,15 @@ async def ensure_media(
     available_episode_count: int | None = None,
 ) -> int:
     """Return an existing media id or create/update its catalogue record."""
-    media_id = data.get("media_id")
+    media_id = current_media_id(data)
     if media_id is not None:
-        return int(media_id)
+        return media_id
 
+    poster_source = data.get("tmdb_poster_url") or poster_input(
+        data.get("tmdb_poster_path")
+    )
     poster_path = await download_poster(
-        data.get("tmdb_poster_url"),
+        poster_source if isinstance(poster_source, str) else None,
         data.get("tmdb_id", 0),
         content_format,
     )

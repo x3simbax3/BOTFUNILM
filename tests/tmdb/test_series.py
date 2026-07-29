@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
-from src import tmdb
+from src import tmdb_series
 from tests.support.tmdb import mock_tmdb_api
 
 
@@ -28,7 +28,7 @@ class TmdbSeriesTests(unittest.IsolatedAsyncioTestCase):
         }
 
         with mock_tmdb_api(data):
-            details = await tmdb.fetch_tv_details(42)
+            details = await tmdb_series.fetch_tv_details(42)
 
         self.assertEqual(details.number_of_seasons, 2)
         self.assertEqual(details.number_of_episodes, 10)
@@ -79,11 +79,11 @@ class TmdbSeriesTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             mock_tmdb_api(fetch=fetch),
-            patch.object(tmdb, "date") as mocked_date,
+            patch.object(tmdb_series, "date") as mocked_date,
         ):
             mocked_date.today.return_value = date(2026, 7, 28)
             mocked_date.fromisoformat.side_effect = date.fromisoformat
-            details = await tmdb.fetch_tv_details(
+            details = await tmdb_series.fetch_tv_details(
                 42,
                 include_episode_availability=True,
             )

@@ -1,9 +1,5 @@
-from src.database.media import (
-    find_media_by_title,
-    get_media_by_tmdb,
-    update_media_poster,
-    upsert_media,
-)
+from src.database.media import get_media_by_tmdb, update_media_poster, upsert_media
+from src.database.media_search import find_media_by_title
 from tests.support.database import DatabaseTestCase
 
 

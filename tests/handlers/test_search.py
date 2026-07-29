@@ -366,24 +366,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         update_release.assert_awaited_once_with(
             7,
             user_id=123,
-            status="Returning Series",
-            in_production=True,
-            number_of_seasons=1,
-            number_of_episodes=12,
-            available_episode_count=4,
-            seasons=[
-                {
-                    "season_number": 1,
-                    "name": "Сезон 1",
-                    "announced_episode_count": 12,
-                    "episode_count": 4,
-                }
-            ],
-            poster_path=None,
-            rating=None,
-            next_episode_air_date="2026-08-01",
-            next_episode_season_number=1,
-            next_episode_number=5,
+            snapshot=details,
         )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertNotIn("ratings", state.data)

@@ -1,6 +1,8 @@
 from datetime import date
 from html import escape
 
+from src.models import is_active_series
+
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import CONTENT_TYPE_TITLES, MEDIA_KIND_TITLES
 
@@ -18,9 +20,6 @@ USER_STATUS_ICONS = {
     "on_hold": "Ⅱ",
     "dropped": "×",
 }
-ACTIVE_TMDB_SERIES_STATUSES = frozenset(
-    {"Returning Series", "Planned", "In Production"}
-)
 LIBRARY_ITEM_DIVIDER = "━━━━━━━━━━━━━"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
@@ -166,7 +165,7 @@ def _series_release_line(item) -> str | None:
         return None
     in_production = _item_value(item, "tmdb_in_production")
     status = _item_value(item, "tmdb_status")
-    if not bool(in_production) and status not in ACTIVE_TMDB_SERIES_STATUSES:
+    if not is_active_series(status, in_production):
         return None
 
     season_number = _item_value(item, "next_episode_season_number")

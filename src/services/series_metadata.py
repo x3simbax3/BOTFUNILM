@@ -1,0 +1,68 @@
+"""Loading and normalization of series release metadata."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from src.database.series import get_media_seasons
+from src.models import (
+    SeriesReleaseSnapshot,
+    SeriesSeason,
+    current_media_id,
+    is_active_series,
+)
+from src.tmdb_series import fetch_tv_details
+
+
+class SeriesMetadataError(RuntimeError):
+    """Raised when release metadata cannot be prepared for tracking."""
+
+
+def snapshot_from_cached_rows(
+    fsm_data: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+) -> SeriesReleaseSnapshot:
+    """Combine cached season rows with release fields already stored in FSM."""
+    return SeriesReleaseSnapshot.from_fsm(
+        fsm_data,
+        seasons=tuple(SeriesSeason.from_mapping(row) for row in rows),
+    )
+
+
+async def load_series_release_snapshot(
+    fsm_data: Mapping[str, Any],
+) -> SeriesReleaseSnapshot:
+    """Load either cached library metadata or fresh TMDB details."""
+    if fsm_data.get("library_progress_edit"):
+        media_id = current_media_id(fsm_data)
+        if media_id is None:
+            raise SeriesMetadataError("Library media id is missing")
+        rows = await get_media_seasons(media_id)
+        if not rows:
+            raise SeriesMetadataError("Cached seasons are missing")
+        return snapshot_from_cached_rows(fsm_data, rows)
+
+    return await fetch_tv_details(
+        int(fsm_data.get("tmdb_id") or 0),
+        include_episode_availability=True,
+    )
+
+
+def normalize_seasons(snapshot: SeriesReleaseSnapshot) -> list[dict[str, Any]]:
+    """Return regular, non-empty seasons in the FSM-compatible shape."""
+    return snapshot.season_dicts(include_empty=False)
+
+
+def count_available_episodes(snapshot: SeriesReleaseSnapshot) -> int:
+    return sum(season["episode_count"] for season in normalize_seasons(snapshot))
+
+
+__all__ = (
+    "SeriesMetadataError",
+    "count_available_episodes",
+    "is_active_series",
+    "load_series_release_snapshot",
+    "normalize_seasons",
+    "snapshot_from_cached_rows",
+)

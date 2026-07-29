@@ -5,44 +5,6 @@ from __future__ import annotations
 import aiosqlite
 
 from src.database.connection import connection_scope
-from src.tmdb import MIN_RELEVANCE, title_relevance_score
-
-
-async def find_media_by_title(
-    title: str,
-    content_format: str,
-    content_type: str,
-    *,
-    database_url: str | None = None,
-) -> aiosqlite.Row | None:
-    """Return the closest local title, using the same relevance logic as TMDB."""
-    async with connection_scope(database_url) as connection:
-        async with connection.execute(
-            """
-            SELECT id, title, original_title
-            FROM media
-            WHERE content_format = ? AND content_type = ?
-            """,
-            (content_format, content_type),
-        ) as cursor:
-            rows = await cursor.fetchall()
-
-        best = None
-        best_score = 0.0
-        for row in rows:
-            score = title_relevance_score(dict(row), title)
-            if score > best_score:
-                best = row
-                best_score = score
-
-        if best is None or best_score < MIN_RELEVANCE:
-            return None
-
-        async with connection.execute(
-            "SELECT * FROM media WHERE id = ?",
-            (best["id"],),
-        ) as cursor:
-            return await cursor.fetchone()
 
 
 async def get_media_by_tmdb(
@@ -197,165 +159,6 @@ async def update_media_metadata(
         )
 
 
-async def update_media_series_release_info(
-    media_id: int,
-    *,
-    user_id: int,
-    status: str | None,
-    in_production: bool | None,
-    number_of_seasons: int,
-    number_of_episodes: int,
-    available_episode_count: int,
-    seasons: list[dict],
-    poster_path: str | None,
-    rating: float | None,
-    next_episode_air_date: str | None,
-    next_episode_season_number: int | None,
-    next_episode_number: int | None,
-    database_url: str | None = None,
-) -> None:
-    """Refresh shared release data and reconcile only the initiating user."""
-    async with connection_scope(database_url) as connection:
-        await connection.execute(
-            """
-            UPDATE media
-            SET tmdb_status = ?, tmdb_in_production = ?,
-                number_of_seasons = ?, number_of_episodes = ?,
-                available_episode_count = MAX(?, COALESCE((
-                    SELECT MAX(episodes_watched)
-                    FROM user_media
-                    WHERE media_id = ?
-                ), 0)),
-                poster_path = COALESCE(?, poster_path),
-                rating = COALESCE(?, rating),
-                next_episode_air_date = ?, next_episode_season_number = ?,
-                next_episode_number = ?,
-                tmdb_release_checked_at = CURRENT_TIMESTAMP,
-                last_updated = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (
-                status,
-                in_production,
-                number_of_seasons,
-                number_of_episodes,
-                available_episode_count,
-                media_id,
-                poster_path,
-                rating,
-                next_episode_air_date,
-                next_episode_season_number,
-                next_episode_number,
-                media_id,
-            ),
-        )
-        await _replace_media_seasons(connection, media_id, seasons)
-        await connection.execute(
-            """
-            UPDATE user_season_progress
-            SET episodes_watched = (
-                    SELECT ms.available_episode_count
-                    FROM media_seasons AS ms
-                    WHERE ms.media_id = user_season_progress.media_id
-                      AND ms.season_number = user_season_progress.season_number
-                ),
-                last_watched_at = CURRENT_TIMESTAMP
-            WHERE media_id = ? AND user_id = ?
-              AND EXISTS (
-                  SELECT 1 FROM media_seasons AS ms
-                  WHERE ms.media_id = user_season_progress.media_id
-                    AND ms.season_number = user_season_progress.season_number
-                    AND user_season_progress.episodes_watched
-                        > ms.available_episode_count
-              )
-            """,
-            (media_id, user_id),
-        )
-        active = bool(in_production) or status in {
-            "Returning Series",
-            "Planned",
-            "In Production",
-        }
-        await connection.execute(
-            """
-            UPDATE user_media
-            SET episodes_watched = COALESCE((
-                    SELECT SUM(usp.episodes_watched)
-                    FROM user_season_progress AS usp
-                    WHERE usp.user_id = user_media.user_id
-                      AND usp.media_id = user_media.media_id
-                ), 0),
-                status = CASE
-                    WHEN COALESCE((
-                        SELECT SUM(usp.episodes_watched)
-                        FROM user_season_progress AS usp
-                        WHERE usp.user_id = user_media.user_id
-                          AND usp.media_id = user_media.media_id
-                    ), 0) = 0 THEN 'planned'
-                    WHEN ? THEN 'watching'
-                    WHEN COALESCE((
-                        SELECT SUM(usp.episodes_watched)
-                        FROM user_season_progress AS usp
-                        WHERE usp.user_id = user_media.user_id
-                          AND usp.media_id = user_media.media_id
-                    ), 0) = ? THEN 'completed'
-                    ELSE 'watching'
-                END,
-                last_watched_at = CURRENT_TIMESTAMP
-            WHERE media_id = ? AND user_id = ?
-            """,
-            (active, available_episode_count, media_id, user_id),
-        )
-        await connection.execute(
-            """
-            UPDATE media
-            SET available_episode_count = ?
-            WHERE id = ?
-            """,
-            (available_episode_count, media_id),
-        )
-
-
-async def replace_media_seasons(
-    media_id: int,
-    seasons: list[dict],
-    *,
-    database_url: str | None = None,
-) -> None:
-    """Replace cached season availability from one TMDB response."""
-    async with connection_scope(database_url) as connection:
-        await _replace_media_seasons(connection, media_id, seasons)
-
-
-async def _replace_media_seasons(
-    connection: aiosqlite.Connection,
-    media_id: int,
-    seasons: list[dict],
-) -> None:
-    await connection.execute(
-        "DELETE FROM media_seasons WHERE media_id = ?", (media_id,)
-    )
-    if seasons:
-        await connection.executemany(
-            """
-            INSERT INTO media_seasons (
-                media_id, season_number, name,
-                announced_episode_count, available_episode_count
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    media_id,
-                    season["season_number"],
-                    season["name"],
-                    season.get("announced_episode_count", season["episode_count"]),
-                    season["episode_count"],
-                )
-                for season in seasons
-            ],
-        )
-
-
 def _last_row_id(cursor: aiosqlite.Cursor) -> int:
     if cursor.lastrowid is None:
         raise RuntimeError("Insert did not produce a row id")
@@ -363,11 +166,8 @@ def _last_row_id(cursor: aiosqlite.Cursor) -> int:
 
 
 __all__ = (
-    "find_media_by_title",
     "get_media_by_tmdb",
-    "replace_media_seasons",
     "upsert_media",
     "update_media_metadata",
     "update_media_poster",
-    "update_media_series_release_info",
 )

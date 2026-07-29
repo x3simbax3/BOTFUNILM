@@ -11,6 +11,7 @@ from src.callback_data import parse_rating_callback
 from src.database.user_media import save_user_media, update_user_media_rating
 from src.fsm import MenuState
 from src.handlers.common import delete_message_safely
+from src.handlers.navigation import reset_to_main
 from src.handlers.series import start_series_tracking
 from src.keyboards import main_menu_keyboard, rating_keyboard
 from src.lang import (
@@ -24,6 +25,7 @@ from src.lang import (
     rating_prompt_text,
     rating_summary_text,
 )
+from src.models import current_media_id
 from src.services import ensure_media
 
 router = Router(name="rating")
@@ -41,7 +43,7 @@ async def back_from_rating(callback: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(ratings={}, rating_index=0)
         if data.get("library_rating_edit"):
             await state.update_data(library_rating_edit=False)
-            await state.set_state(MenuState.choosing_action)
+            await reset_to_main(state)
             await callback.message.edit_text(
                 RATING_EDIT_CANCELLED,
                 reply_markup=main_menu_keyboard(),
@@ -130,8 +132,8 @@ async def finish_library_rating_edit(
     average: float,
 ) -> None:
     data = await state.get_data()
-    media_id = data.get("media_id")
-    if type(media_id) is not int or media_id <= 0:
+    media_id = current_media_id(data)
+    if media_id is None:
         await callback.answer(MOVIE_SAVE_FAILED, show_alert=True)
         return
     try:
@@ -152,7 +154,7 @@ async def finish_library_rating_edit(
         RATING_UPDATED,
         reply_markup=main_menu_keyboard(),
     )
-    await state.set_state(MenuState.choosing_action)
+    await reset_to_main(state)
 
 
 async def finish_movie(
@@ -183,4 +185,4 @@ async def finish_movie(
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(),
     )
-    await state.set_state(MenuState.choosing_action)
+    await reset_to_main(state)
