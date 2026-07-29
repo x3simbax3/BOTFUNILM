@@ -70,6 +70,30 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("with_genres", fetch.await_args.args[2])
 
+    async def test_search_logs_do_not_include_user_query(self) -> None:
+        private_query = "private user search"
+        data = {
+            "results": [
+                {
+                    "id": 42,
+                    "title": private_query,
+                    "genre_ids": [18],
+                }
+            ]
+        }
+
+        with (
+            mock_tmdb_api(data),
+            self.assertLogs(tmdb_search.logger, level="INFO") as captured,
+        ):
+            await tmdb_search.find_title_guess(
+                private_query,
+                "full_length",
+                "movie",
+            )
+
+        self.assertNotIn(private_query, "\n".join(captured.output))
+
     async def test_fetch_json_classifies_http_errors(self) -> None:
         cases = (
             (401, TmdbAuthenticationError),

@@ -53,10 +53,15 @@ async def find_title_candidates(
     media_path = "tv" if content_format == "series" else "movie"
     search_url = f"{TMDB_URL.rstrip('/')}/search/{media_path}"
     queries = make_queries(original_query)
-    logger.info("Поиск '%s', варианты: %s", original_query, queries)
+    logger.info(
+        "TMDB search started format=%s type=%s variants=%d",
+        content_format,
+        content_type,
+        len(queries),
+    )
 
     session = await get_http_session()
-    for query_variant in queries:
+    for attempt, query_variant in enumerate(queries, start=1):
         data = await fetch_json(
             session,
             search_url,
@@ -90,13 +95,22 @@ async def find_title_candidates(
                 if len(candidates) == limit:
                     break
             logger.info(
-                "query='%s': найдено вариантов=%d, results=%d",
-                query_variant,
+                "TMDB search matched format=%s type=%s attempt=%d "
+                "candidates=%d results=%d",
+                content_format,
+                content_type,
+                attempt,
                 len(candidates),
                 len(results),
             )
             return candidates
 
+    logger.info(
+        "TMDB search completed without match format=%s type=%s attempts=%d",
+        content_format,
+        content_type,
+        len(queries),
+    )
     raise TmdbNotFoundError(original_query)
 
 

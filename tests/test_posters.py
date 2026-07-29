@@ -54,6 +54,17 @@ class PosterInputTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertIsNone(posters.poster_input(url))
 
+    def test_rejected_url_log_does_not_include_path_or_query(self) -> None:
+        url = "https://attacker.example/private-title.jpg?user-input=secret"
+
+        with self.assertLogs(posters.logger, level="WARNING") as captured:
+            self.assertIsNone(posters.poster_input(url))
+
+        rendered = "\n".join(captured.output)
+        self.assertIn("attacker.example", rendered)
+        self.assertNotIn("private-title", rendered)
+        self.assertNotIn("user-input", rendered)
+
     def test_extracts_largest_sent_photo_file_id(self) -> None:
         message = SimpleNamespace(
             photo=[SimpleNamespace(file_id="small"), SimpleNamespace(file_id="large")]

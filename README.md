@@ -124,7 +124,7 @@ SQLite-база находится в именованном volume `bot_data`, 
 | `BOT_TOKEN` | токен Telegram-бота от BotFather | обязательна |
 | `TMDB_API` | TMDB API Read Access Token | обязательна для поиска |
 | `DATABASE_URL` | URL SQLite при локальном запуске | `sqlite:///bot.db` |
-| `DEBUG` | подробное логирование | `false` |
+| `DEBUG` | диагностика приложения без текста сообщений и raw updates | `false` |
 | `TMDB_URL` | HTTPS-адрес TMDB API; хост должен входить в allowlist | `https://api.themoviedb.org/3` |
 | `TMDB_ALLOWED_HOSTS` | точные имена хостов, которым разрешено передавать TMDB-токен | `api.themoviedb.org` |
 | `TMDB_LANG` | язык данных TMDB | `ru-RU` |

@@ -22,6 +22,7 @@ from src.database.connection import database_path
 from src.database.media_search import backfill_media_search_index
 from src.file_security import verify_private_files
 from src.http_client import close_http_session
+from src.logging_config import configure_logging
 from src.routers import router
 from src.update_throttling import UserThrottleMiddleware
 
@@ -64,10 +65,9 @@ def create_dispatcher() -> Dispatcher:
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.DEBUG if DEBUG else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging(debug=DEBUG)
+    logger = logging.getLogger(__name__)
+    logger.info("Bot startup initiated")
 
     os.umask(0o077)
     verify_private_files(
@@ -92,6 +92,7 @@ async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
     try:
         await bot.me()
+        logger.info("Telegram connection verified; polling starting")
         dp = create_dispatcher()
         dp.include_router(router)
         await dp.start_polling(
@@ -99,6 +100,7 @@ async def main() -> None:
             tasks_concurrency_limit=UPDATE_TASKS_CONCURRENCY_LIMIT,
         )
     finally:
+        logger.info("Bot shutdown initiated")
         try:
             await close_http_session()
         finally:

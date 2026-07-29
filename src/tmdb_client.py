@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -65,13 +66,21 @@ async def fetch_json(
                         raise TmdbError("TMDB вернул некорректный ответ") from exc
         raise TmdbRateLimitError
     except TmdbError as exc:
-        logger.warning("TMDB %s вернул ошибку: %s", url, type(exc).__name__)
+        logger.warning(
+            "TMDB request failed host=%s error=%s",
+            _request_host(url),
+            type(exc).__name__,
+        )
         raise
     except asyncio.TimeoutError:
-        logger.warning("TMDB %s: таймаут", url)
+        logger.warning("TMDB request timed out host=%s", _request_host(url))
         raise TmdbUnavailableError from None
     except aiohttp.ClientError as exc:
-        logger.warning("TMDB %s: сетевая ошибка: %s", url, exc)
+        logger.warning(
+            "TMDB network failure host=%s error=%s",
+            _request_host(url),
+            type(exc).__name__,
+        )
         raise TmdbUnavailableError from exc
 
 
@@ -112,6 +121,10 @@ async def _read_json_response(response: aiohttp.ClientResponse) -> dict:
     if not isinstance(data, dict):
         raise ValueError("TMDB response must be a JSON object")
     return data
+
+
+def _request_host(url: str) -> str:
+    return urlsplit(url).hostname or "unknown"
 
 
 __all__ = ("fetch_json",)

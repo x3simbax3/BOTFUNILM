@@ -24,7 +24,7 @@ def poster_input(poster_path: str | None) -> str | FSInputFile | None:
     try:
         local_path.relative_to(MEDIA_ROOT)
     except ValueError:
-        logger.warning("Некорректный локальный путь постера: %s", poster_path)
+        logger.warning("Rejected poster path outside MEDIA_ROOT")
         return None
 
     return FSInputFile(local_path) if local_path.is_file() else None
@@ -47,7 +47,7 @@ def _is_allowed_poster_url(url: str) -> bool:
         and not parsed.fragment
     )
     if not allowed:
-        logger.warning("Отклонён недоверенный URL постера: %s", url)
+        logger.warning("Rejected poster URL host=%s", hostname or "invalid")
     return allowed
 
 
