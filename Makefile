@@ -9,7 +9,7 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps migrate migration db-check db-status db-downgrade db-reset commit
+.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset commit
 .NOTPARALLEL: check
 
 help:
@@ -28,6 +28,7 @@ help:
 	@echo ""
 	@echo "Local development targets:"
 	@echo "  make start-local    Apply migrations and run bot through uv"
+	@echo "  make secure-files   Restrict local .env and database permissions"
 	@echo "  make test-local     Run tests locally through uv"
 	@echo "  make db-check       Validate migration files and schema"
 	@echo "  make migration name='...'  Generate a migration"
@@ -63,10 +64,10 @@ build: compose-check
 
 start: up
 
-up: compose-check
+up: secure-files compose-check
 	$(COMPOSE) up --detach --build
 
-deploy: compose-check
+deploy: secure-files compose-check
 	$(COMPOSE) up --detach --build bot
 
 start-local: migrate
@@ -85,8 +86,12 @@ logs:
 ps:
 	$(COMPOSE) ps
 
-migrate:
-	$(ATLAS) migrate apply --env local
+secure-files:
+	chmod 600 config/.env
+	@if [ -e bot.db ]; then chmod 600 bot.db; fi
+
+migrate: secure-files
+	umask 077; $(ATLAS) migrate apply --env local
 
 migration:
 	@if [ -z "$(name)" ]; then \
@@ -118,7 +123,7 @@ db-reset:
 			*) echo "Database reset cancelled."; exit 1 ;; \
 		esac; \
 		rm -f -- bot.db bot.db-shm bot.db-wal; \
-		$(ATLAS) migrate apply --env local
+		umask 077; $(ATLAS) migrate apply --env local
 
 commit: check
 	@if [ -z "$(m)" ]; then \

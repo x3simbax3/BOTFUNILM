@@ -5,10 +5,14 @@ from typing import Any
 
 import aiosqlite
 from aiogram import F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.database.media import get_media_by_tmdb
+from src.database.media import (
+    get_media_by_tmdb,
+    update_media_telegram_poster_file_id,
+)
 from src.database.user_media import get_user_media
 from src.fsm import MenuState
 from src.handlers.common import (
@@ -30,7 +34,7 @@ from src.lang import (
     WATCH_STATUS_PROMPT,
 )
 from src.models import MediaWorkflowData, current_media_id
-from src.posters import poster_input
+from src.posters import poster_input, sent_photo_file_id
 from src.services.title_search import TitleSearchCandidate
 from src.tmdb_search import MAX_TITLE_CANDIDATES
 
@@ -52,15 +56,28 @@ async def show_candidates(
         0,
         len(payloads),
     )
+    telegram_poster_file_id = sent_photo_file_id(guess_message) or payloads[0].get(
+        "telegram_poster_file_id"
+    )
+    if telegram_poster_file_id and payloads[0].get("media_id"):
+        try:
+            await update_media_telegram_poster_file_id(
+                int(payloads[0]["media_id"]),
+                telegram_poster_file_id,
+            )
+        except aiosqlite.Error:
+            pass
+    workflow_data = MediaWorkflowData.from_tmdb_candidate(
+        payloads[0],
+        content_format=content_format,
+        content_type=content_type,
+    ).to_fsm_dict()
+    workflow_data["telegram_poster_file_id"] = telegram_poster_file_id
     await state.update_data(
         tmdb_candidates=payloads,
         tmdb_candidate_index=0,
         tmdb_guess_message_id=guess_message.message_id,
-        **MediaWorkflowData.from_tmdb_candidate(
-            payloads[0],
-            content_format=content_format,
-            content_type=content_type,
-        ).to_fsm_dict(),
+        **workflow_data,
     )
     await state.set_state(MenuState.confirming_tmdb_guess)
 
@@ -85,15 +102,29 @@ async def _send_candidate(
         display_title,
         candidate.get("overview"),
     )
-    photo = poster_input(candidate.get("poster_path")) or candidate.get("poster_url")
+    fallback_photo = poster_input(candidate.get("poster_path")) or poster_input(
+        candidate.get("poster_url")
+    )
+    cached_file_id = candidate.get("telegram_poster_file_id")
+    photo = cached_file_id or fallback_photo
     keyboard = tmdb_guess_keyboard(position, total)
     if photo:
-        return await message.answer_photo(
-            photo=photo,
-            caption=text,
-            parse_mode="HTML",
-            reply_markup=keyboard,
-        )
+        try:
+            return await message.answer_photo(
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        except TelegramBadRequest:
+            if not cached_file_id or not fallback_photo:
+                raise
+            return await message.answer_photo(
+                photo=fallback_photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
     return await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -136,14 +167,27 @@ async def navigate_tmdb_guesses(callback: CallbackQuery, state: FSMContext) -> N
         position,
         len(candidates),
     )
+    telegram_poster_file_id = sent_photo_file_id(guess_message) or candidate.get(
+        "telegram_poster_file_id"
+    )
+    if telegram_poster_file_id and candidate.get("media_id"):
+        try:
+            await update_media_telegram_poster_file_id(
+                int(candidate["media_id"]),
+                telegram_poster_file_id,
+            )
+        except aiosqlite.Error:
+            pass
+    workflow_data = MediaWorkflowData.from_tmdb_candidate(
+        candidate,
+        content_format=data.get("content_format", ""),
+        content_type=data.get("content_type", "movie"),
+    ).to_fsm_dict()
+    workflow_data["telegram_poster_file_id"] = telegram_poster_file_id
     await state.update_data(
         tmdb_candidate_index=position,
         tmdb_guess_message_id=guess_message.message_id,
-        **MediaWorkflowData.from_tmdb_candidate(
-            candidate,
-            content_format=data.get("content_format", ""),
-            content_type=data.get("content_type", "movie"),
-        ).to_fsm_dict(),
+        **workflow_data,
     )
 
 

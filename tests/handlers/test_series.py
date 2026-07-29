@@ -392,6 +392,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             original_title=None,
             description=None,
             poster_path=None,
+            telegram_poster_file_id=None,
             first_air_date=None,
             number_of_seasons=2,
             number_of_episodes=10,

@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
@@ -8,7 +9,57 @@ from src.tmdb import TMDB_IMAGE_URL, TmdbTitle
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
 
+class PhotoCachingMessageStub(MessageStub):
+    async def answer_photo(self, photo: str, **kwargs):
+        sent = await super().answer_photo(photo, **kwargs)
+        sent.photo = [SimpleNamespace(file_id="telegram-file-id")]
+        return sent
+
+
 class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_opening_item_caches_telegram_photo_file_id(self) -> None:
+        message = PhotoCachingMessageStub()
+        state = StateStub()
+        item = {
+            "id": 7,
+            "tmdb_id": 42,
+            "title": "Матрица",
+            "original_title": "The Matrix",
+            "description": "Описание",
+            "poster_path": "/poster.jpg",
+            "telegram_poster_file_id": None,
+            "content_format": "full_length",
+            "content_type": "movie",
+            "user_status": "completed",
+            "user_rating": 9,
+            "rating": 8.7,
+            "release_date": "1999-03-31",
+            "first_air_date": None,
+            "number_of_seasons": None,
+            "number_of_episodes": None,
+            "episodes_watched": None,
+            "library_users_count": 1,
+        }
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_item",
+                AsyncMock(return_value=item),
+            ),
+            patch.object(
+                library_handlers,
+                "update_media_telegram_poster_file_id",
+                AsyncMock(),
+            ) as update_file_id,
+        ):
+            await library_handlers.show_library_item(message, state, 123, 7)
+
+        self.assertEqual(
+            message.photo_answers[0]["photo"],
+            f"{TMDB_IMAGE_URL}/poster.jpg",
+        )
+        update_file_id.assert_awaited_once_with(7, "telegram-file-id")
+
     async def test_start_deep_link_opens_owned_library_item(self) -> None:
         message = MessageStub(text="/start media_7")
         state = StateStub({"library_message_id": 55})

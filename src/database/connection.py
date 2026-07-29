@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import aiosqlite
 
-from config.config import DATABASE_URL
+from config.config import DATABASE_URL, SQLITE_BUSY_TIMEOUT_MS
 
 
 def database_path(database_url: str | None = None) -> str:
@@ -24,10 +24,17 @@ def database_path(database_url: str | None = None) -> str:
 
 async def connect_database(database_url: str | None = None) -> aiosqlite.Connection:
     """Open an asynchronous SQLite connection for direct cursor use."""
-    connection = await aiosqlite.connect(database_path(database_url), timeout=5)
+    if SQLITE_BUSY_TIMEOUT_MS <= 0:
+        raise ValueError("SQLITE_BUSY_TIMEOUT_MS must be positive")
+    connection = await aiosqlite.connect(
+        database_path(database_url),
+        timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+    )
     connection.row_factory = aiosqlite.Row
     await connection.execute("PRAGMA foreign_keys = ON")
-    await connection.execute("PRAGMA busy_timeout = 5000")
+    await connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    await connection.execute("PRAGMA journal_mode = WAL")
+    await connection.execute("PRAGMA synchronous = NORMAL")
     return connection
 
 

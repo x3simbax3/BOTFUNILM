@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import rating as rating_handlers
-from src.services import media as media_service
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
 
@@ -97,66 +96,21 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        with (
-            patch.object(
-                media_service,
-                "upsert_media",
-                AsyncMock(return_value=7),
-            ) as upsert,
-            patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
-        ):
+        with patch.object(
+            rating_handlers,
+            "save_completed_movie",
+            AsyncMock(return_value=7),
+        ) as save:
             await rating_handlers.finish_movie(callback, state, 8.6)
 
-        upsert.assert_awaited_once_with(
-            tmdb_id=42,
-            content_format="full_length",
-            content_type="cartoon",
-            title="Фильм",
-            original_title=None,
-            description=None,
-            poster_path=None,
-            release_date=None,
-        )
         save.assert_awaited_once_with(
-            user_id=123,
-            media_id=7,
-            status="completed",
-            user_rating=9,
-            rating_details=ratings,
-        )
-        self.assertEqual(state.state, MenuState.choosing_action)
-
-    async def test_finish_movie_reuses_local_media(self) -> None:
-        message = MessageStub()
-        callback = CallbackStub("rate:8", message)
-        ratings = {
-            "acting": 8,
-            "story": 8,
-            "visuals": 8,
-            "sound": 8,
-            "overall": 8,
-        }
-        state = StateStub(
+            123,
             {
-                "media_id": 7,
                 "tmdb_id": 42,
                 "tmdb_title": "Фильм",
-                "content_type": "movie",
+                "content_type": "cartoon",
                 "ratings": ratings,
-            }
+            },
+            8.6,
         )
-
-        with (
-            patch.object(media_service, "upsert_media", AsyncMock()) as upsert,
-            patch.object(rating_handlers, "save_user_media", AsyncMock()) as save,
-        ):
-            await rating_handlers.finish_movie(callback, state, 8.0)
-
-        upsert.assert_not_awaited()
-        save.assert_awaited_once_with(
-            user_id=123,
-            media_id=7,
-            status="completed",
-            user_rating=8,
-            rating_details=ratings,
-        )
+        self.assertEqual(state.state, MenuState.choosing_action)

@@ -68,6 +68,21 @@ class MigrationTests(DatabaseTestCase):
         connection = await connect_database(self.database_url)
         await connection.close()
 
+    async def test_connections_enable_wal_and_busy_timeout(self) -> None:
+        connection = await connect_database(self.database_url)
+        try:
+            journal_mode = (
+                await (await connection.execute("PRAGMA journal_mode")).fetchone()
+            )[0]
+            busy_timeout = (
+                await (await connection.execute("PRAGMA busy_timeout")).fetchone()
+            )[0]
+        finally:
+            await connection.close()
+
+        self.assertEqual(journal_mode, "wal")
+        self.assertGreaterEqual(busy_timeout, 5000)
+
     def test_non_sqlite_url_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Only sqlite"):
             database_path("postgresql://localhost/botfunilm")

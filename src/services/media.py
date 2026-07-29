@@ -7,7 +7,6 @@ import aiosqlite
 
 from src.database.media import upsert_media
 from src.models import current_media_id
-from src.posters import download_poster, poster_input
 
 
 async def ensure_media(
@@ -24,14 +23,6 @@ async def ensure_media(
     if media_id is not None:
         return media_id
 
-    poster_source = data.get("tmdb_poster_url") or poster_input(
-        data.get("tmdb_poster_path")
-    )
-    poster_path = await download_poster(
-        poster_source if isinstance(poster_source, str) else None,
-        data.get("tmdb_id", 0),
-        content_format,
-    )
     media_details = {
         "tmdb_id": data.get("tmdb_id"),
         "content_format": content_format,
@@ -39,7 +30,8 @@ async def ensure_media(
         "title": data.get("tmdb_title", ""),
         "original_title": data.get("tmdb_original_title"),
         "description": data.get("tmdb_description"),
-        "poster_path": poster_path or data.get("tmdb_poster_path"),
+        "poster_path": data.get("tmdb_poster_path"),
+        "telegram_poster_file_id": data.get("telegram_poster_file_id"),
     }
     if content_format == "series":
         media_details["first_air_date"] = data.get("tmdb_release_date")

@@ -32,13 +32,6 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.local_search = patcher.start()
         self.addCleanup(patcher.stop)
-        poster_patcher = patch.object(
-            title_search,
-            "download_poster",
-            AsyncMock(return_value=None),
-        )
-        self.poster_download = poster_patcher.start()
-        self.addCleanup(poster_patcher.stop)
 
     async def test_search_title_without_text_asks_for_text(self) -> None:
         message = MessageStub(text=None)
@@ -82,7 +75,11 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub(text="Матрица")
         state = StateStub({"content_format": "full_length"})
         guess = TmdbTitle(
-            "Матрица", "Описание", "https://image.test/poster.jpg", "Матрица", "Матрица"
+            "Матрица",
+            "Описание",
+            "https://image.tmdb.org/t/p/w500/poster.jpg",
+            "Матрица",
+            "Матрица",
         )
 
         with patch.object(

@@ -1,8 +1,8 @@
-FROM arigaio/atlas:latest AS atlas
+FROM arigaio/atlas@sha256:ff5291f4995d545479a8301aa364eb256d9f94747d82ae9d6d691ba877fbe8d3 AS atlas
 
-FROM python:3.10-slim-trixie AS base
+FROM python:3.10-slim-trixie@sha256:c1e4e6c01eb489c422288b2de34b0761ca316f7a2d98e2c33f47659a73ed108a AS base
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 COPY --from=atlas /atlas /usr/local/bin/atlas
 
 ENV PYTHONUNBUFFERED=1 \

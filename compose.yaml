@@ -5,6 +5,9 @@ services:
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 512m
+    pids_limit: 128
     env_file:
       - config/.env
     environment:
@@ -20,8 +23,11 @@ services:
       - bot_data:/data
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4.10-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: unless-stopped
+    cpus: "0.50"
+    mem_limit: 128m
+    pids_limit: 64
     command:
       - redis-server
       - --save

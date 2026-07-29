@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from src.callback_data import parse_rating_callback
-from src.database.user_media import save_user_media, update_user_media_rating
+from src.database.user_media import update_user_media_rating
 from src.fsm import MenuState
 from src.handlers.common import delete_message_safely
 from src.handlers.navigation import reset_to_main
@@ -26,7 +26,7 @@ from src.lang import (
     rating_summary_text,
 )
 from src.models import current_media_id
-from src.services import ensure_media
+from src.services import save_completed_movie
 
 router = Router(name="rating")
 
@@ -164,13 +164,10 @@ async def finish_movie(
 ) -> None:
     data = await state.get_data()
     try:
-        media_id = await ensure_media(data, "full_length")
-        await save_user_media(
-            user_id=callback.from_user.id,
-            media_id=media_id,
-            status="completed",
-            user_rating=round(average),
-            rating_details=data.get("ratings"),
+        await save_completed_movie(
+            callback.from_user.id,
+            dict(data),
+            average,
         )
     except (aiosqlite.Error, RuntimeError):
         await callback.answer(

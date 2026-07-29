@@ -85,9 +85,13 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
                 session = SessionStub(ResponseStub(status, headers=headers))
                 with self.assertRaises(error_type):
                     await tmdb_client.fetch_json(
-                        session, "https://tmdb.test", {}, "token"
+                        session,
+                        "https://api.themoviedb.org/3/test",
+                        {},
+                        "token",
                     )
                 self.assertEqual(session.call_count, 2 if status == 429 else 1)
+                self.assertFalse(session.last_get_kwargs["allow_redirects"])
 
     async def test_fetch_json_classifies_timeout_and_network_error(self) -> None:
         for error in (asyncio.TimeoutError(), aiohttp.ClientConnectionError()):
@@ -95,7 +99,34 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(TmdbUnavailableError):
                     await tmdb_client.fetch_json(
                         SessionStub(error=error),
-                        "https://tmdb.test",
+                        "https://api.themoviedb.org/3/test",
                         {},
                         "token",
                     )
+
+    async def test_fetch_json_rejects_untrusted_host_before_request(self) -> None:
+        session = SessionStub(ResponseStub(200, {"ok": True}))
+
+        with self.assertRaises(ValueError):
+            await tmdb_client.fetch_json(
+                session,
+                "https://attacker.example/3/search/movie",
+                {},
+                "token",
+            )
+
+        self.assertEqual(session.call_count, 0)
+
+    async def test_fetch_json_rejects_oversized_response(self) -> None:
+        session = SessionStub(ResponseStub(200, raw_body=b'{"value":"large"}'))
+
+        with (
+            patch.object(tmdb_client, "TMDB_MAX_RESPONSE_BYTES", 8),
+            self.assertRaisesRegex(TmdbError, "too large"),
+        ):
+            await tmdb_client.fetch_json(
+                session,
+                "https://api.themoviedb.org/3/test",
+                {},
+                "token",
+            )

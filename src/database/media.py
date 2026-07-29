@@ -13,6 +13,7 @@ from src.database.series_release import (
     update_media_series_release_info as _update_media_series_release_info,
 )
 from src.models import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
+from src.tmdb_matching import normalize_text
 
 
 async def get_media_by_tmdb(
@@ -43,6 +44,7 @@ async def upsert_media(
     original_title: str | None = None,
     description: str | None = None,
     poster_path: str | None = None,
+    telegram_poster_file_id: str | None = None,
     rating: float | None = None,
     release_date: str | None = None,
     first_air_date: str | None = None,
@@ -65,8 +67,11 @@ async def upsert_media(
         content_type,
         title,
         original_title,
+        normalize_text(title),
+        normalize_text(original_title or ""),
         description,
         poster_path,
+        telegram_poster_file_id,
         rating,
         release_date,
         first_air_date,
@@ -85,11 +90,13 @@ async def upsert_media(
                 """
                 INSERT INTO media (
                     tmdb_id, content_format, content_type, title,
-                    original_title, description,
-                    poster_path, rating, release_date, first_air_date,
+                    original_title, normalized_title,
+                    normalized_original_title, description,
+                    poster_path, telegram_poster_file_id,
+                    rating, release_date, first_air_date,
                     number_of_seasons, number_of_episodes,
                     available_episode_count, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 values,
             ) as cursor:
@@ -99,23 +106,46 @@ async def upsert_media(
             """
             INSERT INTO media (
                 tmdb_id, content_format, content_type, title,
-                original_title, description,
-                poster_path, rating, release_date, first_air_date,
+                original_title, normalized_title,
+                normalized_original_title, description,
+                poster_path, telegram_poster_file_id,
+                rating, release_date, first_air_date,
                 number_of_seasons, number_of_episodes,
                 available_episode_count, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tmdb_id, content_format, content_type) DO UPDATE SET
                 title = excluded.title,
-                original_title = excluded.original_title,
-                description = excluded.description,
-                poster_path = excluded.poster_path,
-                rating = excluded.rating,
-                release_date = excluded.release_date,
-                first_air_date = excluded.first_air_date,
-                number_of_seasons = excluded.number_of_seasons,
-                number_of_episodes = excluded.number_of_episodes,
-                available_episode_count = excluded.available_episode_count,
-                status = excluded.status,
+                normalized_title = excluded.normalized_title,
+                original_title = COALESCE(
+                    excluded.original_title, media.original_title
+                ),
+                normalized_original_title = CASE
+                    WHEN excluded.original_title IS NULL
+                        THEN media.normalized_original_title
+                    ELSE excluded.normalized_original_title
+                END,
+                description = COALESCE(excluded.description, media.description),
+                poster_path = COALESCE(excluded.poster_path, media.poster_path),
+                telegram_poster_file_id = COALESCE(
+                    excluded.telegram_poster_file_id,
+                    media.telegram_poster_file_id
+                ),
+                rating = COALESCE(excluded.rating, media.rating),
+                release_date = COALESCE(excluded.release_date, media.release_date),
+                first_air_date = COALESCE(
+                    excluded.first_air_date, media.first_air_date
+                ),
+                number_of_seasons = COALESCE(
+                    excluded.number_of_seasons, media.number_of_seasons
+                ),
+                number_of_episodes = COALESCE(
+                    excluded.number_of_episodes, media.number_of_episodes
+                ),
+                available_episode_count = COALESCE(
+                    excluded.available_episode_count,
+                    media.available_episode_count
+                ),
+                status = COALESCE(excluded.status, media.status),
                 last_updated = CURRENT_TIMESTAMP
             """,
             values,
@@ -147,6 +177,26 @@ async def update_media_poster(
             WHERE id = ?
             """,
             (poster_path, media_id),
+        )
+
+
+async def update_media_telegram_poster_file_id(
+    media_id: int,
+    file_id: str,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """Cache a reusable Telegram photo id for a catalogue item."""
+    if not file_id:
+        raise ValueError("Telegram poster file id cannot be empty")
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            """
+            UPDATE media
+            SET telegram_poster_file_id = ?, last_updated = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (file_id, media_id),
         )
 
 
@@ -252,5 +302,6 @@ __all__ = (
     "upsert_media",
     "update_media_metadata",
     "update_media_poster",
+    "update_media_telegram_poster_file_id",
     "update_media_series_release_info",
 )

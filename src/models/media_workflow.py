@@ -19,6 +19,7 @@ class MediaWorkflowData:
     tmdb_rating: float | None
     content_format: str
     content_type: str
+    telegram_poster_file_id: str | None = None
 
     @classmethod
     def from_tmdb_candidate(
@@ -43,6 +44,7 @@ class MediaWorkflowData:
             or str(_get(candidate, "content_format") or ""),
             content_type=content_type
             or str(_get(candidate, "content_type") or "movie"),
+            telegram_poster_file_id=_get(candidate, "telegram_poster_file_id"),
         )
 
     @classmethod
@@ -61,6 +63,7 @@ class MediaWorkflowData:
             tmdb_rating=_get(item, "rating"),
             content_format=str(item["content_format"]),
             content_type=str(item["content_type"]),
+            telegram_poster_file_id=_get(item, "telegram_poster_file_id"),
         )
 
     @classmethod
@@ -78,6 +81,7 @@ class MediaWorkflowData:
             tmdb_rating=data.get("tmdb_rating"),
             content_format=str(data.get("content_format") or ""),
             content_type=str(data.get("content_type") or "movie"),
+            telegram_poster_file_id=data.get("telegram_poster_file_id"),
         )
 
     def to_fsm_dict(self) -> dict[str, Any]:

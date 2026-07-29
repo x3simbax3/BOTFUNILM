@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch
@@ -19,13 +20,27 @@ class ResponseStub(AsyncContextStub):
         status: int,
         data: dict | None = None,
         headers: dict[str, str] | None = None,
+        raw_body: bytes | None = None,
     ) -> None:
         self.status = status
         self.data = data or {}
         self.headers = headers or {}
+        self.content = ContentStub(
+            raw_body if raw_body is not None else json.dumps(self.data).encode()
+        )
+        self.content_length = len(raw_body) if raw_body is not None else None
 
     async def json(self, **kwargs) -> dict:
         return self.data
+
+
+class ContentStub:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    async def read(self, size: int) -> bytes:
+        chunk, self.body = self.body[:size], self.body[size:]
+        return chunk
 
 
 class SessionStub(AsyncContextStub):
@@ -33,9 +48,11 @@ class SessionStub(AsyncContextStub):
         self.response = response
         self.error = error
         self.call_count = 0
+        self.last_get_kwargs = None
 
     def get(self, *args, **kwargs):
         self.call_count += 1
+        self.last_get_kwargs = kwargs
         if self.error:
             raise self.error
         return self.response

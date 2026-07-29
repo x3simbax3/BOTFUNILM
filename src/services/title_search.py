@@ -6,11 +6,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from src.database.media import update_media_poster
 from src.database.media_search import find_media_by_title
-from src.posters import download_poster
 from src.tmdb_models import TmdbTitle
-from src.tmdb_parsing import TMDB_IMAGE_URL
 from src.tmdb_search import MAX_TITLE_CANDIDATES, find_title_candidates
 
 
@@ -25,6 +22,7 @@ class TitleSearchCandidate:
     rating: float | None
     original_title: str | None
     release_date: str | None
+    telegram_poster_file_id: str | None = None
 
     @classmethod
     def from_tmdb(
@@ -32,6 +30,7 @@ class TitleSearchCandidate:
         title: TmdbTitle,
         *,
         media_id: int | None = None,
+        telegram_poster_file_id: str | None = None,
     ) -> TitleSearchCandidate:
         return cls(
             media_id=media_id,
@@ -43,6 +42,7 @@ class TitleSearchCandidate:
             rating=title.rating,
             original_title=title.original_title,
             release_date=title.release_date,
+            telegram_poster_file_id=telegram_poster_file_id,
         )
 
     def to_fsm_dict(self) -> dict[str, Any]:
@@ -59,15 +59,17 @@ async def search_title_candidates(
     """Return a local candidate when possible, otherwise query TMDB."""
     local_media = await find_media_by_title(query, content_format, content_type)
     if local_media is not None:
-        local_title = await _title_from_local_media(
+        local_title = _title_from_local_media(
             local_media,
             query,
-            content_format,
         )
         return [
             TitleSearchCandidate.from_tmdb(
                 local_title,
                 media_id=int(local_media["id"]),
+                telegram_poster_file_id=dict(local_media).get(
+                    "telegram_poster_file_id"
+                ),
             )
         ]
 
@@ -82,27 +84,11 @@ async def search_title_candidates(
     return [TitleSearchCandidate.from_tmdb(title) for title in titles]
 
 
-async def _title_from_local_media(
+def _title_from_local_media(
     local_media,
     query: str,
-    content_format: str,
 ) -> TmdbTitle:
     poster_path = local_media["poster_path"]
-    if poster_path and poster_path.startswith(("/", "http://", "https://")):
-        poster_url = (
-            poster_path
-            if poster_path.startswith(("http://", "https://"))
-            else f"{TMDB_IMAGE_URL}{poster_path}"
-        )
-        cached_path = await download_poster(
-            poster_url,
-            local_media["tmdb_id"] or 0,
-            content_format,
-        )
-        if cached_path:
-            poster_path = cached_path
-            await update_media_poster(local_media["id"], cached_path)
-
     return TmdbTitle(
         title=local_media["title"],
         overview=local_media["description"],

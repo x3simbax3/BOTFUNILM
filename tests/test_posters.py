@@ -1,39 +1,12 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from aiogram.types import FSInputFile
 
 from src import posters
-
-
-class ContentStub:
-    async def iter_chunked(self, size: int):
-        yield b"poster-data"
-
-
-class ResponseStub:
-    status = 200
-    headers = {"Content-Type": "image/jpeg"}
-    content = ContentStub()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, traceback) -> None:
-        pass
-
-
-class SessionStub:
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, traceback) -> None:
-        pass
-
-    def get(self, url: str) -> ResponseStub:
-        return ResponseStub()
 
 
 class PosterInputTests(unittest.TestCase):
@@ -65,38 +38,28 @@ class PosterInputTests(unittest.TestCase):
     def test_keeps_legacy_tmdb_path(self) -> None:
         result = posters.poster_input("/poster.jpg")
 
-        self.assertEqual(result, "https://image.tmdb.org/t/p/original/poster.jpg")
+        self.assertEqual(result, "https://image.tmdb.org/t/p/w500/poster.jpg")
 
+    def test_accepts_allowed_https_poster_url(self) -> None:
+        url = "https://image.tmdb.org/t/p/w500/poster.jpg"
 
-class PosterDownloadTests(unittest.IsolatedAsyncioTestCase):
-    async def test_without_url_does_not_create_file(self) -> None:
-        result = await posters.download_poster(None, 42, "full_length")
+        self.assertEqual(posters.poster_input(url), url)
 
-        self.assertIsNone(result)
-
-    async def test_downloads_poster_to_media_root(self) -> None:
-        with (
-            tempfile.TemporaryDirectory() as temporary_directory,
-            patch.object(posters, "MEDIA_ROOT", Path(temporary_directory)),
-            patch.object(
-                posters,
-                "get_http_session",
-                AsyncMock(return_value=SessionStub()),
-            ),
+    def test_rejects_untrusted_or_insecure_poster_url(self) -> None:
+        for url in (
+            "https://attacker.example/poster.jpg",
+            "http://image.tmdb.org/poster.jpg",
+            "https://user:password@image.tmdb.org/poster.jpg",
         ):
-            result = await posters.download_poster(
-                "https://image.test/poster.jpg",
-                42,
-                "series",
-            )
+            with self.subTest(url=url):
+                self.assertIsNone(posters.poster_input(url))
 
-            self.assertEqual(result, "posters/tmdb_series_42.jpg")
-            saved = Path(temporary_directory) / result
-            self.assertEqual(saved.read_bytes(), b"poster-data")
+    def test_extracts_largest_sent_photo_file_id(self) -> None:
+        message = SimpleNamespace(
+            photo=[SimpleNamespace(file_id="small"), SimpleNamespace(file_id="large")]
+        )
 
-    def test_image_extension_ignores_query_string(self) -> None:
-        self.assertEqual(posters._image_extension("https://test/p.webp?v=1"), ".webp")
-        self.assertEqual(posters._image_extension("https://test/poster"), ".jpg")
+        self.assertEqual(posters.sent_photo_file_id(message), "large")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,7 @@ from src.tmdb_models import TmdbTitle
 
 
 class TitleSearchServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_local_match_skips_remote_search_and_updates_cached_poster(
-        self,
-    ) -> None:
+    async def test_local_match_reuses_tmdb_path_and_telegram_file_id(self) -> None:
         local = {
             "id": 7,
             "tmdb_id": 42,
@@ -19,6 +17,7 @@ class TitleSearchServiceTests(unittest.IsolatedAsyncioTestCase):
             "original_title": "The Matrix",
             "first_air_date": None,
             "release_date": "1999-03-31",
+            "telegram_poster_file_id": "telegram-file-id",
         }
         remote_started = AsyncMock()
         with (
@@ -27,16 +26,6 @@ class TitleSearchServiceTests(unittest.IsolatedAsyncioTestCase):
                 "find_media_by_title",
                 AsyncMock(return_value=local),
             ),
-            patch.object(
-                title_search,
-                "download_poster",
-                AsyncMock(return_value="media/posters/matrix.jpg"),
-            ) as download,
-            patch.object(
-                title_search,
-                "update_media_poster",
-                AsyncMock(),
-            ) as update,
             patch.object(
                 title_search,
                 "find_title_candidates",
@@ -52,10 +41,12 @@ class TitleSearchServiceTests(unittest.IsolatedAsyncioTestCase):
 
         remote.assert_not_awaited()
         remote_started.assert_not_awaited()
-        download.assert_awaited_once()
-        update.assert_awaited_once_with(7, "media/posters/matrix.jpg")
         self.assertEqual(candidates[0].media_id, 7)
-        self.assertEqual(candidates[0].poster_path, "media/posters/matrix.jpg")
+        self.assertEqual(candidates[0].poster_path, "/poster.jpg")
+        self.assertEqual(
+            candidates[0].telegram_poster_file_id,
+            "telegram-file-id",
+        )
 
     async def test_remote_search_reports_transition_and_maps_candidates(self) -> None:
         remote_started = AsyncMock()

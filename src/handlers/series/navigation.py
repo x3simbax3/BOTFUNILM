@@ -185,7 +185,9 @@ async def handle_episode_selection(callback: CallbackQuery, state: FSMContext) -
         await finish_series_tracking(callback, state)
         return
 
-    assert isinstance(selection, EpisodeCallback)
+    if not isinstance(selection, EpisodeCallback):
+        await callback.answer(INVALID_EPISODE, show_alert=True)
+        return
     try:
         watched = apply_episode_selection(
             restore_progress_keys(data.get("watched_by_season", {})),

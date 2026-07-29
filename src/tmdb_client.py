@@ -1,11 +1,17 @@
 """Low-level HTTP transport for the TMDB API."""
 
 import asyncio
+import json
 import logging
 
 import aiohttp
 
-from config.config import TMDB_RATE_LIMIT_COOLDOWN_SECONDS
+from config.config import (
+    TMDB_ALLOWED_HOSTS,
+    TMDB_MAX_RESPONSE_BYTES,
+    TMDB_RATE_LIMIT_COOLDOWN_SECONDS,
+    validate_tmdb_url,
+)
 from src.tmdb_limiter import get_tmdb_request_limiter
 from src.tmdb_models import (
     TmdbAuthenticationError,
@@ -17,6 +23,7 @@ from src.tmdb_models import (
 logger = logging.getLogger(__name__)
 DEFAULT_RATE_LIMIT_COOLDOWN = TMDB_RATE_LIMIT_COOLDOWN_SECONDS
 MAX_RATE_LIMIT_RETRIES = 1
+RESPONSE_READ_CHUNK_BYTES = 64 * 1024
 
 
 async def fetch_json(
@@ -26,6 +33,7 @@ async def fetch_json(
     api_token: str,
 ) -> dict:
     """Fetch one JSON document and translate HTTP failures to domain errors."""
+    validate_tmdb_url(url, TMDB_ALLOWED_HOSTS)
     headers = {"Authorization": f"Bearer {api_token}"}
     try:
         limiter = get_tmdb_request_limiter()
@@ -36,6 +44,7 @@ async def fetch_json(
                     params=params,
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=15),
+                    allow_redirects=False,
                 ) as response:
                     if response.status in (401, 403):
                         raise TmdbAuthenticationError
@@ -51,8 +60,8 @@ async def fetch_json(
                         raise TmdbError(f"TMDB вернул HTTP {response.status}")
 
                     try:
-                        return await response.json(content_type=None)
-                    except (aiohttp.ContentTypeError, ValueError) as exc:
+                        return await _read_json_response(response)
+                    except (UnicodeDecodeError, ValueError) as exc:
                         raise TmdbError("TMDB вернул некорректный ответ") from exc
         raise TmdbRateLimitError
     except TmdbError as exc:
@@ -74,6 +83,35 @@ def _retry_after_seconds(response: aiohttp.ClientResponse) -> float:
     except (TypeError, ValueError):
         return DEFAULT_RATE_LIMIT_COOLDOWN
     return max(0.0, delay)
+
+
+async def _read_json_response(response: aiohttp.ClientResponse) -> dict:
+    if TMDB_MAX_RESPONSE_BYTES <= 0:
+        raise ValueError("TMDB_MAX_RESPONSE_BYTES must be positive")
+    if (
+        response.content_length is not None
+        and response.content_length > TMDB_MAX_RESPONSE_BYTES
+    ):
+        raise TmdbError("TMDB response body is too large")
+
+    body = bytearray()
+    while len(body) <= TMDB_MAX_RESPONSE_BYTES:
+        chunk = await response.content.read(
+            min(
+                RESPONSE_READ_CHUNK_BYTES,
+                TMDB_MAX_RESPONSE_BYTES + 1 - len(body),
+            )
+        )
+        if not chunk:
+            break
+        body.extend(chunk)
+    if len(body) > TMDB_MAX_RESPONSE_BYTES:
+        raise TmdbError("TMDB response body is too large")
+
+    data = json.loads(body)
+    if not isinstance(data, dict):
+        raise ValueError("TMDB response must be a JSON object")
+    return data
 
 
 __all__ = ("fetch_json",)

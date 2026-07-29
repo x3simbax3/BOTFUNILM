@@ -42,8 +42,11 @@ CREATE TABLE media (
     content_type        TEXT NOT NULL,
     title               TEXT NOT NULL,
     original_title      TEXT,
+    normalized_title    TEXT,
+    normalized_original_title TEXT,
     description         TEXT,
     poster_path         TEXT,
+    telegram_poster_file_id TEXT,
     rating              REAL,
     release_date        TEXT,
     first_air_date      TEXT,
@@ -74,6 +77,10 @@ CREATE TABLE media (
 CREATE UNIQUE INDEX media_tmdb_id_content_format_content_type
     ON media (tmdb_id, content_format, content_type);
 CREATE INDEX ix_media_status ON media (status);
+CREATE INDEX ix_media_normalized_title
+    ON media (content_format, content_type, normalized_title, id);
+CREATE INDEX ix_media_normalized_original_title
+    ON media (content_format, content_type, normalized_original_title, id);
 
 CREATE TABLE user_library_filters (
     user_id             INTEGER,

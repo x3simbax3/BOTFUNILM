@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+umask 077
 
 : "${ATLAS_DATABASE_URL:?ATLAS_DATABASE_URL is required}"
 

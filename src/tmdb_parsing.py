@@ -2,7 +2,7 @@
 
 from src.tmdb_models import TmdbEpisodeAirInfo, TmdbNotFoundError, TmdbTitle
 
-TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/original"
+TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
 
 def _parse_episode_air_info(value: object) -> TmdbEpisodeAirInfo | None:

@@ -2,6 +2,7 @@
 
 import aiosqlite
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 
@@ -17,7 +18,10 @@ from src.database.library import (
     list_user_library,
     update_user_library_filter,
 )
-from src.database.media import update_media_metadata
+from src.database.media import (
+    update_media_metadata,
+    update_media_telegram_poster_file_id,
+)
 from src.database.user_media import delete_user_media, set_user_media_status
 from src.fsm import MenuState
 from src.handlers.common import (
@@ -56,7 +60,7 @@ from src.lang import (
     rating_prompt_text,
 )
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot, current_media_id
-from src.posters import poster_input
+from src.posters import poster_input, sent_photo_file_id
 from src.tmdb import TmdbError, fetch_title_details
 
 router = Router(name="library")
@@ -223,15 +227,36 @@ async def show_library_item(
         await _show_library_error(message, state, ITEM_NOT_FOUND)
         return False
 
-    item, photo = await _refresh_item_metadata(item)
+    item, fallback_photo = await _refresh_item_metadata(item)
     text = library_item_caption(item)
-    send = message.answer_photo if photo else message.answer
-    content = {"caption": text, "photo": photo} if photo else {"text": text}
-    await send(
-        **content,
-        parse_mode="HTML",
-        reply_markup=library_item_keyboard(planned=item["user_status"] == "planned"),
-    )
+    cached_file_id = item.get("telegram_poster_file_id")
+    photo = cached_file_id or fallback_photo
+    keyboard = library_item_keyboard(planned=item["user_status"] == "planned")
+    if photo:
+        try:
+            sent_message = await message.answer_photo(
+                photo=photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        except TelegramBadRequest:
+            if not cached_file_id or not fallback_photo:
+                raise
+            sent_message = await message.answer_photo(
+                photo=fallback_photo,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        file_id = sent_photo_file_id(sent_message)
+        if file_id and file_id != cached_file_id:
+            try:
+                await update_media_telegram_poster_file_id(media_id, file_id)
+            except aiosqlite.Error:
+                pass
+    else:
+        await message.answer(text=text, parse_mode="HTML", reply_markup=keyboard)
     await state.update_data(media_id=media_id, library_page=0)
     await state.set_state(MenuState.viewing_media)
     return True
@@ -434,11 +459,12 @@ async def _refresh_item_metadata(item):
     """Repair missing movie artwork without refreshing series on card open."""
     refreshed = dict(item)
     photo = poster_input(refreshed.get("poster_path"))
+    has_photo = bool(refreshed.get("telegram_poster_file_id")) or photo is not None
     if refreshed.get("tmdb_id") in {None, 0}:
         return refreshed, photo
 
     if refreshed.get("content_format") != "series" and (
-        photo is None or refreshed.get("rating") is None
+        not has_photo or refreshed.get("rating") is None
     ):
         try:
             details = await fetch_title_details(

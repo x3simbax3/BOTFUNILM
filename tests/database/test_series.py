@@ -136,12 +136,86 @@ class SeriesTests(DatabaseTestCase):
             456, media_id, database_url=self.database_url
         )
 
-        self.assertEqual(initiating_user["episodes_watched"], 5)
-        self.assertEqual(initiating_progress[0]["episodes_watched"], 5)
+        self.assertEqual(initiating_user["episodes_watched"], 8)
+        self.assertEqual(initiating_progress[0]["episodes_watched"], 8)
         self.assertEqual(other_user["episodes_watched"], 8)
         self.assertEqual(other_user["status"], "on_hold")
         self.assertEqual(other_user["last_watched_at"], "2000-01-01 00:00:00")
         self.assertEqual(other_progress[0]["episodes_watched"], 8)
+
+        media = await get_media_by_tmdb(
+            46,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["available_episode_count"], 10)
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                """
+                SELECT available_episode_count
+                FROM media_seasons
+                WHERE media_id = ? AND season_number = 1
+                """,
+                (media_id,),
+            ) as cursor:
+                season = await cursor.fetchone()
+        self.assertEqual(season["available_episode_count"], 8)
+
+    async def test_series_availability_only_increases(self) -> None:
+        media_id = await self.create_series(
+            tmdb_id=47,
+            title="Monotonic series",
+            number_of_seasons=2,
+            number_of_episodes=20,
+            available_episode_count=12,
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=123,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=2,
+                number_of_episodes=20,
+                seasons=[
+                    SeriesSeason(1, "Season 1", 10, 10),
+                    SeriesSeason(2, "Season 2", 10, 2),
+                ],
+            ),
+            database_url=self.database_url,
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=456,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=1,
+                number_of_episodes=10,
+                seasons=[SeriesSeason(1, "Season 1 renamed", 10, 8)],
+            ),
+            database_url=self.database_url,
+        )
+
+        media = await get_media_by_tmdb(
+            47,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["available_episode_count"], 12)
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                """
+                SELECT season_number, name, available_episode_count
+                FROM media_seasons
+                WHERE media_id = ?
+                ORDER BY season_number
+                """,
+                (media_id,),
+            ) as cursor:
+                seasons = await cursor.fetchall()
+        self.assertEqual(
+            [tuple(season) for season in seasons],
+            [(1, "Season 1 renamed", 10), (2, "Season 2", 2)],
+        )
 
     async def test_season_progress_is_inserted_and_updated(self) -> None:
         media_id = await self.create_series()

@@ -1,5 +1,13 @@
+from unittest.mock import patch
+
+from src.database import media_search
+from src.database.connection import connection_scope
 from src.database.media import get_media_by_tmdb, update_media_poster, upsert_media
-from src.database.media_search import find_media_by_title
+from src.database.media_search import (
+    LOCAL_SEARCH_CANDIDATE_LIMIT,
+    backfill_media_search_index,
+    find_media_by_title,
+)
 from tests.support.database import DatabaseTestCase
 
 
@@ -29,6 +37,54 @@ class MediaTests(DatabaseTestCase):
         self.assertEqual(updated_id, media_id)
         self.assertEqual(row["title"], "New title")
         self.assertEqual(row["rating"], 8.5)
+
+    async def test_partial_upsert_preserves_existing_optional_metadata(self) -> None:
+        media_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="Old title",
+            original_title="Original title",
+            description="Good description",
+            poster_path="posters/good.jpg",
+            telegram_poster_file_id="telegram-file-id",
+            rating=8.5,
+            release_date="2025-01-01",
+            first_air_date="2025-02-01",
+            number_of_seasons=3,
+            number_of_episodes=24,
+            available_episode_count=20,
+            status="Returning Series",
+            database_url=self.database_url,
+        )
+
+        updated_id = await upsert_media(
+            tmdb_id=42,
+            content_format="series",
+            content_type="movie",
+            title="New title",
+            database_url=self.database_url,
+        )
+        row = await get_media_by_tmdb(
+            42,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(updated_id, media_id)
+        self.assertEqual(row["title"], "New title")
+        self.assertEqual(row["original_title"], "Original title")
+        self.assertEqual(row["description"], "Good description")
+        self.assertEqual(row["poster_path"], "posters/good.jpg")
+        self.assertEqual(row["telegram_poster_file_id"], "telegram-file-id")
+        self.assertEqual(row["rating"], 8.5)
+        self.assertEqual(row["release_date"], "2025-01-01")
+        self.assertEqual(row["first_air_date"], "2025-02-01")
+        self.assertEqual(row["number_of_seasons"], 3)
+        self.assertEqual(row["number_of_episodes"], 24)
+        self.assertEqual(row["available_episode_count"], 20)
+        self.assertEqual(row["status"], "Returning Series")
 
     async def test_update_media_poster(self) -> None:
         media_id = await upsert_media(
@@ -125,3 +181,56 @@ class MediaTests(DatabaseTestCase):
         )
 
         self.assertIsNone(row)
+
+    async def test_local_fuzzy_search_scores_only_bounded_candidates(self) -> None:
+        async with connection_scope(self.database_url) as connection:
+            await connection.executemany(
+                """
+                INSERT INTO media (
+                    tmdb_id, content_format, content_type, title,
+                    normalized_title
+                ) VALUES (?, 'full_length', 'movie', ?, ?)
+                """,
+                [
+                    (index, f"abcdefgh title {index}", f"abcdefgh title {index}")
+                    for index in range(150)
+                ],
+            )
+
+        with patch.object(
+            media_search,
+            "title_relevance_score",
+            wraps=media_search.title_relevance_score,
+        ) as score:
+            await find_media_by_title(
+                "abcdefgh typo",
+                "full_length",
+                "movie",
+                database_url=self.database_url,
+            )
+
+        self.assertLessEqual(score.call_count, LOCAL_SEARCH_CANDIDATE_LIMIT)
+
+    async def test_search_index_backfill_handles_preexisting_rows(self) -> None:
+        async with connection_scope(self.database_url) as connection:
+            await connection.execute(
+                """
+                INSERT INTO media (
+                    tmdb_id, content_format, content_type, title
+                ) VALUES (99, 'full_length', 'movie', 'Матрица')
+                """
+            )
+
+        self.assertEqual(
+            await backfill_media_search_index(database_url=self.database_url),
+            1,
+        )
+        row = await find_media_by_title(
+            "матрица",
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["tmdb_id"], 99)
