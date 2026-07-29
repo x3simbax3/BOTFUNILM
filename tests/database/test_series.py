@@ -4,6 +4,7 @@ from src.database.connection import connection_scope
 from src.database.media import get_media_by_tmdb
 from src.database.ratings import get_user_rating_details
 from src.database.series import (
+    get_media_seasons,
     get_user_season_progress,
     save_user_series_progress,
 )
@@ -15,6 +16,40 @@ from tests.support.database import DatabaseTestCase
 
 
 class SeriesTests(DatabaseTestCase):
+    async def test_media_seasons_are_returned_as_mapping_objects(self) -> None:
+        media_id = await self.create_series(
+            tmdb_id=44,
+            title="Mapped seasons",
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=123,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=1,
+                number_of_episodes=8,
+                seasons=[SeriesSeason(1, "Season 1", 8, 5)],
+            ),
+            database_url=self.database_url,
+        )
+
+        seasons = await get_media_seasons(
+            media_id,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            seasons,
+            [
+                {
+                    "season_number": 1,
+                    "name": "Season 1",
+                    "announced_episode_count": 8,
+                    "available_episode_count": 5,
+                }
+            ],
+        )
+        self.assertEqual(seasons[0].get("available_episode_count"), 5)
+
     async def test_series_release_info_is_overwritten(self) -> None:
         media_id = await self.create_series(
             tmdb_id=45,

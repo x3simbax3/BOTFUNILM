@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 import aiosqlite
 
@@ -14,8 +15,8 @@ async def get_media_seasons(
     media_id: int,
     *,
     database_url: str | None = None,
-) -> list[aiosqlite.Row]:
-    """Return cached regular seasons for one catalogue entry."""
+) -> list[dict[str, Any]]:
+    """Return cached regular seasons as service-layer mappings."""
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             """
@@ -27,7 +28,7 @@ async def get_media_seasons(
             """,
             (media_id,),
         ) as cursor:
-            return await cursor.fetchall()
+            return [dict(row) for row in await cursor.fetchall()]
 
 
 async def get_user_season_progress(
