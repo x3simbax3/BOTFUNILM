@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiosqlite
 
-from src.database.connection import connection_scope
+from src.database.connection import connection_scope, existing_or_connection_scope
 from src.models import SeriesReleaseSnapshot
 
 
@@ -14,12 +14,16 @@ async def update_media_series_release_info(
     user_id: int,
     snapshot: SeriesReleaseSnapshot,
     database_url: str | None = None,
+    connection: aiosqlite.Connection | None = None,
 ) -> None:
     """Refresh release data and reconcile only the initiating user's progress."""
     available_episode_count = snapshot.available_episode_count
     next_episode = snapshot.next_episode
-    async with connection_scope(database_url) as connection:
-        await connection.execute(
+    async with existing_or_connection_scope(
+        connection,
+        database_url=database_url,
+    ) as active_connection:
+        await active_connection.execute(
             """
             UPDATE media
             SET tmdb_status = ?, tmdb_in_production = ?,
@@ -52,8 +56,8 @@ async def update_media_series_release_info(
                 media_id,
             ),
         )
-        await _replace_media_seasons(connection, media_id, snapshot)
-        await connection.execute(
+        await _replace_media_seasons(active_connection, media_id, snapshot)
+        await active_connection.execute(
             """
             UPDATE user_season_progress
             SET episodes_watched = (
@@ -74,7 +78,7 @@ async def update_media_series_release_info(
             """,
             (media_id, user_id),
         )
-        await connection.execute(
+        await active_connection.execute(
             """
             UPDATE user_media
             SET episodes_watched = COALESCE((
@@ -104,7 +108,7 @@ async def update_media_series_release_info(
             """,
             (snapshot.active, available_episode_count, media_id, user_id),
         )
-        await connection.execute(
+        await active_connection.execute(
             "UPDATE media SET available_episode_count = ? WHERE id = ?",
             (available_episode_count, media_id),
         )

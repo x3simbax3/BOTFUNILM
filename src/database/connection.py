@@ -48,4 +48,26 @@ async def connection_scope(
         await connection.close()
 
 
-__all__ = ("connect_database", "connection_scope", "database_path")
+@asynccontextmanager
+async def existing_or_connection_scope(
+    connection: aiosqlite.Connection | None = None,
+    *,
+    database_url: str | None = None,
+) -> AsyncIterator[aiosqlite.Connection]:
+    """Reuse a caller-owned transaction or open and own a new one."""
+    if connection is not None:
+        if database_url is not None:
+            raise ValueError("database_url cannot be used with an existing connection")
+        yield connection
+        return
+
+    async with connection_scope(database_url) as owned_connection:
+        yield owned_connection
+
+
+__all__ = (
+    "connect_database",
+    "connection_scope",
+    "database_path",
+    "existing_or_connection_scope",
+)

@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 from typing import Any
 
+import aiosqlite
+
 from src.database.media import upsert_media
 from src.models import current_media_id
 from src.posters import download_poster, poster_input
@@ -15,6 +17,7 @@ async def ensure_media(
     number_of_seasons: int | None = None,
     number_of_episodes: int | None = None,
     available_episode_count: int | None = None,
+    connection: aiosqlite.Connection | None = None,
 ) -> int:
     """Return an existing media id or create/update its catalogue record."""
     media_id = current_media_id(data)
@@ -51,6 +54,6 @@ async def ensure_media(
     if data.get("tmdb_rating") is not None:
         media_details["rating"] = data["tmdb_rating"]
 
-    return await upsert_media(
-        **media_details,
-    )
+    if connection is None:
+        return await upsert_media(**media_details)
+    return await upsert_media(**media_details, connection=connection)

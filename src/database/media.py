@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import aiosqlite
 
-from src.database.connection import connection_scope
+from src.database.connection import connection_scope, existing_or_connection_scope
 from src.database.media_search import find_media_by_title
 from src.database.series_release import (
     replace_media_seasons as _replace_media_seasons,
@@ -51,6 +51,7 @@ async def upsert_media(
     available_episode_count: int | None = None,
     status: str | None = None,
     database_url: str | None = None,
+    connection: aiosqlite.Connection | None = None,
 ) -> int:
     """Insert media or refresh an existing TMDB-backed record."""
     resolved_available_episode_count = (
@@ -75,9 +76,12 @@ async def upsert_media(
         status,
     )
 
-    async with connection_scope(database_url) as connection:
+    async with existing_or_connection_scope(
+        connection,
+        database_url=database_url,
+    ) as active_connection:
         if tmdb_id is None:
-            async with connection.execute(
+            async with active_connection.execute(
                 """
                 INSERT INTO media (
                     tmdb_id, content_format, content_type, title,
@@ -91,7 +95,7 @@ async def upsert_media(
             ) as cursor:
                 return _last_row_id(cursor)
 
-        await connection.execute(
+        await active_connection.execute(
             """
             INSERT INTO media (
                 tmdb_id, content_format, content_type, title,
@@ -116,7 +120,7 @@ async def upsert_media(
             """,
             values,
         )
-        async with connection.execute(
+        async with active_connection.execute(
             """
             SELECT id FROM media
             WHERE tmdb_id = ? AND content_format = ? AND content_type = ?

@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from src.database.connection import connection_scope
 from src.database.media import get_media_by_tmdb
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.database.series_release import update_media_series_release_info
@@ -189,6 +190,8 @@ async def prepare_series_tracking(
 async def save_series_tracking_result(
     fsm_data: Mapping[str, Any],
     user_id: int,
+    *,
+    database_url: str | None = None,
 ) -> SeriesTrackingResult:
     total = fsm_data.get("total_episodes", 0)
     announced_total = fsm_data.get("announced_total_episodes", total)
@@ -203,30 +206,36 @@ async def save_series_tracking_result(
 
     average = fsm_data.get("rating_average")
     is_ongoing = bool(fsm_data.get("is_ongoing"))
-    media_id = await ensure_media(
-        fsm_data,
-        "series",
-        number_of_seasons=fsm_data.get("total_seasons"),
-        number_of_episodes=announced_total,
-        available_episode_count=total,
-    )
     release_snapshot = SeriesReleaseSnapshot.from_fsm(fsm_data)
-    await update_media_series_release_info(
-        media_id,
-        user_id=user_id,
-        snapshot=release_snapshot,
-    )
-    await save_user_series_progress(
-        user_id=user_id,
-        media_id=media_id,
-        seasons=watched,
-        total_episodes=total,
-        is_ongoing=is_ongoing,
-        user_rating=round(average) if average is not None else None,
-        rating_details=(
-            None if fsm_data.get("library_progress_edit") else fsm_data.get("ratings")
-        ),
-    )
+    async with connection_scope(database_url) as connection:
+        media_id = await ensure_media(
+            fsm_data,
+            "series",
+            number_of_seasons=fsm_data.get("total_seasons"),
+            number_of_episodes=announced_total,
+            available_episode_count=total,
+            connection=connection,
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=user_id,
+            snapshot=release_snapshot,
+            connection=connection,
+        )
+        await save_user_series_progress(
+            user_id=user_id,
+            media_id=media_id,
+            seasons=watched,
+            total_episodes=total,
+            is_ongoing=is_ongoing,
+            user_rating=round(average) if average is not None else None,
+            rating_details=(
+                None
+                if fsm_data.get("library_progress_edit")
+                else fsm_data.get("ratings")
+            ),
+            connection=connection,
+        )
     return SeriesTrackingResult(
         title=str(fsm_data.get("tmdb_title") or ""),
         total_episodes=total,

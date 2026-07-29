@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 import aiosqlite
 
-from src.database.connection import connection_scope
+from src.database.connection import connection_scope, existing_or_connection_scope
 from src.database.ratings import replace_user_rating_details
 
 
@@ -59,12 +59,16 @@ async def save_user_series_progress(
     user_rating: int | None = None,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
+    connection: aiosqlite.Connection | None = None,
 ) -> None:
     """Save season details and refresh the aggregate series progress atomically."""
     _validate_progress_values(seasons, total_episodes)
 
-    async with connection_scope(database_url) as connection:
-        async with connection.execute(
+    async with existing_or_connection_scope(
+        connection,
+        database_url=database_url,
+    ) as active_connection:
+        async with active_connection.execute(
             "SELECT content_format FROM media WHERE id = ?",
             (media_id,),
         ) as cursor:
@@ -74,7 +78,7 @@ async def save_user_series_progress(
         if media["content_format"] != "series":
             raise ValueError("Progress can only be saved for series")
 
-        await connection.execute(
+        await active_connection.execute(
             """
             INSERT INTO user_media (
                 user_id, media_id, status, user_rating, episodes_watched, added_at
@@ -89,17 +93,17 @@ async def save_user_series_progress(
         )
         if rating_details is not None:
             await replace_user_rating_details(
-                connection,
+                active_connection,
                 user_id,
                 media_id,
                 rating_details,
             )
 
-        await connection.execute(
+        await active_connection.execute(
             "DELETE FROM user_season_progress WHERE user_id = ? AND media_id = ?",
             (user_id, media_id),
         )
-        await connection.execute(
+        await active_connection.execute(
             """
             UPDATE media
             SET available_episode_count = ?, last_updated = CURRENT_TIMESTAMP
@@ -108,7 +112,7 @@ async def save_user_series_progress(
             (total_episodes, media_id),
         )
         if seasons:
-            await connection.executemany(
+            await active_connection.executemany(
                 """
                 INSERT INTO user_season_progress (
                     user_id, media_id, season_number, episodes_watched
@@ -120,7 +124,7 @@ async def save_user_series_progress(
                 ],
             )
 
-        async with connection.execute(
+        async with active_connection.execute(
             """
             SELECT COALESCE(SUM(episodes_watched), 0)
             FROM user_season_progress
@@ -138,7 +142,7 @@ async def save_user_series_progress(
             status = "completed"
         else:
             status = "watching"
-        await connection.execute(
+        await active_connection.execute(
             """
             UPDATE user_media
             SET status = ?, episodes_watched = ?, last_watched_at = CURRENT_TIMESTAMP

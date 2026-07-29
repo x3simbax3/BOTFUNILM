@@ -1,8 +1,16 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, patch, sentinel
 
+from src.database.media import get_media_by_tmdb
 from src.models import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
 from src.services import series_tracking
+from tests.support.database import DatabaseTestCase
+
+
+@asynccontextmanager
+async def connection_scope_stub(*args, **kwargs):
+    yield sentinel.connection
 
 
 class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -83,6 +91,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
                 "save_user_series_progress",
                 AsyncMock(),
             ) as save,
+            patch.object(series_tracking, "connection_scope", connection_scope_stub),
         ):
             result = await series_tracking.save_series_tracking_result(fsm_data, 123)
 
@@ -92,6 +101,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
             number_of_seasons=1,
             number_of_episodes=12,
             available_episode_count=5,
+            connection=sentinel.connection,
         )
         update.assert_awaited_once()
         snapshot = update.await_args.kwargs["snapshot"]
@@ -104,6 +114,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
             is_ongoing=True,
             user_rating=9,
             rating_details={"story": 9},
+            connection=sentinel.connection,
         )
         self.assertEqual(result.watched_total, 4)
         self.assertEqual(result.announced_episodes, 12)
@@ -127,6 +138,46 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         ensure.assert_not_awaited()
+
+
+class SeriesTrackingTransactionTests(DatabaseTestCase):
+    async def test_failure_rolls_back_catalogue_and_release_writes(self) -> None:
+        fsm_data = {
+            "tmdb_id": 42,
+            "tmdb_title": "Сериал",
+            "content_type": "movie",
+            "total_seasons": 1,
+            "total_episodes": 5,
+            "announced_total_episodes": 12,
+            "seasons_data": [
+                {
+                    "season_number": 1,
+                    "name": "Сезон 1",
+                    "episode_count": 5,
+                    "announced_episode_count": 12,
+                }
+            ],
+            "watched_by_season": {1: 4},
+        }
+        with patch.object(
+            series_tracking,
+            "save_user_series_progress",
+            AsyncMock(side_effect=RuntimeError("forced failure")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "forced failure"):
+                await series_tracking.save_series_tracking_result(
+                    fsm_data,
+                    123,
+                    database_url=self.database_url,
+                )
+
+        media = await get_media_by_tmdb(
+            42,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertIsNone(media)
 
 
 if __name__ == "__main__":

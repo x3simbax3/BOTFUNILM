@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.database.connection import connection_scope
 from src.database.series_release import update_media_series_release_info
 from src.database.user_media import save_user_media
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot
@@ -21,25 +22,35 @@ class PlannedMediaResult:
 async def save_planned_media(
     user_id: int,
     workflow: MediaWorkflowData,
+    *,
+    database_url: str | None = None,
 ) -> PlannedMediaResult:
     """Upsert catalogue metadata and attach it to the user's planned list."""
     snapshot = await _series_snapshot(workflow)
-    media_id = await ensure_media(
-        workflow.to_fsm_dict(),
-        workflow.content_format,
-        number_of_seasons=(snapshot.number_of_seasons if snapshot else None),
-        number_of_episodes=(snapshot.number_of_episodes if snapshot else None),
-        available_episode_count=(
-            snapshot.available_episode_count if snapshot else None
-        ),
-    )
-    if snapshot is not None:
-        await update_media_series_release_info(
-            media_id,
-            user_id=user_id,
-            snapshot=snapshot,
+    async with connection_scope(database_url) as connection:
+        media_id = await ensure_media(
+            workflow.to_fsm_dict(),
+            workflow.content_format,
+            number_of_seasons=(snapshot.number_of_seasons if snapshot else None),
+            number_of_episodes=(snapshot.number_of_episodes if snapshot else None),
+            available_episode_count=(
+                snapshot.available_episode_count if snapshot else None
+            ),
+            connection=connection,
         )
-    await save_user_media(user_id=user_id, media_id=media_id, status="planned")
+        if snapshot is not None:
+            await update_media_series_release_info(
+                media_id,
+                user_id=user_id,
+                snapshot=snapshot,
+                connection=connection,
+            )
+        await save_user_media(
+            user_id=user_id,
+            media_id=media_id,
+            status="planned",
+            connection=connection,
+        )
     return PlannedMediaResult(media_id=media_id, series_snapshot=snapshot)
 
 

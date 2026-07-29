@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 import aiosqlite
 
-from src.database.connection import connection_scope
+from src.database.connection import connection_scope, existing_or_connection_scope
 from src.database.ratings import replace_user_rating_details
 
 
@@ -19,9 +19,13 @@ async def save_user_media(
     episodes_watched: int | None = None,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
+    connection: aiosqlite.Connection | None = None,
 ) -> None:
-    async with connection_scope(database_url) as connection:
-        await connection.execute(
+    async with existing_or_connection_scope(
+        connection,
+        database_url=database_url,
+    ) as active_connection:
+        await active_connection.execute(
             """
             INSERT INTO user_media (
                 user_id, media_id, status, user_rating, episodes_watched, added_at
@@ -36,7 +40,7 @@ async def save_user_media(
         )
         if rating_details is not None:
             await replace_user_rating_details(
-                connection,
+                active_connection,
                 user_id,
                 media_id,
                 rating_details,

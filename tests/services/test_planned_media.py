@@ -1,8 +1,16 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, patch, sentinel
 
+from src.database.media import get_media_by_tmdb
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot, SeriesSeason
 from src.services import planned_media
+from tests.support.database import DatabaseTestCase
+
+
+@asynccontextmanager
+async def connection_scope_stub(*args, **kwargs):
+    yield sentinel.connection
 
 
 class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -47,6 +55,7 @@ class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
                 "save_user_media",
                 AsyncMock(),
             ) as save,
+            patch.object(planned_media, "connection_scope", connection_scope_stub),
         ):
             result = await planned_media.save_planned_media(123, workflow)
 
@@ -57,9 +66,20 @@ class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
             number_of_seasons=1,
             number_of_episodes=12,
             available_episode_count=5,
+            connection=sentinel.connection,
         )
-        update.assert_awaited_once_with(7, user_id=123, snapshot=snapshot)
-        save.assert_awaited_once_with(user_id=123, media_id=7, status="planned")
+        update.assert_awaited_once_with(
+            7,
+            user_id=123,
+            snapshot=snapshot,
+            connection=sentinel.connection,
+        )
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            status="planned",
+            connection=sentinel.connection,
+        )
         self.assertEqual(result.media_id, 7)
         self.assertIs(result.series_snapshot, snapshot)
 
@@ -85,12 +105,60 @@ class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(),
             ) as update,
             patch.object(planned_media, "save_user_media", AsyncMock()),
+            patch.object(planned_media, "connection_scope", connection_scope_stub),
         ):
             result = await planned_media.save_planned_media(123, workflow)
 
         fetch.assert_not_awaited()
         update.assert_not_awaited()
         self.assertIsNone(result.series_snapshot)
+
+
+class PlannedMediaTransactionTests(DatabaseTestCase):
+    async def test_failure_rolls_back_catalogue_and_release_writes(self) -> None:
+        workflow = MediaWorkflowData(
+            media_id=None,
+            tmdb_id=42,
+            tmdb_title="Сериал",
+            tmdb_description=None,
+            tmdb_poster_path=None,
+            tmdb_original_title=None,
+            tmdb_release_date=None,
+            tmdb_rating=None,
+            content_format="series",
+            content_type="movie",
+        )
+        snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=1,
+            number_of_episodes=12,
+            seasons=(SeriesSeason(1, "Сезон 1", 12, 5),),
+        )
+        with (
+            patch.object(
+                planned_media,
+                "fetch_tv_details",
+                AsyncMock(return_value=snapshot),
+            ),
+            patch.object(
+                planned_media,
+                "save_user_media",
+                AsyncMock(side_effect=RuntimeError("forced failure")),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "forced failure"):
+                await planned_media.save_planned_media(
+                    123,
+                    workflow,
+                    database_url=self.database_url,
+                )
+
+        media = await get_media_by_tmdb(
+            42,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertIsNone(media)
 
 
 if __name__ == "__main__":

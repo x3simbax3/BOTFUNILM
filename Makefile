@@ -97,7 +97,11 @@ migration:
 
 db-check:
 	$(ATLAS) migrate validate --env local
-	$(ATLAS) schema diff --from file://migrations --to file://schema.sql --dev-url 'sqlite://dev?mode=memory&_fk=1'
+	@schema_diff="$$( $(ATLAS) schema diff --from file://migrations --to file://schema.sql --dev-url 'sqlite://dev?mode=memory&_fk=1' --format '{{ sql . }}' )"; \
+		if [ -n "$$schema_diff" ]; then \
+			printf '%s\n' "Schema and migrations differ:" "$$schema_diff"; \
+			exit 1; \
+		fi
 
 db-status:
 	$(ATLAS) migrate status --env local

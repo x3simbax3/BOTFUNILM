@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import series as series_handlers
@@ -396,6 +396,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             number_of_seasons=2,
             number_of_episodes=10,
             available_episode_count=10,
+            connection=ANY,
         )
         update_release.assert_awaited_once()
         self.assertEqual(update_release.await_args.args, (7,))
@@ -420,6 +421,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "sound": 8,
                 "overall": 9,
             },
+            connection=ANY,
         )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertEqual(callback.answers, [{"text": None}])

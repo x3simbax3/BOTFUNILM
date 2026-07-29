@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import search as search_handlers
@@ -364,11 +364,17 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
         ):
             await search_handlers.choose_watch_status(callback, state)
 
-        save.assert_awaited_once_with(user_id=123, media_id=7, status="planned")
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            status="planned",
+            connection=ANY,
+        )
         update_release.assert_awaited_once_with(
             7,
             user_id=123,
             snapshot=details,
+            connection=ANY,
         )
         self.assertEqual(state.state, MenuState.choosing_action)
         self.assertNotIn("ratings", state.data)
