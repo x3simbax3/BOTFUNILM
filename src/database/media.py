@@ -5,7 +5,7 @@ from __future__ import annotations
 import aiosqlite
 
 from src.database.connection import connection_scope, existing_or_connection_scope
-from src.database.media_search import find_media_by_title
+from src.database.media_search import find_media_by_title, replace_media_search_terms
 from src.database.series_release import (
     replace_media_seasons as _replace_media_seasons,
 )
@@ -100,7 +100,14 @@ async def upsert_media(
                 """,
                 values,
             ) as cursor:
-                return _last_row_id(cursor)
+                media_id = _last_row_id(cursor)
+            await replace_media_search_terms(
+                active_connection,
+                media_id,
+                title,
+                original_title,
+            )
+            return media_id
 
         await active_connection.execute(
             """
@@ -152,7 +159,7 @@ async def upsert_media(
         )
         async with active_connection.execute(
             """
-            SELECT id FROM media
+            SELECT id, title, original_title FROM media
             WHERE tmdb_id = ? AND content_format = ? AND content_type = ?
             """,
             (tmdb_id, content_format, content_type),
@@ -160,7 +167,14 @@ async def upsert_media(
             row = await cursor.fetchone()
         if row is None:
             raise RuntimeError("Media upsert did not produce a row")
-        return int(row["id"])
+        media_id = int(row["id"])
+        await replace_media_search_terms(
+            active_connection,
+            media_id,
+            str(row["title"]),
+            row["original_title"],
+        )
+        return media_id
 
 
 async def update_media_poster(
@@ -197,6 +211,23 @@ async def update_media_telegram_poster_file_id(
             WHERE id = ?
             """,
             (file_id, media_id),
+        )
+
+
+async def clear_media_telegram_poster_file_id(
+    media_id: int,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """Remove a Telegram photo id after Telegram reports that it is invalid."""
+    async with connection_scope(database_url) as connection:
+        await connection.execute(
+            """
+            UPDATE media
+            SET telegram_poster_file_id = NULL, last_updated = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (media_id,),
         )
 
 
@@ -296,6 +327,7 @@ async def update_media_series_release_info(
 
 
 __all__ = (
+    "clear_media_telegram_poster_file_id",
     "find_media_by_title",
     "get_media_by_tmdb",
     "replace_media_seasons",

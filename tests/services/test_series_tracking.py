@@ -24,7 +24,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(series_tracking.SeriesProgressError):
                     series_tracking.restore_progress_keys(invalid)
 
-    async def test_prepare_tracking_clamps_saved_progress_to_aired_episodes(
+    async def test_prepare_tracking_preserves_progress_above_fresh_tmdb_limit(
         self,
     ) -> None:
         snapshot = SeriesReleaseSnapshot(
@@ -33,10 +33,26 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
             seasons=(SeriesSeason(1, "Сезон 1", 12, 5),),
             status="Returning Series",
         )
-        with patch.object(
-            series_tracking,
-            "get_user_season_progress",
-            AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 12}]),
+        with (
+            patch.object(
+                series_tracking,
+                "get_user_season_progress",
+                AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 12}]),
+            ),
+            patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "season_number": 1,
+                            "name": "Сезон 1",
+                            "announced_episode_count": 12,
+                            "available_episode_count": 10,
+                        }
+                    ]
+                ),
+            ),
         ):
             start = await series_tracking.prepare_series_tracking(
                 {"media_id": 7},
@@ -44,9 +60,36 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
                 snapshot,
             )
 
-        self.assertEqual(start.total_episodes, 5)
-        self.assertEqual(start.watched, {1: 5})
+        self.assertEqual(start.total_episodes, 12)
+        self.assertEqual(start.watched, {1: 12})
+        self.assertEqual(start.seasons_data[0]["episode_count"], 12)
         self.assertTrue(start.release_data["is_ongoing"])
+
+    def test_tracking_limits_keep_cached_seasons_missing_from_tmdb(self) -> None:
+        merged = series_tracking.merge_tracking_season_limits(
+            [
+                {
+                    "season_number": 1,
+                    "name": "Season 1",
+                    "episode_count": 10,
+                    "announced_episode_count": 10,
+                }
+            ],
+            [
+                {
+                    "season_number": 2,
+                    "name": "Season 2",
+                    "available_episode_count": 2,
+                    "announced_episode_count": 4,
+                }
+            ],
+            {2: 3},
+        )
+
+        self.assertEqual(
+            [(season["season_number"], season["episode_count"]) for season in merged],
+            [(1, 10), (2, 3)],
+        )
 
     async def test_save_tracking_orchestrates_catalogue_release_and_progress(
         self,

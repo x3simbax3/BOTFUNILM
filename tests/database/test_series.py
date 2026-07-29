@@ -201,6 +201,11 @@ class SeriesTests(DatabaseTestCase):
             database_url=self.database_url,
         )
         self.assertEqual(media["available_episode_count"], 12)
+        self.assertEqual(media["number_of_seasons"], 2)
+        self.assertGreaterEqual(
+            media["number_of_episodes"],
+            media["available_episode_count"],
+        )
         async with connection_scope(self.database_url) as connection:
             async with connection.execute(
                 """
@@ -216,6 +221,47 @@ class SeriesTests(DatabaseTestCase):
             [tuple(season) for season in seasons],
             [(1, "Season 1 renamed", 10), (2, "Season 2", 2)],
         )
+
+    async def test_series_totals_cover_all_cached_seasons(self) -> None:
+        media_id = await self.create_series(
+            tmdb_id=48,
+            number_of_seasons=2,
+            number_of_episodes=12,
+            available_episode_count=12,
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=123,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=2,
+                number_of_episodes=12,
+                seasons=[
+                    SeriesSeason(1, "Season 1", 10, 10),
+                    SeriesSeason(2, "Season 2", 2, 2),
+                ],
+            ),
+            database_url=self.database_url,
+        )
+        await update_media_series_release_info(
+            media_id,
+            user_id=123,
+            snapshot=SeriesReleaseSnapshot(
+                number_of_seasons=1,
+                number_of_episodes=10,
+                seasons=[SeriesSeason(1, "Season 1", 10, 10)],
+            ),
+            database_url=self.database_url,
+        )
+
+        media = await get_media_by_tmdb(
+            48,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["number_of_seasons"], 2)
+        self.assertEqual(media["number_of_episodes"], 12)
+        self.assertEqual(media["available_episode_count"], 12)
 
     async def test_season_progress_is_inserted_and_updated(self) -> None:
         media_id = await self.create_series()

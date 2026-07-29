@@ -82,6 +82,17 @@ CREATE INDEX ix_media_normalized_title
 CREATE INDEX ix_media_normalized_original_title
     ON media (content_format, content_type, normalized_original_title, id);
 
+CREATE TABLE media_search_terms (
+    media_id            INTEGER NOT NULL,
+    term                TEXT NOT NULL,
+    PRIMARY KEY (media_id, term),
+    CONSTRAINT media_search_terms_media
+        FOREIGN KEY (media_id) REFERENCES media (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_media_search_terms_term
+    ON media_search_terms (term, media_id);
+
 CREATE TABLE user_library_filters (
     user_id             INTEGER,
     full_length         INTEGER NOT NULL DEFAULT 1,

@@ -19,6 +19,7 @@ from src.database.library import (
     update_user_library_filter,
 )
 from src.database.media import (
+    clear_media_telegram_poster_file_id,
     update_media_metadata,
     update_media_telegram_poster_file_id,
 )
@@ -241,14 +242,32 @@ async def show_library_item(
                 reply_markup=keyboard,
             )
         except TelegramBadRequest:
-            if not cached_file_id or not fallback_photo:
-                raise
-            sent_message = await message.answer_photo(
-                photo=fallback_photo,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
+            if cached_file_id:
+                item["telegram_poster_file_id"] = None
+                try:
+                    await clear_media_telegram_poster_file_id(media_id)
+                except aiosqlite.Error:
+                    pass
+            if cached_file_id and fallback_photo:
+                try:
+                    sent_message = await message.answer_photo(
+                        photo=fallback_photo,
+                        caption=text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
+                except TelegramBadRequest:
+                    sent_message = await message.answer(
+                        text=text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
+            else:
+                sent_message = await message.answer(
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                )
         file_id = sent_photo_file_id(sent_message)
         if file_id and file_id != cached_file_id:
             try:

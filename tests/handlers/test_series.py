@@ -169,6 +169,11 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "get_user_season_progress",
                 AsyncMock(return_value=saved_progress),
             ),
+            patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(return_value=[]),
+            ),
         ):
             await series_handlers.start_series_tracking(callback, state)
 
@@ -224,6 +229,11 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "get_user_season_progress",
                 AsyncMock(return_value=saved_progress),
             ) as get_progress,
+            patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(return_value=[]),
+            ),
         ):
             await series_handlers.start_series_tracking(callback, state)
 
@@ -278,6 +288,11 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 3}]),
             ),
             patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(return_value=cached_seasons),
+            ),
+            patch.object(
                 series_metadata,
                 "fetch_tv_details",
                 AsyncMock(),
@@ -292,7 +307,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["watched_by_season"], {1: 3})
         self.assertEqual(state.state, MenuState.tracking_series)
 
-    async def test_active_series_clamps_progress_to_aired_episodes(self) -> None:
+    async def test_active_series_does_not_clamp_saved_progress(self) -> None:
         message = MessageStub()
         callback = CallbackStub("rate:8", message)
         state = StateStub(
@@ -322,15 +337,20 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 "get_user_season_progress",
                 AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 12}]),
             ),
+            patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(return_value=[]),
+            ),
         ):
             await series_handlers.start_series_tracking(callback, state)
 
         fetch.assert_awaited_once_with(42, include_episode_availability=True)
-        self.assertEqual(state.data["total_episodes"], 5)
+        self.assertEqual(state.data["total_episodes"], 12)
         self.assertEqual(state.data["announced_total_episodes"], 12)
-        self.assertEqual(state.data["watched_by_season"], {1: 5})
+        self.assertEqual(state.data["watched_by_season"], {1: 12})
         self.assertTrue(state.data["is_ongoing"])
-        self.assertIn("вышло 5 из 12 сер.", message.answers[0]["text"])
+        self.assertIn("вышло 12 из 12 сер.", message.answers[0]["text"])
 
     async def test_finish_series_saves_progress_and_returns_to_menu(self) -> None:
         message = MessageStub()

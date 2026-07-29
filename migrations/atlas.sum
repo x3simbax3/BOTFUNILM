@@ -1,4 +1,4 @@
-h1:0JeRN1g0fnGfQghIrV+n7q54KrpKpuzBBXrGqXUcM+M=
+h1:qon+EEc0/u0z8tuh8Iy6oijfJyOiuB0034uuvnVYldM=
 20260723193218_initial.sql h1:SZU4jnB0oVHMGUfJXn0mXO4JxP/xppIEOzs5VxJ+xGY=
 20260724120000_add_user_season_progress.sql h1:e0jJrJZ0RV8maVxut8TasWDVFtAngzo6igizH3KCfEw=
 20260724130000_split_media_classification.sql h1:cl/TOWC3ugxhdBoEF5SvfhELbjWzAEJpxhJHhdFAy2Y=
@@ -13,3 +13,4 @@ h1:0JeRN1g0fnGfQghIrV+n7q54KrpKpuzBBXrGqXUcM+M=
 20260728160000_add_user_media_rating_details.sql h1:jZV8VzO9VDC4ZuYZrM1I83nevJeNw6SHFdENbmvjx9E=
 20260729120000_add_telegram_poster_file_id.sql h1:nVRvqTdU21roMhxsObSk8SN9AHWHUQW6usIgo9TOE/g=
 20260729130000_add_normalized_media_titles.sql h1:M2wwzjWt8EeUtMJRX1vcQONtRFs53qGE1yX6FyQqcPI=
+20260729140000_add_media_search_terms.sql h1:MpsZqvxRvid36T732e7wpNXJQg5h0KBtw2RdFqxSyTU=

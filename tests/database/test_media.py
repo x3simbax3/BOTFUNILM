@@ -165,6 +165,24 @@ class MediaTests(DatabaseTestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["id"], expected_id)
 
+    async def test_find_media_by_title_matches_typo_at_start(self) -> None:
+        expected_id = await self.create_media(
+            tmdb_id=43,
+            content_format="full_length",
+            content_type="movie",
+            title="Матрица",
+        )
+
+        row = await find_media_by_title(
+            "Натрица",
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["id"], expected_id)
+
     async def test_find_media_by_title_respects_classification(self) -> None:
         await self.create_media(
             tmdb_id=42,
@@ -196,6 +214,7 @@ class MediaTests(DatabaseTestCase):
                     for index in range(150)
                 ],
             )
+        await backfill_media_search_index(database_url=self.database_url)
 
         with patch.object(
             media_search,
@@ -210,6 +229,7 @@ class MediaTests(DatabaseTestCase):
             )
 
         self.assertLessEqual(score.call_count, LOCAL_SEARCH_CANDIDATE_LIMIT)
+        self.assertGreater(score.call_count, 0)
 
     async def test_search_index_backfill_handles_preexisting_rows(self) -> None:
         async with connection_scope(self.database_url) as connection:

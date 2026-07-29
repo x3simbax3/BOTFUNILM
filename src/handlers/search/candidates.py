@@ -1,6 +1,6 @@
 """TMDB candidate presentation, carousel, confirmation and rejection."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from typing import Any
 
 import aiosqlite
@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.database.media import (
+    clear_media_telegram_poster_file_id,
     get_media_by_tmdb,
     update_media_telegram_poster_file_id,
 )
@@ -117,11 +118,27 @@ async def _send_candidate(
                 reply_markup=keyboard,
             )
         except TelegramBadRequest:
-            if not cached_file_id or not fallback_photo:
-                raise
-            return await message.answer_photo(
-                photo=fallback_photo,
-                caption=text,
+            if cached_file_id:
+                if isinstance(candidate, MutableMapping):
+                    candidate["telegram_poster_file_id"] = None
+                media_id = candidate.get("media_id")
+                if media_id:
+                    try:
+                        await clear_media_telegram_poster_file_id(int(media_id))
+                    except (aiosqlite.Error, TypeError, ValueError):
+                        pass
+            if cached_file_id and fallback_photo:
+                try:
+                    return await message.answer_photo(
+                        photo=fallback_photo,
+                        caption=text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
+                except TelegramBadRequest:
+                    pass
+            return await message.answer(
+                text,
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )

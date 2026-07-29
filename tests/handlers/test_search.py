@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import ANY, AsyncMock, patch
 
+from aiogram.exceptions import TelegramBadRequest
+
 from src.fsm import MenuState
 from src.handlers import search as search_handlers
 from src.handlers.search import candidates as candidate_handlers
@@ -113,6 +115,37 @@ class SearchTitleHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Матрица", status_stub.last_text)
         self.assertEqual(state.data["tmdb_guess_message_id"], 101)
         self.assertEqual(state.state, MenuState.confirming_tmdb_guess)
+
+    async def test_stale_candidate_photo_is_cleared_and_sent_as_text(self) -> None:
+        message = MessageStub()
+        message.answer_photo = AsyncMock(
+            side_effect=TelegramBadRequest(method=AsyncMock(), message="bad file id")
+        )
+        candidate = {
+            "media_id": 7,
+            "title": "Матрица",
+            "poster_path": None,
+            "poster_url": None,
+            "telegram_poster_file_id": "stale-file-id",
+        }
+
+        with patch.object(
+            candidate_handlers,
+            "clear_media_telegram_poster_file_id",
+            AsyncMock(),
+        ) as clear_file_id:
+            sent = await candidate_handlers._send_candidate(
+                message,
+                candidate,
+                "full_length",
+                0,
+                1,
+            )
+
+        clear_file_id.assert_awaited_once_with(7)
+        self.assertIsNone(candidate["telegram_poster_file_id"])
+        self.assertEqual(sent.message_id, message.answers[0]["stub"].message_id)
+        self.assertIn("Матрица", message.answers[0]["text"])
 
     async def test_search_title_reuses_matching_local_media(self) -> None:
         message = MessageStub(text="матрица")

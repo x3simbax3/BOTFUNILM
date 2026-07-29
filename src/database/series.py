@@ -106,10 +106,14 @@ async def save_user_series_progress(
         await active_connection.execute(
             """
             UPDATE media
-            SET available_episode_count = ?, last_updated = CURRENT_TIMESTAMP
+            SET available_episode_count = MAX(
+                    COALESCE(available_episode_count, 0), ?
+                ),
+                number_of_episodes = MAX(COALESCE(number_of_episodes, 0), ?),
+                last_updated = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (total_episodes, media_id),
+            (total_episodes, total_episodes, media_id),
         )
         if seasons:
             await active_connection.executemany(

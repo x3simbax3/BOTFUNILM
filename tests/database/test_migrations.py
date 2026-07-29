@@ -22,6 +22,8 @@ class MigrationTests(DatabaseTestCase):
         self.assertIn(("media_seasons", "table"), objects)
         self.assertIn(("user_library_filters", "table"), objects)
         self.assertIn(("ix_media_status", "index"), objects)
+        self.assertIn(("media_search_terms", "table"), objects)
+        self.assertIn(("ix_media_search_terms_term", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
         self.assertIn(("ix_user_season_progress_media_id", "index"), objects)
         self.assertIn(

@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from aiogram.exceptions import TelegramBadRequest
+
 from src.fsm import MenuState
 from src.handlers import library as library_handlers
 from src.handlers import menu as menu_handlers
@@ -59,6 +61,57 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
             f"{TMDB_IMAGE_URL}/poster.jpg",
         )
         update_file_id.assert_awaited_once_with(7, "telegram-file-id")
+
+    async def test_stale_cached_photo_is_cleared_and_card_becomes_text(self) -> None:
+        message = MessageStub()
+        message.answer_photo = AsyncMock(
+            side_effect=TelegramBadRequest(method=AsyncMock(), message="bad file id")
+        )
+        state = StateStub()
+        item = {
+            "id": 7,
+            "tmdb_id": None,
+            "title": "Матрица",
+            "original_title": None,
+            "description": "Описание",
+            "poster_path": None,
+            "telegram_poster_file_id": "stale-file-id",
+            "content_format": "full_length",
+            "content_type": "movie",
+            "user_status": "completed",
+            "user_rating": 9,
+            "rating": 8.7,
+            "release_date": "1999-03-31",
+            "first_air_date": None,
+            "number_of_seasons": None,
+            "number_of_episodes": None,
+            "episodes_watched": None,
+            "library_users_count": 1,
+        }
+
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_item",
+                AsyncMock(return_value=item),
+            ),
+            patch.object(
+                library_handlers,
+                "clear_media_telegram_poster_file_id",
+                AsyncMock(),
+            ) as clear_file_id,
+        ):
+            opened = await library_handlers.show_library_item(
+                message,
+                state,
+                123,
+                7,
+            )
+
+        self.assertTrue(opened)
+        clear_file_id.assert_awaited_once_with(7)
+        self.assertEqual(len(message.answers), 1)
+        self.assertIn("Матрица", message.answers[0]["text"])
 
     async def test_start_deep_link_opens_owned_library_item(self) -> None:
         message = MessageStub(text="/start media_7")

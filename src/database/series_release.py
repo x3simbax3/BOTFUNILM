@@ -23,19 +23,47 @@ async def update_media_series_release_info(
         connection,
         database_url=database_url,
     ) as active_connection:
+        await _replace_media_seasons(active_connection, media_id, snapshot)
+        async with active_connection.execute(
+            """
+            SELECT COALESCE(MAX(season_number), 0),
+                   COALESCE(SUM(announced_episode_count), 0),
+                   COALESCE(SUM(available_episode_count), 0)
+            FROM media_seasons
+            WHERE media_id = ?
+            """,
+            (media_id,),
+        ) as cursor:
+            season_count, announced_count, available_count = await cursor.fetchone()
+        async with active_connection.execute(
+            """
+            SELECT COALESCE(MAX(episodes_watched), 0)
+            FROM user_media
+            WHERE media_id = ?
+            """,
+            (media_id,),
+        ) as cursor:
+            max_user_progress = int((await cursor.fetchone())[0])
+
+        consistent_available = max(
+            available_episode_count,
+            int(available_count),
+            max_user_progress,
+        )
+        consistent_seasons = max(snapshot.number_of_seasons, int(season_count))
+        consistent_episodes = max(
+            snapshot.number_of_episodes,
+            int(announced_count),
+            consistent_available,
+        )
         await active_connection.execute(
             """
             UPDATE media
             SET tmdb_status = ?, tmdb_in_production = ?,
-                number_of_seasons = ?, number_of_episodes = ?,
+                number_of_seasons = MAX(COALESCE(number_of_seasons, 0), ?),
+                number_of_episodes = MAX(COALESCE(number_of_episodes, 0), ?),
                 available_episode_count = MAX(
-                    COALESCE(available_episode_count, 0),
-                    ?,
-                    COALESCE((
-                        SELECT MAX(episodes_watched)
-                        FROM user_media
-                        WHERE media_id = ?
-                    ), 0)
+                    COALESCE(available_episode_count, 0), ?
                 ),
                 poster_path = COALESCE(?, poster_path),
                 rating = COALESCE(?, rating),
@@ -48,10 +76,9 @@ async def update_media_series_release_info(
             (
                 snapshot.status,
                 snapshot.in_production,
-                snapshot.number_of_seasons,
-                snapshot.number_of_episodes,
-                available_episode_count,
-                media_id,
+                consistent_seasons,
+                consistent_episodes,
+                consistent_available,
                 snapshot.poster_path,
                 snapshot.rating,
                 next_episode.air_date if next_episode is not None else None,
@@ -60,7 +87,6 @@ async def update_media_series_release_info(
                 media_id,
             ),
         )
-        await _replace_media_seasons(active_connection, media_id, snapshot)
 
 
 async def replace_media_seasons(
@@ -105,6 +131,7 @@ async def _replace_media_seasons(
                 name = excluded.name,
                 announced_episode_count = MAX(
                     excluded.announced_episode_count,
+                    media_seasons.announced_episode_count,
                     media_seasons.available_episode_count
                 ),
                 available_episode_count = MAX(

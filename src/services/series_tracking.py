@@ -8,11 +8,15 @@ from typing import Any
 
 from src.database.connection import connection_scope
 from src.database.media import get_media_by_tmdb
-from src.database.series import get_user_season_progress, save_user_series_progress
+from src.database.series import (
+    get_media_seasons,
+    get_user_season_progress,
+    save_user_series_progress,
+)
 from src.database.series_release import update_media_series_release_info
 from src.models import SeriesReleaseSnapshot, current_media_id
 from src.services.media import ensure_media
-from src.services.series_metadata import count_available_episodes, normalize_seasons
+from src.services.series_metadata import normalize_seasons
 
 
 class SeriesProgressError(ValueError):
@@ -140,17 +144,74 @@ def restore_progress_keys(value: object) -> dict[int, int]:
     return progress
 
 
-def clamp_progress_to_available(
+def merge_tracking_season_limits(
+    fresh_seasons: Sequence[Mapping[str, Any]],
+    cached_seasons: Sequence[Mapping[str, Any]],
     progress: Mapping[int, int],
-    seasons_data: Sequence[Mapping[str, Any]],
-) -> dict[int, int]:
-    """Drop obsolete seasons and clamp saved values to currently aired episodes."""
-    limits = season_episode_limits(seasons_data)
-    return {
-        season_number: min(episodes_watched, limits[season_number])
-        for season_number, episodes_watched in progress.items()
-        if season_number in limits and limits[season_number] > 0
-    }
+) -> list[dict[str, Any]]:
+    """Build non-decreasing UI limits from TMDB, cache and user progress."""
+    merged: dict[int, dict[str, Any]] = {}
+    for season in cached_seasons:
+        season_number = season.get("season_number")
+        available = season.get("available_episode_count")
+        announced = season.get("announced_episode_count")
+        if not _is_positive_int(season_number) or not _is_nonnegative_int(available):
+            raise SeriesProgressError("Invalid cached season limits")
+        if not _is_nonnegative_int(announced):
+            raise SeriesProgressError("Invalid cached announced episode count")
+        merged[season_number] = {
+            "season_number": season_number,
+            "name": str(season.get("name") or f"Сезон {season_number}"),
+            "episode_count": available,
+            "announced_episode_count": max(announced, available),
+        }
+
+    for season in fresh_seasons:
+        season_number = season.get("season_number")
+        available = season.get("episode_count")
+        announced = season.get("announced_episode_count", available)
+        if not _is_positive_int(season_number) or not _is_nonnegative_int(available):
+            raise SeriesProgressError("Invalid fresh season limits")
+        if not _is_nonnegative_int(announced):
+            raise SeriesProgressError("Invalid fresh announced episode count")
+        current = merged.get(season_number)
+        merged[season_number] = {
+            "season_number": season_number,
+            "name": str(season.get("name") or (current or {}).get("name") or ""),
+            "episode_count": max(
+                available,
+                int((current or {}).get("episode_count", 0)),
+            ),
+            "announced_episode_count": max(
+                announced,
+                int((current or {}).get("announced_episode_count", 0)),
+                available,
+            ),
+        }
+
+    for season_number, episodes_watched in progress.items():
+        if not _is_positive_int(season_number) or not _is_nonnegative_int(
+            episodes_watched
+        ):
+            raise SeriesProgressError("Invalid saved progress")
+        current = merged.get(season_number)
+        if current is None:
+            current = {
+                "season_number": season_number,
+                "name": f"Сезон {season_number}",
+                "episode_count": 0,
+                "announced_episode_count": 0,
+            }
+            merged[season_number] = current
+        current["episode_count"] = max(current["episode_count"], episodes_watched)
+        current["announced_episode_count"] = max(
+            current["announced_episode_count"],
+            current["episode_count"],
+        )
+
+    return [
+        merged[number] for number in sorted(merged) if merged[number]["episode_count"]
+    ]
 
 
 async def load_saved_progress(
@@ -173,10 +234,16 @@ async def prepare_series_tracking(
     snapshot: SeriesReleaseSnapshot,
 ) -> SeriesTrackingStart:
     seasons_data = normalize_seasons(snapshot)
-    total_episodes = count_available_episodes(snapshot)
     media_id = await _resolve_media_id(fsm_data)
     saved = await load_saved_progress(user_id, media_id)
-    watched = clamp_progress_to_available(saved, seasons_data)
+    cached_seasons = await get_media_seasons(media_id) if media_id is not None else []
+    seasons_data = merge_tracking_season_limits(
+        seasons_data,
+        cached_seasons,
+        saved,
+    )
+    total_episodes = sum(int(season["episode_count"]) for season in seasons_data)
+    watched = dict(saved)
     watched = validate_series_progress(watched, seasons_data, total_episodes)
     return SeriesTrackingStart(
         media_id=media_id,
@@ -273,8 +340,8 @@ __all__ = (
     "SeriesTrackingResult",
     "SeriesTrackingStart",
     "apply_episode_selection",
-    "clamp_progress_to_available",
     "load_saved_progress",
+    "merge_tracking_season_limits",
     "prepare_series_tracking",
     "restore_progress_keys",
     "save_series_tracking_result",
