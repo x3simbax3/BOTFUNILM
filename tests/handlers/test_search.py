@@ -22,6 +22,7 @@ from src.tmdb import (
     TmdbTvDetails,
     TmdbUnavailableError,
 )
+from src.tmdb_models import TmdbMovieDetails
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
 
@@ -305,6 +306,55 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
             ],
             ["watch_status:completed", "watch_status:planned"],
         )
+
+    async def test_future_movie_does_not_show_completed_status(self) -> None:
+        message = MessageStub(message_id=100)
+        callback = CallbackStub("tmdb_guess:yes", message)
+        state = StateStub(
+            {
+                "tmdb_guess_message_id": 100,
+                "tmdb_id": 969681,
+                "tmdb_title": "Человек-паук: Новый день",
+                "content_format": "full_length",
+                "content_type": "movie",
+                "is_released": True,
+            }
+        )
+        details = TmdbMovieDetails(
+            title="Человек-паук: Новый день",
+            original_title="Spider-Man: Brand New Day",
+            description=None,
+            poster_path=None,
+            rating=None,
+            release_date="2999-08-06",
+            status="Released",
+        )
+
+        with (
+            patch.object(
+                candidate_handlers,
+                "_already_in_library",
+                AsyncMock(return_value=False),
+            ),
+            patch.object(
+                candidate_handlers,
+                "fetch_movie_details",
+                AsyncMock(return_value=details),
+            ),
+        ):
+            await search_handlers.confirm_tmdb_guess(callback, state)
+
+        status_keyboard = message.answers[0]["reply_markup"]
+        self.assertEqual(
+            [
+                button.callback_data
+                for row in status_keyboard.inline_keyboard
+                for button in row
+            ],
+            ["watch_status:planned"],
+        )
+        self.assertFalse(state.data["is_released"])
+        self.assertEqual(state.data["tmdb_release_date"], "2999-08-06")
 
     async def test_confirm_guess_keeps_stale_button_fallback_if_delete_fails(
         self,

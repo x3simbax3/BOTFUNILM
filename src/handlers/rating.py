@@ -20,13 +20,14 @@ from src.lang import (
     RATING_ALREADY_SAVED,
     RATING_EDIT_CANCELLED,
     RATING_UPDATED,
+    UNRELEASED_TITLE,
     movie_watched_text,
     rating_categories,
     rating_prompt_text,
     rating_summary_text,
 )
 from src.models import current_media_id
-from src.services import save_completed_movie
+from src.services import UnreleasedMediaError, save_completed_movie
 
 router = Router(name="rating")
 
@@ -169,6 +170,10 @@ async def finish_movie(
             dict(data),
             average,
         )
+    except UnreleasedMediaError:
+        await callback.answer(UNRELEASED_TITLE, show_alert=True)
+        await reset_to_main(state)
+        return
     except (aiosqlite.Error, RuntimeError):
         await callback.answer(
             MOVIE_SAVE_FAILED,

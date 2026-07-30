@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch, sentinel
 
 from src.database.media import get_media_by_tmdb
 from src.services import completed_movie
+from src.tmdb_models import TmdbMovieDetails
 from tests.support.database import DatabaseTestCase
 
 
@@ -13,6 +14,16 @@ async def connection_scope_stub(*args, **kwargs):
 
 
 class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
+    released_details = TmdbMovieDetails(
+        title="Фильм",
+        original_title=None,
+        description=None,
+        poster_path=None,
+        rating=None,
+        release_date="2026-01-01",
+        status="Released",
+    )
+
     async def test_rejects_unreleased_movie(self) -> None:
         with self.assertRaises(completed_movie.UnreleasedMediaError):
             await completed_movie.save_completed_movie(
@@ -45,6 +56,11 @@ class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
                 "connection_scope",
                 connection_scope_stub,
             ),
+            patch.object(
+                completed_movie,
+                "fetch_movie_details",
+                AsyncMock(return_value=self.released_details),
+            ),
         ):
             media_id = await completed_movie.save_completed_movie(
                 123,
@@ -53,7 +69,11 @@ class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         ensure.assert_awaited_once_with(
-            workflow_data,
+            {
+                **workflow_data,
+                "tmdb_release_date": "2026-01-01",
+                "is_released": True,
+            },
             "full_length",
             connection=sentinel.connection,
         )
@@ -67,6 +87,32 @@ class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(media_id, 7)
 
+    async def test_rechecks_stale_fsm_release_flag_with_tmdb(self) -> None:
+        future_details = TmdbMovieDetails(
+            title="Будущий фильм",
+            original_title=None,
+            description=None,
+            poster_path=None,
+            rating=None,
+            release_date="2999-08-06",
+            status="Released",
+        )
+        with patch.object(
+            completed_movie,
+            "fetch_movie_details",
+            AsyncMock(return_value=future_details),
+        ):
+            with self.assertRaises(completed_movie.UnreleasedMediaError):
+                await completed_movie.save_completed_movie(
+                    123,
+                    {
+                        "tmdb_id": 969681,
+                        "tmdb_title": "Будущий фильм",
+                        "is_released": True,
+                    },
+                    8.0,
+                )
+
 
 class CompletedMovieTransactionTests(DatabaseTestCase):
     async def test_user_write_failure_rolls_back_new_catalogue_entry(self) -> None:
@@ -75,10 +121,17 @@ class CompletedMovieTransactionTests(DatabaseTestCase):
             "tmdb_title": "Фильм",
             "content_type": "movie",
         }
-        with patch.object(
-            completed_movie,
-            "save_user_media",
-            AsyncMock(side_effect=RuntimeError("forced failure")),
+        with (
+            patch.object(
+                completed_movie,
+                "save_user_media",
+                AsyncMock(side_effect=RuntimeError("forced failure")),
+            ),
+            patch.object(
+                completed_movie,
+                "fetch_movie_details",
+                AsyncMock(return_value=CompletedMovieServiceTests.released_details),
+            ),
         ):
             with self.assertRaisesRegex(RuntimeError, "forced failure"):
                 await completed_movie.save_completed_movie(

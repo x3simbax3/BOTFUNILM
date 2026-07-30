@@ -36,7 +36,10 @@ from src.lang import (
 )
 from src.models import MediaWorkflowData, current_media_id
 from src.posters import poster_input, sent_photo_file_id
+from src.release_availability import release_date_has_passed
 from src.services.title_search import TitleSearchCandidate
+from src.tmdb_models import TmdbError
+from src.tmdb_movie import fetch_movie_details
 from src.tmdb_search import MAX_TITLE_CANDIDATES
 
 from .router import router
@@ -240,19 +243,36 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer(LOCAL_SEARCH_FAILED, show_alert=True)
         return
 
+    is_released = bool(data.get("is_released", True))
+    release_date = data.get("tmdb_release_date")
+    if data.get("content_format") == "full_length":
+        tmdb_id = data.get("tmdb_id")
+        if type(tmdb_id) is int and tmdb_id > 0:
+            try:
+                details = await fetch_movie_details(tmdb_id)
+            except (TmdbError, ValueError):
+                is_released = False
+            else:
+                release_date = details.release_date
+                is_released = (
+                    release_date_has_passed(release_date)
+                    if release_date
+                    else details.status == "Released"
+                )
+
     await callback.answer()
     await state.update_data(
         tmdb_candidates=[],
         tmdb_candidate_index=0,
         tmdb_guess_message_id=None,
+        tmdb_release_date=release_date,
+        is_released=is_released,
     )
     await delete_message_safely(callback.message)
     await callback.message.answer(
         WATCH_STATUS_PROMPT,
         parse_mode="HTML",
-        reply_markup=watch_status_keyboard(
-            allow_completed=bool(data.get("is_released", True))
-        ),
+        reply_markup=watch_status_keyboard(allow_completed=is_released),
     )
     await state.set_state(MenuState.choosing_watch_status)
 
