@@ -43,12 +43,22 @@ def library_text(
     bot_username: str,
     offset: int = 0,
     sort_order: str = "recent",
+    *,
+    library_is_empty: bool = False,
 ) -> str:
     if not items:
-        return (
-            f"{LIBRARY_HEADING}\n"
-            "╰ <i>Ничего не найдено</i>\n\n"
-            "Измени фильтры и попробуй снова."
+        hint = (
+            "Добавь первую запись в библиотеку."
+            if library_is_empty
+            else "Измени фильтры и попробуй снова."
+        )
+        return "\n".join(
+            (
+                LIBRARY_HEADING,
+                "╰ <i>Ничего не найдено</i>",
+                "",
+                hint,
+            )
         )
 
     heading = {

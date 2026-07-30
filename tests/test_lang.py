@@ -19,8 +19,13 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(locale.keyboards.MAIN_ADD, "＋\u00a0Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
-    def test_start_text_uses_asymmetric_action_heading(self) -> None:
+    def test_start_text_uses_left_bordered_headings(self) -> None:
         self.assertNotIn("(˶ᵔ ᵕ ᵔ˶)", lang.START_TEXT)
+        self.assertIn("╭ <b>BotFunilm</b>", lang.START_TEXT)
+        self.assertIn(
+            "╰ <i>Фильмы и сериалы — в одном месте</i>",
+            lang.START_TEXT,
+        )
         self.assertIn("╭ <b>Куда дальше?</b>", lang.START_TEXT)
         self.assertIn("╰ <i>Выбери действие ниже</i>", lang.START_TEXT)
 
@@ -116,6 +121,18 @@ class LocalizationTests(unittest.TestCase):
             "╰ <i>Сортировка по моей оценке</i>",
             rating_result,
         )
+
+    def test_empty_library_text_differs_from_empty_filtered_results(self) -> None:
+        empty_library = lang.library_text(
+            [],
+            "BotFunilmBot",
+            library_is_empty=True,
+        )
+        empty_filters = lang.library_text([], "BotFunilmBot")
+
+        self.assertIn("Добавь первую запись в библиотеку.", empty_library)
+        self.assertNotIn("Измени фильтры", empty_library)
+        self.assertIn("Измени фильтры и попробуй снова.", empty_filters)
 
     def test_library_text_shows_series_progress_status_and_rating(self) -> None:
         result = lang.library_text(

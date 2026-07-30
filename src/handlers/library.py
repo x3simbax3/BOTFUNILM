@@ -176,6 +176,7 @@ async def open_library_page(
             offset=page * LIBRARY_PAGE_SIZE,
             sort_order=sort_order,
         )
+        library_is_empty = not items and page == 0 and all(filters.values())
         bot_user = await callback.bot.me()
         if not bot_user.username:
             raise RuntimeError("Bot username is unavailable")
@@ -192,6 +193,7 @@ async def open_library_page(
             bot_user.username,
             page * LIBRARY_PAGE_SIZE,
             sort_order,
+            library_is_empty=library_is_empty,
         ),
         parse_mode="HTML",
         reply_markup=library_keyboard(

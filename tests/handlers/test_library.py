@@ -337,6 +337,30 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.data["library_message_id"], 10)
         self.assertEqual(state.state, MenuState.viewing_library)
 
+    async def test_empty_library_prompts_user_to_add_first_item(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:library", message)
+        state = StateStub()
+
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_filters",
+                AsyncMock(return_value={"movie": True, "series": True}),
+            ),
+            patch.object(
+                library_handlers,
+                "list_user_library",
+                AsyncMock(return_value=[]),
+            ),
+        ):
+            await library_handlers.open_library(callback, state)
+
+        self.assertIn(
+            "Добавь первую запись в библиотеку.",
+            message.edit_text_calls[0]["text"],
+        )
+
     async def test_sort_buttons_select_rating_and_recent_order(self) -> None:
         rating_callback = CallbackStub("library:sort:rating", MessageStub())
         recent_callback = CallbackStub("library:sort:recent", MessageStub())
