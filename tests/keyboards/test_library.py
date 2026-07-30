@@ -164,6 +164,15 @@ class LibraryKeyboardTests(KeyboardTestCase):
             ],
         )
 
+    def test_unreleased_library_item_has_no_watched_action(self) -> None:
+        self.assert_callback_rows(
+            keyboards.library_item_keyboard(planned=True, released=False),
+            [
+                ["library:item:edit", "library:item:delete"],
+                ["library:back"],
+            ],
+        )
+
     def test_series_edit_menu_can_change_rating_and_progress(self) -> None:
         self.assert_callback_rows(
             keyboards.library_edit_keyboard(series=True),

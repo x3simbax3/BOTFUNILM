@@ -20,6 +20,7 @@ class MediaWorkflowData:
     content_format: str
     content_type: str
     telegram_poster_file_id: str | None = None
+    is_released: bool = True
 
     @classmethod
     def from_tmdb_candidate(
@@ -45,6 +46,7 @@ class MediaWorkflowData:
             content_type=content_type
             or str(_get(candidate, "content_type") or "movie"),
             telegram_poster_file_id=_get(candidate, "telegram_poster_file_id"),
+            is_released=bool(_get(candidate, "is_released", True)),
         )
 
     @classmethod
@@ -64,6 +66,7 @@ class MediaWorkflowData:
             content_format=str(item["content_format"]),
             content_type=str(item["content_type"]),
             telegram_poster_file_id=_get(item, "telegram_poster_file_id"),
+            is_released=bool(_get(item, "is_released", True)),
         )
 
     @classmethod
@@ -82,6 +85,7 @@ class MediaWorkflowData:
             content_format=str(data.get("content_format") or ""),
             content_type=str(data.get("content_type") or "movie"),
             telegram_poster_file_id=data.get("telegram_poster_file_id"),
+            is_released=bool(data.get("is_released", True)),
         )
 
     def to_fsm_dict(self) -> dict[str, Any]:

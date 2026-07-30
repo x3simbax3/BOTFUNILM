@@ -20,6 +20,7 @@ TMDB_UNAVAILABLE = "TMDB сейчас недоступен. Попробуй н�
 TMDB_FAILED = "Не удалось получить ответ от TMDB. Попробуй позже."
 INVALID_WATCH_STATUS = "Неизвестный статус просмотра"
 TITLE_SAVE_FAILED = "Не удалось сохранить. Попробуй ещё раз."
+UNRELEASED_TITLE = "Этот тайтл ещё не вышел. Пока его можно только запланировать."
 ALREADY_IN_LIBRARY = "Уже добавлено в библиотеку"
 WATCH_STATUS_PROMPT = (
     "━━━  <b>Добавление</b>  ━━━\n"
@@ -75,6 +76,7 @@ __all__ = (
     "TITLE_AS_TEXT",
     "TITLE_EMPTY",
     "TITLE_SAVE_FAILED",
+    "UNRELEASED_TITLE",
     "TMDB_AUTH_FAILED",
     "TMDB_FAILED",
     "TMDB_NOT_CONFIGURED",

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Literal
 
 import aiosqlite
 
 from src.database.connection import connection_scope
+from src.database.media_release_notifications import record_media_release
 from src.database.media_search import replace_media_search_terms
 from src.database.series_release import _replace_media_seasons
 from src.database.series_subscriptions import record_series_release
 from src.models import SeriesReleaseSnapshot
+from src.release_availability import release_date_has_passed
 from src.tmdb_matching import normalize_text
+from src.tmdb_models import TmdbMovieDetails
 
 RefreshMode = Literal["daily", "weekly"]
 ACTIVE_STATUSES = ("Returning Series", "Planned", "In Production")
@@ -23,6 +27,7 @@ class MediaRefreshCandidate:
     media_id: int
     tmdb_id: int
     title: str
+    content_format: str
 
 
 @dataclass(frozen=True)
@@ -46,7 +51,7 @@ async def select_due_media_batch(
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             f"""
-            SELECT id, tmdb_id, title
+            SELECT id, tmdb_id, title, content_format
             FROM media
             WHERE id > ? AND tmdb_id IS NOT NULL AND {condition}
             ORDER BY id
@@ -60,6 +65,7 @@ async def select_due_media_batch(
             media_id=int(row["id"]),
             tmdb_id=int(row["tmdb_id"]),
             title=str(row["title"]),
+            content_format=str(row["content_format"]),
         )
         for row in rows
     ]
@@ -91,7 +97,7 @@ async def get_media_candidate(
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             """
-            SELECT id, tmdb_id, title FROM media
+            SELECT id, tmdb_id, title, content_format FROM media
             WHERE id = ? AND content_format = 'series' AND tmdb_id IS NOT NULL
             """,
             (media_id,),
@@ -99,7 +105,9 @@ async def get_media_candidate(
             row = await cursor.fetchone()
     if row is None:
         return None
-    return MediaRefreshCandidate(int(row["id"]), int(row["tmdb_id"]), row["title"])
+    return MediaRefreshCandidate(
+        int(row["id"]), int(row["tmdb_id"]), row["title"], row["content_format"]
+    )
 
 
 async def get_tmdb_candidates(
@@ -110,7 +118,7 @@ async def get_tmdb_candidates(
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             """
-            SELECT id, tmdb_id, title FROM media
+            SELECT id, tmdb_id, title, content_format FROM media
             WHERE tmdb_id = ? AND content_format = 'series'
             ORDER BY id
             """,
@@ -118,7 +126,12 @@ async def get_tmdb_candidates(
         ) as cursor:
             rows = await cursor.fetchall()
     return [
-        MediaRefreshCandidate(int(row["id"]), int(row["tmdb_id"]), row["title"])
+        MediaRefreshCandidate(
+            int(row["id"]),
+            int(row["tmdb_id"]),
+            row["title"],
+            row["content_format"],
+        )
         for row in rows
     ]
 
@@ -143,31 +156,43 @@ async def save_media_refresh(
     """Apply one TMDB snapshot in a short transaction and preserve progress."""
     async with connection_scope(database_url) as connection:
         async with connection.execute(
-            "SELECT COALESCE(available_episode_count, 0) FROM media WHERE id = ?",
+            """
+            SELECT COALESCE(available_episode_count, 0), is_released
+            FROM media WHERE id = ?
+            """,
             (media_id,),
         ) as cursor:
             row = await cursor.fetchone()
         if row is None:
             raise ValueError(f"Media {media_id} does not exist")
         previous_episode_count = int(row[0])
+        was_released = bool(row[1])
         changes = await _collect_changes(connection, media_id, snapshot)
         if changes:
             await _replace_media_seasons(connection, media_id, snapshot)
             await _write_metadata(connection, media_id, snapshot, mode)
+            is_released = was_released or snapshot.available_episode_count > 0
+            if is_released and not was_released:
+                await record_media_release(connection, media_id)
             current_episode_count = max(
                 previous_episode_count,
                 snapshot.available_episode_count,
             )
             last_episode = snapshot.last_episode_to_air
-            await record_series_release(
-                connection,
-                media_id,
-                previous_episode_count,
-                current_episode_count,
-                season_number=(last_episode.season_number if last_episode else None),
-                episode_number=(last_episode.episode_number if last_episode else None),
-                active=snapshot.active,
-            )
+            if was_released:
+                await record_series_release(
+                    connection,
+                    media_id,
+                    previous_episode_count,
+                    current_episode_count,
+                    season_number=(
+                        last_episode.season_number if last_episode else None
+                    ),
+                    episode_number=(
+                        last_episode.episode_number if last_episode else None
+                    ),
+                    active=snapshot.active,
+                )
         else:
             await _touch_checked_at(connection, media_id, mode, error=None)
         return changes
@@ -184,13 +209,103 @@ async def mark_media_refresh_error(
         await _touch_checked_at(connection, media_id, mode, error=error[:500])
 
 
+async def save_movie_release_refresh(
+    media_id: int,
+    snapshot: TmdbMovieDetails,
+    *,
+    today: date,
+    database_url: str | None = None,
+) -> list[MediaChange]:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            "SELECT * FROM media WHERE id = ? AND content_format = 'full_length'",
+            (media_id,),
+        ) as cursor:
+            media = await cursor.fetchone()
+        if media is None:
+            raise ValueError(f"Movie {media_id} does not exist")
+
+        was_released = bool(media["is_released"])
+        has_release_date = bool(snapshot.release_date)
+        is_released = (
+            was_released
+            or snapshot.status == "Released"
+            or (
+                has_release_date
+                and release_date_has_passed(snapshot.release_date, today=today)
+            )
+        )
+        fresh = {
+            "title": snapshot.title,
+            "original_title": snapshot.original_title,
+            "description": snapshot.description,
+            "poster_path": snapshot.poster_path,
+            "rating": snapshot.rating,
+            "release_date": snapshot.release_date,
+            "status": snapshot.status,
+            "is_released": int(is_released),
+        }
+        changes = [
+            MediaChange(field, media[field], value)
+            for field, value in fresh.items()
+            if media[field] != value
+        ]
+        await connection.execute(
+            """
+            UPDATE media
+            SET title = ?, original_title = ?,
+                normalized_title = ?, normalized_original_title = ?,
+                description = ?, poster_path = ?, rating = ?, release_date = ?,
+                status = ?, is_released = ?,
+                telegram_poster_file_id = CASE
+                    WHEN poster_path IS NOT ? THEN NULL
+                    ELSE telegram_poster_file_id
+                END,
+                tmdb_release_checked_at = CURRENT_TIMESTAMP,
+                tmdb_refresh_error = NULL, last_updated = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                snapshot.title,
+                snapshot.original_title,
+                normalize_text(snapshot.title),
+                normalize_text(snapshot.original_title or ""),
+                snapshot.description,
+                snapshot.poster_path,
+                snapshot.rating,
+                snapshot.release_date,
+                snapshot.status,
+                int(is_released),
+                snapshot.poster_path,
+                media_id,
+            ),
+        )
+        await replace_media_search_terms(
+            connection,
+            media_id,
+            snapshot.title,
+            snapshot.original_title,
+        )
+        if is_released and not was_released:
+            await record_media_release(connection, media_id)
+        return changes
+
+
 def _due_condition(mode: RefreshMode) -> tuple[str, tuple[object, ...]]:
     if mode == "daily":
         placeholders = ", ".join("?" for _ in ACTIVE_STATUSES)
         return (
             f"""
-            content_format = 'series'
-            AND (tmdb_in_production = 1 OR tmdb_status IN ({placeholders}))
+            (
+                (content_format = 'series'
+                 AND (tmdb_in_production = 1 OR tmdb_status IN ({placeholders})))
+                OR
+                (is_released = 0 AND EXISTS (
+                    SELECT 1 FROM user_media
+                    WHERE user_media.media_id = media.id
+                      AND user_media.status = 'planned'
+                ))
+            )
             AND (
                 tmdb_release_checked_at IS NULL
                 OR tmdb_release_checked_at < datetime('now', '-23 hours')
@@ -257,6 +372,9 @@ async def _collect_changes(
             last_episode.season_number if last_episode else None
         ),
         "last_episode_number": last_episode.episode_number if last_episode else None,
+        "is_released": int(
+            bool(media["is_released"]) or snapshot.available_episode_count > 0
+        ),
     }
     changes = [
         MediaChange(field, media[field], value)
@@ -305,7 +423,7 @@ async def _write_metadata(
     mode: RefreshMode,
 ) -> None:
     async with connection.execute(
-        "SELECT title FROM media WHERE id = ?",
+        "SELECT title, is_released FROM media WHERE id = ?",
         (media_id,),
     ) as cursor:
         current = await cursor.fetchone()
@@ -349,6 +467,7 @@ async def _write_metadata(
                 ELSE telegram_poster_file_id
             END,
             tmdb_status = ?, tmdb_in_production = ?,
+            is_released = ?,
             number_of_seasons = ?, number_of_episodes = ?,
             available_episode_count = ?,
             next_episode_air_date = ?, next_episode_season_number = ?,
@@ -371,6 +490,7 @@ async def _write_metadata(
             snapshot.poster_path,
             snapshot.status,
             snapshot.in_production,
+            int(bool(current["is_released"]) or snapshot.available_episode_count > 0),
             seasons,
             episodes,
             available,
@@ -423,5 +543,6 @@ __all__ = (
     "mark_media_refresh_error",
     "preview_media_refresh",
     "save_media_refresh",
+    "save_movie_release_refresh",
     "select_due_media_batch",
 )

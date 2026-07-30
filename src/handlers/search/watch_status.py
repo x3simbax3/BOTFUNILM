@@ -15,6 +15,7 @@ from src.keyboards import (
 from src.lang import (
     INVALID_WATCH_STATUS,
     TITLE_SAVE_FAILED,
+    UNRELEASED_TITLE,
     planned_title_saved_text,
     rating_categories,
     rating_prompt_text,
@@ -40,6 +41,9 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
 
     data = await state.get_data()
     workflow = MediaWorkflowData.from_fsm(data)
+    if status == "completed" and not workflow.is_released:
+        await callback.answer(UNRELEASED_TITLE, show_alert=True)
+        return
     if status == "planned":
         try:
             result = await save_planned_media(callback.from_user.id, workflow)

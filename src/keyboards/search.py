@@ -35,23 +35,26 @@ def tmdb_guess_keyboard(
     )
 
 
-def watch_status_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def watch_status_keyboard(*, allow_completed: bool = True) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if allow_completed:
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=text.STATUS_COMPLETED,
                     callback_data="watch_status:completed",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=text.STATUS_PLANNED,
-                    callback_data="watch_status:planned",
-                ),
-            ],
-        ],
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.STATUS_PLANNED,
+                callback_data="watch_status:planned",
+            )
+        ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def tmdb_retry_keyboard(

@@ -55,6 +55,7 @@ from src.lang import (
     ITEM_OPEN_FAILED,
     LIBRARY_OPEN_FAILED,
     UNKNOWN_FILTER,
+    UNRELEASED_TITLE,
     library_item_text,
     library_text,
     rating_categories,
@@ -239,7 +240,10 @@ async def show_library_item(
     text = library_item_caption(item)
     cached_file_id = item.get("telegram_poster_file_id")
     photo = cached_file_id or fallback_photo
-    keyboard = library_item_keyboard(planned=item["user_status"] == "planned")
+    keyboard = library_item_keyboard(
+        planned=item["user_status"] == "planned",
+        released=bool(dict(item).get("is_released", True)),
+    )
     if photo:
         try:
             sent_message = await message.answer_photo(
@@ -300,6 +304,7 @@ async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> 
         ITEM_EDIT_PROMPT,
         reply_markup=library_edit_keyboard(
             series=item["content_format"] == "series",
+            released=bool(dict(item).get("is_released", True)),
             tracking_available=(
                 item["content_format"] == "series"
                 and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
@@ -340,6 +345,9 @@ async def edit_library_item_rating(
     item = await _current_library_item(callback, state)
     if item is None:
         return
+    if not bool(dict(item).get("is_released", True)):
+        await callback.answer(UNRELEASED_TITLE, show_alert=True)
+        return
     categories = rating_categories(item["content_type"])
     await state.update_data(
         **MediaWorkflowData.from_library_item(item).to_fsm_dict(),
@@ -369,6 +377,9 @@ async def change_library_item_progress(
         return
     item = await _current_library_item(callback, state)
     if item is None:
+        return
+    if not bool(dict(item).get("is_released", True)):
+        await callback.answer(UNRELEASED_TITLE, show_alert=True)
         return
 
     if item["content_format"] == "series":
@@ -484,7 +495,10 @@ async def _edit_library_item_message(message: Message, item) -> None:
         message,
         library_item_caption(item),
         parse_mode="HTML",
-        reply_markup=library_item_keyboard(planned=item["user_status"] == "planned"),
+        reply_markup=library_item_keyboard(
+            planned=item["user_status"] == "planned",
+            released=bool(dict(item).get("is_released", True)),
+        ),
     )
 
 

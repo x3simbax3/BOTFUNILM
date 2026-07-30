@@ -19,6 +19,17 @@ class TmdbTitle:
     release_date: str | None = None
 
 
+@dataclass(frozen=True)
+class TmdbMovieDetails:
+    title: str
+    original_title: str | None
+    description: str | None
+    poster_path: str | None
+    rating: float | None
+    release_date: str | None
+    status: str | None
+
+
 TmdbEpisodeAirInfo = SeriesEpisode
 TmdbSeasonInfo = SeriesSeason
 TmdbTvDetails = SeriesReleaseSnapshot
@@ -56,6 +67,7 @@ __all__ = (
     "TmdbError",
     "TmdbNotConfiguredError",
     "TmdbNotFoundError",
+    "TmdbMovieDetails",
     "TmdbRateLimitError",
     "TmdbSeasonInfo",
     "TmdbTitle",

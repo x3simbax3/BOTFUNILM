@@ -13,6 +13,19 @@ async def connection_scope_stub(*args, **kwargs):
 
 
 class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejects_unreleased_movie(self) -> None:
+        with self.assertRaises(completed_movie.UnreleasedMediaError):
+            await completed_movie.save_completed_movie(
+                123,
+                {
+                    "tmdb_id": 42,
+                    "tmdb_title": "Будущий фильм",
+                    "content_type": "movie",
+                    "is_released": False,
+                },
+                8.0,
+            )
+
     async def test_saves_catalogue_and_user_entry_on_same_connection(self) -> None:
         workflow_data = {
             "tmdb_id": 42,

@@ -8,6 +8,10 @@ from src.database.user_media import save_user_media
 from src.services.media import ensure_media
 
 
+class UnreleasedMediaError(ValueError):
+    pass
+
+
 async def save_completed_movie(
     user_id: int,
     workflow_data: Mapping[str, Any],
@@ -16,6 +20,8 @@ async def save_completed_movie(
     database_url: str | None = None,
 ) -> int:
     """Upsert catalogue metadata and completed user entry in one transaction."""
+    if not bool(workflow_data.get("is_released", True)):
+        raise UnreleasedMediaError("Media has not been released yet")
     async with connection_scope(database_url) as connection:
         media_id = await ensure_media(
             workflow_data,
@@ -33,4 +39,4 @@ async def save_completed_movie(
     return media_id
 
 
-__all__ = ("save_completed_movie",)
+__all__ = ("UnreleasedMediaError", "save_completed_movie")

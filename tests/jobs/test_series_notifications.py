@@ -1,6 +1,10 @@
 from unittest.mock import AsyncMock
 
 from src.database.connection import connection_scope
+from src.database.media_release_notifications import (
+    get_pending_release_users,
+    record_media_release,
+)
 from src.database.series_subscriptions import (
     prepare_notification_batches,
     record_series_release,
@@ -11,6 +15,27 @@ from tests.support.database import DatabaseTestCase
 
 
 class SeriesNotificationJobTests(DatabaseTestCase):
+    async def test_sends_planned_title_release_notification(self) -> None:
+        media_id = await self.create_user_media(
+            status="planned",
+            media_kwargs={"title": "Новый фильм"},
+        )
+        async with connection_scope(self.database_url) as connection:
+            await record_media_release(connection, media_id)
+        bot = AsyncMock()
+
+        stats = await send_release_notifications(
+            bot,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(stats.sent, 1)
+        self.assertIn("Новый фильм", bot.send_message.await_args.kwargs["text"])
+        self.assertEqual(
+            await get_pending_release_users(database_url=self.database_url),
+            [],
+        )
+
     async def test_sends_one_message_and_marks_batch_sent(self) -> None:
         media_id = await self.create_user_media(
             media_kwargs={

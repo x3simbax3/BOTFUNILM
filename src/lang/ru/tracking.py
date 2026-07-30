@@ -1,5 +1,6 @@
 from html import escape
 
+from src.database.media_release_notifications import MediaReleaseNotification
 from src.database.series_subscriptions import NotificationItem
 
 TRACKED_HEADING = "╭ <b>Отслеживаемые сериалы</b>"
@@ -64,6 +65,16 @@ def release_notification_text(
     return "\n".join(lines)
 
 
+def media_release_notification_text(
+    items: list[MediaReleaseNotification],
+) -> str:
+    lines = ["🎬 <b>Можно смотреть</b>", ""]
+    for item in items:
+        lines.append(f"• <b>{escape(item.title)}</b> — тайтл вышел")
+    lines.extend(["", "Теперь просмотр можно отметить в библиотеке."])
+    return "\n".join(lines)
+
+
 def _episode_word(count: int) -> str:
     if count % 10 == 1 and count % 100 != 11:
         return "серия"
@@ -81,6 +92,7 @@ __all__ = (
     "TRACKING_SAVE_FAILED",
     "TRACKING_UNAVAILABLE",
     "release_notification_text",
+    "media_release_notification_text",
     "replace_tracking_status",
     "tracking_status_line",
     "tracked_series_text",

@@ -112,6 +112,7 @@ class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
             number_of_seasons=1,
             number_of_episodes=12,
             available_episode_count=5,
+            is_released=True,
             connection=sentinel.connection,
         )
         update.assert_awaited_once_with(

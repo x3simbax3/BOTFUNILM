@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.database.media_search import find_media_by_title
+from src.release_availability import release_date_has_passed
 from src.tmdb_models import TmdbTitle
 from src.tmdb_search import MAX_TITLE_CANDIDATES, find_title_candidates
 
@@ -23,6 +24,7 @@ class TitleSearchCandidate:
     original_title: str | None
     release_date: str | None
     telegram_poster_file_id: str | None = None
+    is_released: bool = True
 
     @classmethod
     def from_tmdb(
@@ -31,6 +33,7 @@ class TitleSearchCandidate:
         *,
         media_id: int | None = None,
         telegram_poster_file_id: str | None = None,
+        is_released: bool | None = None,
     ) -> TitleSearchCandidate:
         return cls(
             media_id=media_id,
@@ -43,6 +46,11 @@ class TitleSearchCandidate:
             original_title=title.original_title,
             release_date=title.release_date,
             telegram_poster_file_id=telegram_poster_file_id,
+            is_released=(
+                release_date_has_passed(title.release_date)
+                if is_released is None
+                else is_released
+            ),
         )
 
     def to_fsm_dict(self) -> dict[str, Any]:
@@ -70,6 +78,7 @@ async def search_title_candidates(
                 telegram_poster_file_id=dict(local_media).get(
                     "telegram_poster_file_id"
                 ),
+                is_released=bool(dict(local_media).get("is_released", True)),
             )
         ]
 

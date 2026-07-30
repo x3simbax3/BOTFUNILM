@@ -1,5 +1,11 @@
+from datetime import date
+
 from src.database.connection import connection_scope
 from src.database.media import get_media_by_tmdb
+from src.database.media_release_notifications import (
+    get_pending_release_users,
+    get_release_notifications,
+)
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.database.series_subscriptions import (
     get_notification_batch,
@@ -9,13 +15,55 @@ from src.database.series_subscriptions import (
 from src.jobs.media_refresh import (
     preview_media_refresh,
     save_media_refresh,
+    save_movie_release_refresh,
     select_due_media_batch,
 )
 from src.models import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
+from src.tmdb_models import TmdbMovieDetails
 from tests.support.database import DatabaseTestCase
 
 
 class MediaRefreshDatabaseTests(DatabaseTestCase):
+    async def test_daily_selects_and_releases_planned_future_movie(self) -> None:
+        media_id = await self.create_user_media(
+            status="planned",
+            media_kwargs={
+                "tmdb_id": 99,
+                "title": "Будущий фильм",
+                "release_date": "2026-07-31",
+                "is_released": False,
+            },
+        )
+
+        rows = await select_due_media_batch("daily", database_url=self.database_url)
+        self.assertEqual([row.media_id for row in rows], [media_id])
+        self.assertEqual(rows[0].content_format, "full_length")
+
+        await save_movie_release_refresh(
+            media_id,
+            TmdbMovieDetails(
+                title="Будущий фильм",
+                original_title=None,
+                description="Описание",
+                poster_path=None,
+                rating=8.0,
+                release_date="2026-07-30",
+                status="Released",
+            ),
+            today=date(2026, 7, 30),
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            await get_pending_release_users(database_url=self.database_url),
+            [123],
+        )
+        notifications = await get_release_notifications(
+            123,
+            database_url=self.database_url,
+        )
+        self.assertEqual(notifications[0].title, "Будущий фильм")
+
     async def test_refresh_queues_new_episode_for_subscriber(self) -> None:
         media_id = await self.create_user_media(
             media_kwargs={

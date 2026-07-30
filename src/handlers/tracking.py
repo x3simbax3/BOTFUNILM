@@ -123,6 +123,7 @@ async def toggle_library_subscription(
         ITEM_EDIT_PROMPT,
         reply_markup=library_edit_keyboard(
             series=True,
+            released=bool(dict(item).get("is_released", True)),
             tracking_available=tracking_available,
             tracking_enabled=bool(item["is_tracking"]),
         ),

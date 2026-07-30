@@ -64,6 +64,7 @@ async def upsert_media(
     number_of_seasons: int | None = None,
     number_of_episodes: int | None = None,
     available_episode_count: int | None = None,
+    is_released: bool = True,
     status: str | None = None,
     database_url: str | None = None,
     connection: aiosqlite.Connection | None = None,
@@ -92,6 +93,7 @@ async def upsert_media(
         number_of_episodes,
         resolved_available_episode_count,
         status,
+        int(is_released),
     )
 
     async with existing_or_connection_scope(
@@ -108,8 +110,8 @@ async def upsert_media(
                     poster_path, telegram_poster_file_id,
                     rating, release_date, first_air_date,
                     number_of_seasons, number_of_episodes,
-                    available_episode_count, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    available_episode_count, status, is_released
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 values,
             ) as cursor:
@@ -131,8 +133,8 @@ async def upsert_media(
                 poster_path, telegram_poster_file_id,
                 rating, release_date, first_air_date,
                 number_of_seasons, number_of_episodes,
-                available_episode_count, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                available_episode_count, status, is_released
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(tmdb_id, content_format, content_type) DO UPDATE SET
                 title = excluded.title,
                 normalized_title = excluded.normalized_title,
@@ -166,6 +168,7 @@ async def upsert_media(
                     media.available_episode_count
                 ),
                 status = COALESCE(excluded.status, media.status),
+                is_released = MAX(media.is_released, excluded.is_released),
                 last_updated = CURRENT_TIMESTAMP
             """,
             values,

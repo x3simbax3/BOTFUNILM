@@ -1,6 +1,6 @@
 """Application services shared by handlers."""
 
-from src.services.completed_movie import save_completed_movie
+from src.services.completed_movie import UnreleasedMediaError, save_completed_movie
 from src.services.media import ensure_media
 from src.services.series_tracking import (
     SeriesProgressError,
@@ -11,6 +11,7 @@ from src.services.series_tracking import (
 
 __all__ = (
     "SeriesProgressError",
+    "UnreleasedMediaError",
     "apply_episode_selection",
     "ensure_media",
     "save_completed_movie",

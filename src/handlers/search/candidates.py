@@ -250,7 +250,9 @@ async def confirm_tmdb_guess(callback: CallbackQuery, state: FSMContext) -> None
     await callback.message.answer(
         WATCH_STATUS_PROMPT,
         parse_mode="HTML",
-        reply_markup=watch_status_keyboard(),
+        reply_markup=watch_status_keyboard(
+            allow_completed=bool(data.get("is_released", True))
+        ),
     )
     await state.set_state(MenuState.choosing_watch_status)
 

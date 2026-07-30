@@ -65,6 +65,7 @@ CREATE TABLE media (
     rating              REAL,
     release_date        TEXT,
     first_air_date      TEXT,
+    is_released         INTEGER NOT NULL DEFAULT 1,
     number_of_seasons   INTEGER,
     number_of_episodes  INTEGER,
     status              TEXT,
@@ -83,6 +84,7 @@ CREATE TABLE media (
     last_episode_number INTEGER,
     available_episode_count INTEGER,
     CHECK (`library_users_count` >= 0),
+    CHECK (`is_released` IN (0, 1)),
     CHECK (`tmdb_in_production` IS NULL OR `tmdb_in_production` IN (0, 1)),
     CHECK (`next_episode_season_number` IS NULL OR `next_episode_season_number` > 0),
     CHECK (`next_episode_number` IS NULL OR `next_episode_number` > 0),
@@ -107,6 +109,8 @@ CREATE INDEX ix_media_daily_refresh_due
     ON media (content_format, tmdb_release_checked_at, id);
 CREATE INDEX ix_media_weekly_refresh_due
     ON media (content_format, tmdb_metadata_checked_at, id);
+CREATE INDEX ix_media_unreleased_due
+    ON media (is_released, tmdb_release_checked_at, id);
 
 CREATE TABLE media_search_terms (
     media_id            INTEGER NOT NULL,
@@ -212,6 +216,21 @@ CREATE INDEX ix_user_series_notifications_unbatched
     ON user_series_notifications (batch_id, user_id, id);
 CREATE INDEX ix_user_series_notifications_batch_page
     ON user_series_notifications (batch_id, id);
+
+CREATE TABLE user_media_release_notifications (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                  INTEGER NOT NULL,
+    media_id                 INTEGER NOT NULL,
+    detected_at              TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    sent_at                  TEXT,
+    CONSTRAINT user_media_release_notifications_user_media
+        FOREIGN KEY (user_id, media_id)
+        REFERENCES user_media (user_id, media_id) ON DELETE CASCADE,
+    UNIQUE (user_id, media_id)
+);
+
+CREATE INDEX ix_user_media_release_notifications_pending
+    ON user_media_release_notifications (sent_at, user_id, id);
 
 -- Library-count and series-progress triggers are installed by migrations.
 -- Atlas Community cannot represent SQLite triggers in a declarative schema.

@@ -8,6 +8,7 @@ from src.database.connection import connection_scope
 from src.database.series_release import update_media_series_release_info
 from src.database.user_media import save_user_media
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot
+from src.release_availability import release_date_has_passed
 from src.services.media import ensure_media
 from src.services.series_metadata import (
     SeriesMetadataError,
@@ -39,6 +40,11 @@ async def save_planned_media(
             number_of_episodes=(snapshot.number_of_episodes if snapshot else None),
             available_episode_count=(
                 snapshot.available_episode_count if snapshot else None
+            ),
+            is_released=(
+                snapshot.available_episode_count > 0
+                if snapshot is not None
+                else release_date_has_passed(workflow.tmdb_release_date)
             ),
             connection=connection,
         )

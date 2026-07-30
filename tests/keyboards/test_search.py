@@ -30,3 +30,9 @@ class SearchKeyboardTests(KeyboardTestCase):
             keyboards.watch_status_keyboard(),
             [["watch_status:completed"], ["watch_status:planned"]],
         )
+
+    def test_unreleased_title_can_only_be_planned(self) -> None:
+        self.assert_callback_rows(
+            keyboards.watch_status_keyboard(allow_completed=False),
+            [["watch_status:planned"]],
+        )

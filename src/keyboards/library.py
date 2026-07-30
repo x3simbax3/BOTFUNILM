@@ -198,9 +198,11 @@ def _library_filter_group_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def library_item_keyboard(*, planned: bool = False) -> InlineKeyboardMarkup:
+def library_item_keyboard(
+    *, planned: bool = False, released: bool = True
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    if planned:
+    if planned and released:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -237,18 +239,21 @@ def library_item_keyboard(*, planned: bool = False) -> InlineKeyboardMarkup:
 def library_edit_keyboard(
     *,
     series: bool,
+    released: bool = True,
     tracking_available: bool = False,
     tracking_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=text.EDIT_RATING,
-                callback_data="library:item:edit:rating",
-            )
-        ]
-    ]
-    if series:
+    rows = []
+    if released:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=text.EDIT_RATING,
+                    callback_data="library:item:edit:rating",
+                )
+            ]
+        )
+    if series and released:
         rows.append(
             [
                 InlineKeyboardButton(

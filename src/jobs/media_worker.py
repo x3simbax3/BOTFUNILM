@@ -43,6 +43,7 @@ from src.jobs.media_refresh import (
     mark_media_refresh_error,
     preview_media_refresh,
     save_media_refresh,
+    save_movie_release_refresh,
     select_due_media_batch,
 )
 from src.jobs.news_broadcast import send_news_broadcast
@@ -58,6 +59,7 @@ from src.tmdb_models import (
     TmdbRateLimitError,
     TmdbUnavailableError,
 )
+from src.tmdb_movie import fetch_movie_details
 from src.tmdb_series import fetch_tv_details
 
 logger = logging.getLogger(__name__)
@@ -262,23 +264,32 @@ async def _refresh_candidate(
 ) -> TitleResult:
     for attempt in range(MEDIA_REFRESH_RETRIES):
         try:
-            snapshot = await fetch_tv_details(
-                candidate.tmdb_id,
-                include_episode_availability=True,
-            )
-            if dry_run:
-                changes = await preview_media_refresh(
+            if candidate.content_format == "full_length":
+                movie = await fetch_movie_details(candidate.tmdb_id)
+                changes = await save_movie_release_refresh(
                     candidate.media_id,
-                    snapshot,
+                    movie,
+                    today=datetime.now(_worker_timezone()).date(),
                     database_url=database_url,
                 )
             else:
-                changes = await save_media_refresh(
-                    candidate.media_id,
-                    snapshot,
-                    mode,
-                    database_url=database_url,
+                snapshot = await fetch_tv_details(
+                    candidate.tmdb_id,
+                    include_episode_availability=True,
                 )
+                if dry_run:
+                    changes = await preview_media_refresh(
+                        candidate.media_id,
+                        snapshot,
+                        database_url=database_url,
+                    )
+                else:
+                    changes = await save_media_refresh(
+                        candidate.media_id,
+                        snapshot,
+                        mode,
+                        database_url=database_url,
+                    )
             return TitleResult("updated" if changes else "unchanged", tuple(changes))
         except TmdbAuthenticationError:
             logger.error(
@@ -374,7 +385,7 @@ async def run_worker(
     timezone = _worker_timezone()
     if await has_due_media("weekly", database_url=database_url):
         await _run_locked_or_log("weekly", redis, database_url=database_url)
-    elif await has_due_media("daily", database_url=database_url):
+    if await has_due_media("daily", database_url=database_url):
         await _run_locked_or_log("daily", redis, database_url=database_url)
     if datetime.now(timezone).hour >= NOTIFICATION_HOUR:
         await _run_notifications_locked_or_log(
@@ -401,6 +412,10 @@ async def run_worker(
             )
         else:
             await _run_locked_or_log(job, redis, database_url=database_url)
+            if job == "weekly" and await has_due_media(
+                "daily", database_url=database_url
+            ):
+                await _run_locked_or_log("daily", redis, database_url=database_url)
             if datetime.now(timezone).hour >= NOTIFICATION_HOUR:
                 await _run_notifications_locked_or_log(
                     redis,

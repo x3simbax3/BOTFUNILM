@@ -16,6 +16,7 @@ async def ensure_media(
     number_of_seasons: int | None = None,
     number_of_episodes: int | None = None,
     available_episode_count: int | None = None,
+    is_released: bool | None = None,
     connection: aiosqlite.Connection | None = None,
 ) -> int:
     """Return an existing media id or create/update its catalogue record."""
@@ -32,6 +33,9 @@ async def ensure_media(
         "description": data.get("tmdb_description"),
         "poster_path": data.get("tmdb_poster_path"),
         "telegram_poster_file_id": data.get("telegram_poster_file_id"),
+        "is_released": (
+            bool(data.get("is_released", True)) if is_released is None else is_released
+        ),
     }
     if content_format == "series":
         media_details["first_air_date"] = data.get("tmdb_release_date")
