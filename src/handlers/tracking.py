@@ -19,14 +19,13 @@ from src.database.series_subscriptions import (
 from src.fsm import MenuState
 from src.handlers.common import edit_message, replace_message
 from src.keyboards import (
-    library_edit_keyboard,
+    library_item_keyboard,
     notification_keyboard,
     post_add_tracking_keyboard,
     tracked_series_keyboard,
 )
 from src.lang import (
     INVALID_PAGE,
-    ITEM_EDIT_PROMPT,
     ITEM_NOT_FOUND,
     NOTIFICATION_NOT_FOUND,
     TRACKED_OPEN_FAILED,
@@ -115,16 +114,19 @@ async def toggle_library_subscription(
     item = await _toggle(callback, media_id)
     if item is None:
         return
-    tracking_available = is_active_series(
-        item["tmdb_status"], item["tmdb_in_production"]
-    )
+    source_text = getattr(callback.message, "html_text", None)
+    if not isinstance(source_text, str):
+        return
     await edit_message(
         callback.message,
-        ITEM_EDIT_PROMPT,
-        reply_markup=library_edit_keyboard(
-            series=True,
+        source_text,
+        parse_mode="HTML",
+        reply_markup=library_item_keyboard(
+            planned=item["user_status"] == "planned",
             released=bool(dict(item).get("is_released", True)),
-            tracking_available=tracking_available,
+            tracking_available=is_active_series(
+                item["tmdb_status"], item["tmdb_in_production"]
+            ),
             tracking_enabled=bool(item["is_tracking"]),
         ),
     )

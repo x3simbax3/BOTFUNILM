@@ -51,6 +51,9 @@ TMDB_URL = validate_tmdb_url(
     TMDB_ALLOWED_HOSTS,
 )
 TMDB_LANG = os.getenv("TMDB_LANG", "ru-RU")
+TMDB_REGION = os.getenv("TMDB_REGION", "RU").strip().upper()
+if len(TMDB_REGION) != 2 or not TMDB_REGION.isalpha():
+    raise ValueError("TMDB_REGION must be a two-letter country code")
 TMDB_MAX_CONCURRENCY = int(os.getenv("TMDB_MAX_CONCURRENCY", "3"))
 TMDB_MAX_REQUESTS_PER_SECOND = int(os.getenv("TMDB_MAX_REQUESTS_PER_SECOND", "9"))
 TMDB_QUEUE_TIMEOUT_SECONDS = float(os.getenv("TMDB_QUEUE_TIMEOUT_SECONDS", "5"))

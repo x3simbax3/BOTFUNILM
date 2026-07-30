@@ -183,28 +183,25 @@ class LibraryKeyboardTests(KeyboardTestCase):
             ],
         )
 
-    def test_active_series_edit_menu_can_toggle_tracking(self) -> None:
+    def test_active_series_item_can_toggle_tracking(self) -> None:
         self.assert_callback_rows(
-            keyboards.library_edit_keyboard(
-                series=True,
+            keyboards.library_item_keyboard(
                 tracking_available=True,
                 tracking_enabled=True,
             ),
             [
-                ["library:item:edit:rating"],
-                ["library:item:edit:progress"],
-                ["series:tracking:toggle", "series:tracking:status"],
-                ["library:item:edit:back"],
+                ["series:tracking:toggle"],
+                ["library:item:edit", "library:item:delete"],
+                ["library:back"],
             ],
         )
-        tracking_row = keyboards.library_edit_keyboard(
-            series=True,
+        tracking_row = keyboards.library_item_keyboard(
             tracking_available=True,
             tracking_enabled=True,
-        ).inline_keyboard[2]
+        ).inline_keyboard[0]
         self.assertEqual(
             [button.text for button in tracking_row],
-            ["×\u00a0Не отслеживать", "Активно"],
+            ["×\u00a0Не отслеживать"],
         )
 
     def test_post_add_tracking_has_action_status_and_main_menu(self) -> None:

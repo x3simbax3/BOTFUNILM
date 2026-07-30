@@ -243,6 +243,11 @@ async def show_library_item(
     keyboard = library_item_keyboard(
         planned=item["user_status"] == "planned",
         released=bool(dict(item).get("is_released", True)),
+        tracking_available=(
+            item["content_format"] == "series"
+            and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
+        ),
+        tracking_enabled=bool(dict(item).get("is_tracking", False)),
     )
     if photo:
         try:
@@ -305,11 +310,6 @@ async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> 
         reply_markup=library_edit_keyboard(
             series=item["content_format"] == "series",
             released=bool(dict(item).get("is_released", True)),
-            tracking_available=(
-                item["content_format"] == "series"
-                and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
-            ),
-            tracking_enabled=bool(item["is_tracking"]),
         ),
     )
     await callback.answer()
@@ -498,6 +498,11 @@ async def _edit_library_item_message(message: Message, item) -> None:
         reply_markup=library_item_keyboard(
             planned=item["user_status"] == "planned",
             released=bool(dict(item).get("is_released", True)),
+            tracking_available=(
+                item["content_format"] == "series"
+                and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
+            ),
+            tracking_enabled=bool(dict(item).get("is_tracking", False)),
         ),
     )
 

@@ -1,8 +1,9 @@
 """TMDB title search and title-detail use cases."""
 
 import logging
+from dataclasses import replace
 
-from config.config import TMDB_API, TMDB_LANG, TMDB_URL
+from config.config import TMDB_API, TMDB_LANG, TMDB_REGION, TMDB_URL
 from src.http_client import get_http_session
 from src.tmdb_client import fetch_json
 from src.tmdb_matching import (
@@ -17,7 +18,11 @@ from src.tmdb_models import (
     TmdbNotFoundError,
     TmdbTitle,
 )
-from src.tmdb_parsing import _extract_results, _parse_title
+from src.tmdb_parsing import (
+    _extract_results,
+    _parse_title,
+    regional_movie_release_date,
+)
 
 logger = logging.getLogger(__name__)
 MAX_TITLE_CANDIDATES = 5
@@ -62,15 +67,18 @@ async def find_title_candidates(
 
     session = await get_http_session()
     for attempt, query_variant in enumerate(queries, start=1):
+        parameters = {
+            "query": query_variant,
+            "language": TMDB_LANG,
+            "include_adult": "false",
+            "page": "1",
+        }
+        if media_path == "movie":
+            parameters["region"] = TMDB_REGION
         data = await fetch_json(
             session,
             search_url,
-            {
-                "query": query_variant,
-                "language": TMDB_LANG,
-                "include_adult": "false",
-                "page": "1",
-            },
+            parameters,
             TMDB_API,
         )
         results = filter_by_content_type(_extract_results(data), content_type)
@@ -124,10 +132,17 @@ async def fetch_title_details(tmdb_id: int, content_format: str) -> TmdbTitle:
     media_path = "tv" if content_format == "series" else "movie"
     url = f"{TMDB_URL.rstrip('/')}/{media_path}/{tmdb_id}"
     session = await get_http_session()
-    data = await fetch_json(session, url, {"language": TMDB_LANG}, TMDB_API)
+    parameters = {"language": TMDB_LANG}
+    if media_path == "movie":
+        parameters["append_to_response"] = "release_dates"
+    data = await fetch_json(session, url, parameters, TMDB_API)
     if not data:
         raise TmdbError("Не удалось получить информацию о тайтле")
-    return _parse_title(data)
+    title = _parse_title(data)
+    regional_date = regional_movie_release_date(data, TMDB_REGION)
+    if media_path != "movie" or regional_date is None:
+        return title
+    return replace(title, release_date=regional_date)
 
 
 __all__ = (

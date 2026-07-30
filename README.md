@@ -133,6 +133,7 @@ SQLite-база находится в именованном volume `bot_data`, 
 | `TMDB_URL` | HTTPS-адрес TMDB API; хост должен входить в allowlist | `https://api.themoviedb.org/3` |
 | `TMDB_ALLOWED_HOSTS` | точные имена хостов, которым разрешено передавать TMDB-токен | `api.themoviedb.org` |
 | `TMDB_LANG` | язык данных TMDB | `ru-RU` |
+| `TMDB_REGION` | регион дат выхода фильмов | `RU` |
 | `TMDB_MAX_CONCURRENCY` | максимум одновременных запросов TMDB | `3` |
 | `TMDB_MAX_REQUESTS_PER_SECOND` | общий через Redis максимум запросов TMDB в секунду | `9` |
 | `TMDB_QUEUE_TIMEOUT_SECONDS` | максимальное ожидание очереди TMDB | `5` |

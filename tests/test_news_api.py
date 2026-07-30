@@ -1,6 +1,6 @@
 import unittest
 
-from src.news_api import _parse_article
+from src.news_api import _ArticleBodyParser, _parse_article
 
 
 class NewsApiParsingTests(unittest.TestCase):
@@ -21,6 +21,15 @@ class NewsApiParsingTests(unittest.TestCase):
         self.assertIsNotNone(article)
         self.assertEqual(article.description, "Короткое описание")
         self.assertEqual(article.source, "example.com")
+
+    def test_extracts_text_from_article_body(self) -> None:
+        parser = _ArticleBodyParser()
+        parser.feed(
+            '<div itemprop="articleBody"><p>Первый <a href="#">абзац</a>.</p>'
+            "<script>ignore()</script><p>Второй абзац.</p></div>"
+        )
+
+        self.assertEqual(parser.text, "Первый абзац. Второй абзац.")
 
     def test_rejects_unsafe_article_url_and_ignores_unsafe_image(self) -> None:
         self.assertIsNone(

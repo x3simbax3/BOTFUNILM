@@ -229,11 +229,11 @@ async def save_movie_release_refresh(
         has_release_date = bool(snapshot.release_date)
         is_released = (
             was_released
-            or snapshot.status == "Released"
             or (
                 has_release_date
                 and release_date_has_passed(snapshot.release_date, today=today)
             )
+            or (not has_release_date and snapshot.status == "Released")
         )
         fresh = {
             "title": snapshot.title,

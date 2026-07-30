@@ -1,5 +1,7 @@
 """Pure parsing helpers for TMDB responses."""
 
+from datetime import date
+
 from src.tmdb_models import TmdbEpisodeAirInfo, TmdbNotFoundError, TmdbTitle
 
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
@@ -62,4 +64,33 @@ def _parse_rating(value: object) -> float | None:
     return rating if 0 <= rating <= 10 else None
 
 
-__all__ = ("TMDB_IMAGE_URL",)
+def regional_movie_release_date(data: dict, region: str) -> str | None:
+    """Return the first public movie release date for the configured region."""
+    release_dates = data.get("release_dates")
+    if not isinstance(release_dates, dict):
+        return None
+    results = release_dates.get("results")
+    if not isinstance(results, list):
+        return None
+
+    dates: list[date] = []
+    for item in results:
+        if not isinstance(item, dict) or item.get("iso_3166_1") != region:
+            continue
+        releases = item.get("release_dates")
+        if not isinstance(releases, list):
+            continue
+        for release in releases:
+            if not isinstance(release, dict) or release.get("type") not in range(2, 7):
+                continue
+            value = release.get("release_date")
+            if not isinstance(value, str):
+                continue
+            try:
+                dates.append(date.fromisoformat(value[:10]))
+            except ValueError:
+                continue
+    return min(dates).isoformat() if dates else None
+
+
+__all__ = ("TMDB_IMAGE_URL", "regional_movie_release_date")

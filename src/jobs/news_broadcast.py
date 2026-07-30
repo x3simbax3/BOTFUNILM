@@ -6,7 +6,7 @@ import asyncio
 import html
 import logging
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta, timezone
 
 from aiogram import Bot
@@ -25,6 +25,7 @@ from src.news_api import (
     NewsApiError,
     NewsApiRateLimitError,
     NewsArticle,
+    fetch_article_text,
     fetch_news,
 )
 
@@ -105,6 +106,10 @@ async def send_news_broadcast(
         logger.warning("News broadcast skipped because no fresh article was found")
         return stats
     article_filter, article = selected
+    if article.description.endswith(("...", "…")):
+        expanded_text = await fetch_article_text(article.url)
+        if expanded_text:
+            article = replace(article, description=expanded_text)
     stats.article_uuid = article.uuid
     photo = article.image_url
     after_user_id = 0
@@ -117,7 +122,6 @@ async def send_news_broadcast(
                 message, used_photo = await _deliver_article(
                     bot,
                     user_id,
-                    article_filter.label,
                     article,
                     photo,
                 )
@@ -206,11 +210,10 @@ async def select_news_article(
 async def _deliver_article(
     bot: Bot,
     user_id: int,
-    category: str,
     article: NewsArticle,
     photo: str | None,
 ) -> tuple[Message, bool]:
-    text = _article_text(category, article)
+    text = _article_text(article)
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Читать источник", url=article.url)]
@@ -254,11 +257,16 @@ async def _retry_after(method, **kwargs) -> Message:
     raise AssertionError("unreachable")
 
 
-def _article_text(category: str, article: NewsArticle) -> str:
-    title = html.escape(_truncate(article.title, 220))
-    description = html.escape(_truncate(article.description, 620))
-    source = html.escape(article.source or "Источник")
-    parts = [f"<b>Новости · {html.escape(category)}</b>", f"<b>{title}</b>"]
+def _article_text(article: NewsArticle) -> str:
+    source_text = article.source or "Источник"
+    description_limit = max(
+        0,
+        1024 - len(article.title) - len(source_text) - len("\n\n\n\n"),
+    )
+    title = html.escape(article.title)
+    description = html.escape(_truncate(article.description, description_limit))
+    source = html.escape(source_text)
+    parts = [f"<b>{title}</b>"]
     if description:
         parts.append(description)
     parts.append(source)
@@ -266,8 +274,12 @@ def _article_text(category: str, article: NewsArticle) -> str:
 
 
 def _truncate(value: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
     if len(value) <= limit:
         return value
+    if limit == 1:
+        return "…"
     return value[: limit - 1].rstrip() + "…"
 
 

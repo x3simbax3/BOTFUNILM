@@ -199,7 +199,11 @@ def _library_filter_group_keyboard(
 
 
 def library_item_keyboard(
-    *, planned: bool = False, released: bool = True
+    *,
+    planned: bool = False,
+    released: bool = True,
+    tracking_available: bool = False,
+    tracking_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if planned and released:
@@ -208,6 +212,19 @@ def library_item_keyboard(
                 InlineKeyboardButton(
                     text=text.MARK_WATCHED,
                     callback_data="library:item:watched",
+                )
+            ]
+        )
+    if tracking_available:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        text.TRACKING_DISABLE
+                        if tracking_enabled
+                        else text.TRACKING_ENABLE
+                    ),
+                    callback_data="series:tracking:toggle",
                 )
             ]
         )
@@ -240,8 +257,6 @@ def library_edit_keyboard(
     *,
     series: bool,
     released: bool = True,
-    tracking_available: bool = False,
-    tracking_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     rows = []
     if released:
@@ -260,27 +275,6 @@ def library_edit_keyboard(
                     text=text.EDIT_PROGRESS,
                     callback_data="library:item:edit:progress",
                 )
-            ]
-        )
-    if tracking_available:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=(
-                        text.TRACKING_DISABLE
-                        if tracking_enabled
-                        else text.TRACKING_ENABLE
-                    ),
-                    callback_data="series:tracking:toggle",
-                ),
-                InlineKeyboardButton(
-                    text=(
-                        text.TRACKING_ACTIVE
-                        if tracking_enabled
-                        else text.TRACKING_INACTIVE
-                    ),
-                    callback_data="series:tracking:status",
-                ),
             ]
         )
     rows.append(

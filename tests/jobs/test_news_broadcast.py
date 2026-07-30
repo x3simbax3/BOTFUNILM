@@ -1,3 +1,4 @@
+import html
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -88,3 +89,43 @@ class NewsBroadcastTests(DatabaseTestCase):
             "telegram-file-id",
         )
         self.assertIn("&lt;фильм&gt;", bot.send_photo.await_args.kwargs["caption"])
+        self.assertNotIn("Новости ·", bot.send_photo.await_args.kwargs["caption"])
+
+    async def test_expands_truncated_api_description_and_fits_photo_caption(
+        self,
+    ) -> None:
+        async with connection_scope(self.database_url) as connection:
+            await connection.execute("INSERT INTO bot_users (user_id) VALUES (1)")
+        article = NewsArticle(
+            **{
+                **self.article().__dict__,
+                "description": "Короткое описание...",
+            }
+        )
+        expanded = "Подробный текст новости. " * 100
+        bot = AsyncMock()
+        bot.send_photo.return_value = SimpleNamespace(photo=[])
+
+        with (
+            patch(
+                "src.jobs.news_broadcast.select_news_article",
+                new=AsyncMock(return_value=(NEWS_FILTERS[2], article)),
+            ),
+            patch(
+                "src.jobs.news_broadcast.fetch_article_text",
+                new=AsyncMock(return_value=expanded),
+            ),
+            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+        ):
+            await send_news_broadcast(
+                AsyncMock(),
+                bot,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+
+        caption = bot.send_photo.await_args.kwargs["caption"]
+        self.assertIn("Подробный текст новости", caption)
+        self.assertNotIn("Новости ·", caption)
+        visible_caption = html.unescape(caption.replace("<b>", "").replace("</b>", ""))
+        self.assertLessEqual(len(visible_caption), 1024)

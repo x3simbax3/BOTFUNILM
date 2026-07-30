@@ -1,10 +1,10 @@
 """TMDB movie details used by scheduled release tracking."""
 
-from config.config import TMDB_API, TMDB_LANG, TMDB_URL
+from config.config import TMDB_API, TMDB_LANG, TMDB_REGION, TMDB_URL
 from src.http_client import get_http_session
 from src.tmdb_client import fetch_json
 from src.tmdb_models import TmdbError, TmdbMovieDetails, TmdbNotConfiguredError
-from src.tmdb_parsing import _parse_rating
+from src.tmdb_parsing import _parse_rating, regional_movie_release_date
 
 
 async def fetch_movie_details(movie_id: int) -> TmdbMovieDetails:
@@ -17,7 +17,7 @@ async def fetch_movie_details(movie_id: int) -> TmdbMovieDetails:
     data = await fetch_json(
         session,
         f"{TMDB_URL.rstrip('/')}/movie/{movie_id}",
-        {"language": TMDB_LANG},
+        {"language": TMDB_LANG, "append_to_response": "release_dates"},
         TMDB_API,
     )
     title = _optional_text(data.get("title"))
@@ -29,7 +29,10 @@ async def fetch_movie_details(movie_id: int) -> TmdbMovieDetails:
         description=_optional_text(data.get("overview")),
         poster_path=_optional_text(data.get("poster_path")),
         rating=_parse_rating(data.get("vote_average")),
-        release_date=_optional_text(data.get("release_date")),
+        release_date=(
+            regional_movie_release_date(data, TMDB_REGION)
+            or _optional_text(data.get("release_date"))
+        ),
         status=_optional_text(data.get("status")),
     )
 

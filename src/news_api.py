@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import codecs
+import ipaddress
 import json
+import socket
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import unquote, urlsplit
+from html.parser import HTMLParser
+from urllib.parse import unquote, urljoin, urlsplit
 
 import aiohttp
 
@@ -14,6 +19,8 @@ from src.http_client import get_http_session
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
 MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_ARTICLE_RESPONSE_BYTES = 2 * 1024 * 1024
+ARTICLE_TEXT_TARGET = 1400
 
 
 class NewsApiError(RuntimeError):
@@ -90,6 +97,113 @@ async def fetch_news(
     return [article for item in data if (article := _parse_article(item))]
 
 
+async def fetch_article_text(url: str) -> str | None:
+    """Extract article body from a public source page when the API truncates it."""
+    session = await get_http_session()
+    current_url = url
+    for _ in range(3):
+        await _validate_public_url(current_url)
+        try:
+            async with session.get(
+                current_url,
+                timeout=aiohttp.ClientTimeout(total=15),
+                allow_redirects=False,
+                headers={"User-Agent": "BotFunilm/1.0"},
+            ) as response:
+                if response.status in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("Location")
+                    if not location:
+                        return None
+                    current_url = urljoin(current_url, location)
+                    continue
+                if response.status != 200:
+                    return None
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" not in content_type.lower():
+                    return None
+                return await _extract_article_body(response)
+        except (TimeoutError, aiohttp.ClientError, ValueError):
+            return None
+    return None
+
+
+async def _validate_public_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("invalid article URL")
+    port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+    addresses = await asyncio.get_running_loop().getaddrinfo(
+        parsed.hostname,
+        port,
+        type=socket.SOCK_STREAM,
+    )
+    if not addresses or any(
+        not ipaddress.ip_address(address[4][0]).is_global for address in addresses
+    ):
+        raise ValueError("article URL resolves to a non-public address")
+
+
+async def _extract_article_body(response: aiohttp.ClientResponse) -> str | None:
+    parser = _ArticleBodyParser()
+    decoder = codecs.getincrementaldecoder(response.charset or "utf-8")(errors="ignore")
+    size = 0
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        size += len(chunk)
+        if size > MAX_ARTICLE_RESPONSE_BYTES:
+            return None
+        parser.feed(decoder.decode(chunk))
+        if parser.text_length >= ARTICLE_TEXT_TARGET:
+            break
+    parser.feed(decoder.decode(b"", final=True))
+    text = parser.text
+    return text or None
+
+
+class _ArticleBodyParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._body_depth = 0
+        self._ignored_depth = 0
+        self._parts: list[str] = []
+
+    @property
+    def text(self) -> str:
+        return " ".join("".join(self._parts).split())
+
+    @property
+    def text_length(self) -> int:
+        return sum(len(part) for part in self._parts)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if self._body_depth:
+            self._body_depth += 1
+        elif (attributes.get("itemprop") or "").lower() == "articlebody":
+            self._body_depth = 1
+        if self._body_depth and tag in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+        if self._body_depth and not self._ignored_depth and tag == "br":
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._body_depth:
+            return
+        if self._ignored_depth and tag in {"script", "style", "noscript"}:
+            self._ignored_depth -= 1
+        if not self._ignored_depth and tag in {"p", "li"}:
+            self._parts.append("\n")
+        self._body_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._body_depth and not self._ignored_depth:
+            self._parts.append(data)
+
+
 async def _read_response(response: aiohttp.ClientResponse) -> dict:
     if response.content_length and response.content_length > MAX_RESPONSE_BYTES:
         raise NewsApiError("TheNewsAPI response is too large")
@@ -159,5 +273,6 @@ __all__ = (
     "NewsApiRateLimitError",
     "NewsApiUnavailableError",
     "NewsArticle",
+    "fetch_article_text",
     "fetch_news",
 )

@@ -68,6 +68,7 @@ class TmdbSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             fetch.await_args.args[1], f"{tmdb_search.TMDB_URL}/search/movie"
         )
+        self.assertEqual(fetch.await_args.args[2]["region"], tmdb_search.TMDB_REGION)
         self.assertNotIn("with_genres", fetch.await_args.args[2])
 
     async def test_search_logs_do_not_include_user_query(self) -> None:

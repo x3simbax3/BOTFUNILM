@@ -64,6 +64,43 @@ class MediaRefreshDatabaseTests(DatabaseTestCase):
         )
         self.assertEqual(notifications[0].title, "Будущий фильм")
 
+    async def test_movie_status_does_not_override_future_regional_date(self) -> None:
+        media_id = await self.create_user_media(
+            status="planned",
+            media_kwargs={
+                "tmdb_id": 100,
+                "title": "Будущий фильм",
+                "release_date": "2026-08-06",
+                "is_released": False,
+            },
+        )
+
+        await save_movie_release_refresh(
+            media_id,
+            TmdbMovieDetails(
+                title="Будущий фильм",
+                original_title=None,
+                description=None,
+                poster_path=None,
+                rating=None,
+                release_date="2026-08-06",
+                status="Released",
+            ),
+            today=date(2026, 7, 30),
+            database_url=self.database_url,
+        )
+
+        media = await get_media_by_tmdb(
+            100,
+            "full_length",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertFalse(media["is_released"])
+        self.assertEqual(
+            await get_pending_release_users(database_url=self.database_url), []
+        )
+
     async def test_refresh_queues_new_episode_for_subscriber(self) -> None:
         media_id = await self.create_user_media(
             media_kwargs={
