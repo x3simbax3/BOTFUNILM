@@ -1,8 +1,8 @@
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from src.jobs.media_worker import next_scheduled_run
+from src.jobs.media_worker import daily_news_targets, next_scheduled_run
 
 
 class MediaWorkerScheduleTests(unittest.TestCase):
@@ -39,6 +39,21 @@ class MediaWorkerScheduleTests(unittest.TestCase):
 
         self.assertEqual(target, datetime(2026, 7, 29, 2, 0, tzinfo=self.timezone))
         self.assertEqual(mode, "daily")
+
+    def test_news_targets_have_two_hour_slots_and_bounded_jitter(self) -> None:
+        targets = daily_news_targets(
+            date(2026, 7, 30),
+            self.timezone,
+            offsets=(-300, -1, 0, 60, 300, -300, 300),
+        )
+
+        self.assertEqual(targets[0].hour, 9)
+        self.assertEqual(targets[0].minute, 0)
+        self.assertEqual(targets[1].hour, 10)
+        self.assertEqual(targets[1].minute, 59)
+        self.assertEqual(targets[-1].hour, 21)
+        self.assertEqual(targets[-1].minute, 5)
+        self.assertLess(targets[-1], datetime(2026, 7, 30, 22, tzinfo=self.timezone))
 
 
 if __name__ == "__main__":

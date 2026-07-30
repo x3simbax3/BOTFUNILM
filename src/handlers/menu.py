@@ -11,6 +11,7 @@ from src.callback_data import (
     parse_format_callback,
     parse_type_callback,
 )
+from src.database.bot_users import register_bot_user
 from src.fsm import MenuState
 from src.handlers.common import replace_message
 from src.handlers.library import media_id_from_start, show_library_item
@@ -68,6 +69,7 @@ MENU_TREE = {
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
+    await register_bot_user(message.from_user.id)
     previous_data = dict(await state.get_data())
     media_id = media_id_from_start(message.text)
     if media_id is not None:

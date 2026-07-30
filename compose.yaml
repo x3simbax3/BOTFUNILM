@@ -83,6 +83,7 @@ services:
     environment:
       BOT_TOKEN: ""
       TMDB_API: ""
+      THENEWSAPI_KEY: ""
       REDIS_URL: ""
       TEST_PROCESSES: "2"
       RUFF_CACHE_DIR: /tmp/ruff-cache

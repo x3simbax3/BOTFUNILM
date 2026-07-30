@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from src.fsm import MenuState
 from src.handlers import menu as menu_handlers
@@ -17,7 +18,14 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         message = MessageStub()
         state = StateStub({"action": "add"})
 
-        await menu_handlers.start(message, state)
+        with patch.object(
+            menu_handlers,
+            "register_bot_user",
+            new=AsyncMock(),
+        ) as register_user:
+            await menu_handlers.start(message, state)
+
+        register_user.assert_awaited_once_with(123)
 
         self.assertTrue(state.cleared)
         self.assertEqual(state.data, {})

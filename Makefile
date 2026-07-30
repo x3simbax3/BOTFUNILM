@@ -9,7 +9,7 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify media-worker-logs commit
+.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify news-broadcast media-worker-logs commit
 .NOTPARALLEL: check
 
 help:
@@ -30,6 +30,7 @@ help:
 	@echo "  make media-refresh-tmdb id=1399  Refresh by TMDB id"
 	@echo "  make media-refresh-dry id=42  Preview one refresh without writes"
 	@echo "  make series-notify      Send pending series notifications now"
+	@echo "  make news-broadcast     Broadcast one fresh cinema news article now"
 	@echo "  make ps             Show Compose service status"
 	@echo "  make stop           Stop Compose without deleting persistent data"
 	@echo ""
@@ -113,6 +114,9 @@ media-refresh-dry:
 
 series-notify:
 	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker notify
+
+news-broadcast:
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker news
 
 ps:
 	$(COMPOSE) ps

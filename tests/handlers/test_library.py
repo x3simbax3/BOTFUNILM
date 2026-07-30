@@ -135,13 +135,21 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
             "library_users_count": 3,
         }
 
-        with patch.object(
-            library_handlers,
-            "get_user_library_item",
-            AsyncMock(return_value=item),
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_item",
+                AsyncMock(return_value=item),
+            ),
+            patch.object(
+                menu_handlers,
+                "register_bot_user",
+                new=AsyncMock(),
+            ) as register_user,
         ):
             await menu_handlers.start(message, state)
 
+        register_user.assert_awaited_once_with(123)
         self.assertEqual(state.state, MenuState.viewing_media)
         self.assertIn("Матрица", message.answers[0]["text"])
         self.assertIn("Описание", message.answers[0]["text"])

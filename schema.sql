@@ -22,6 +22,17 @@ CREATE INDEX ix_user_media_media_id ON user_media (media_id);
 CREATE INDEX ix_user_media_tracked_by_media
     ON user_media (media_id, user_id) WHERE `is_tracking` = 1;
 
+CREATE TABLE bot_users (
+    user_id             INTEGER NOT NULL PRIMARY KEY,
+    is_active           INTEGER NOT NULL DEFAULT 1,
+    started_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    last_started_at     TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    CHECK (`is_active` IN (0, 1))
+);
+
+CREATE INDEX ix_bot_users_active
+    ON bot_users (is_active, user_id);
+
 CREATE TABLE user_season_progress (
     user_id             INTEGER NOT NULL,
     media_id            INTEGER NOT NULL,

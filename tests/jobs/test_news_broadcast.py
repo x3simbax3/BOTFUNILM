@@ -1,0 +1,90 @@
+from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
+
+from src.database.connection import connection_scope
+from src.jobs.news_broadcast import (
+    NEWS_FILTERS,
+    select_news_article,
+    send_news_broadcast,
+)
+from src.news_api import NewsArticle
+from tests.support.database import DatabaseTestCase
+
+
+class NewsBroadcastTests(DatabaseTestCase):
+    timezone = ZoneInfo("Europe/Moscow")
+
+    def article(self, uuid: str = "fresh") -> NewsArticle:
+        return NewsArticle(
+            uuid=uuid,
+            title="Новый <фильм>",
+            description="Описание & подробности",
+            url="https://example.com/news",
+            image_url="https://example.com/poster.jpg",
+            source="example.com",
+            published_at="2026-07-30T10:00:00Z",
+        )
+
+    async def test_skips_sent_uuid_and_claims_next_article(self) -> None:
+        redis = AsyncMock()
+        redis.get.return_value = None
+        redis.sadd.side_effect = [0, 1]
+        articles = [self.article("sent"), self.article("fresh")]
+
+        with patch(
+            "src.jobs.news_broadcast.fetch_news",
+            new=AsyncMock(return_value=articles),
+        ):
+            selected = await select_news_article(
+                redis,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1].uuid, "fresh")
+        self.assertEqual(redis.sadd.await_count, 2)
+        redis.expireat.assert_awaited_once()
+        redis.set.assert_awaited_once()
+
+    async def test_broadcasts_in_batches_and_reuses_telegram_photo(self) -> None:
+        async with connection_scope(self.database_url) as connection:
+            await connection.executemany(
+                "INSERT INTO bot_users (user_id) VALUES (?)",
+                ((user_id,) for user_id in range(1, 102)),
+            )
+        article_filter = NEWS_FILTERS[0]
+        article = self.article()
+        telegram_message = SimpleNamespace(
+            photo=[SimpleNamespace(file_id="telegram-file-id")]
+        )
+        bot = AsyncMock()
+        bot.send_photo.return_value = telegram_message
+
+        with (
+            patch(
+                "src.jobs.news_broadcast.select_news_article",
+                new=AsyncMock(return_value=(article_filter, article)),
+            ),
+            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+        ):
+            stats = await send_news_broadcast(
+                AsyncMock(),
+                bot,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+
+        self.assertEqual(stats.selected, 101)
+        self.assertEqual(stats.sent, 101)
+        self.assertEqual(bot.send_photo.await_count, 101)
+        self.assertEqual(
+            bot.send_photo.await_args_list[0].kwargs["photo"],
+            article.image_url,
+        )
+        self.assertEqual(
+            bot.send_photo.await_args_list[1].kwargs["photo"],
+            "telegram-file-id",
+        )
+        self.assertIn("&lt;фильм&gt;", bot.send_photo.await_args.kwargs["caption"])

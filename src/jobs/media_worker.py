@@ -8,9 +8,10 @@ import logging
 import os
 import secrets
 import time
+from collections.abc import Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from datetime import time as datetime_time
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -28,6 +29,7 @@ from config.config import (
     MEDIA_REFRESH_RETRIES,
     MEDIA_WORKER_TIMEZONE,
     REDIS_URL,
+    THENEWSAPI_KEY,
 )
 from src.database.connection import connect_database
 from src.http_client import close_http_session
@@ -43,8 +45,10 @@ from src.jobs.media_refresh import (
     save_media_refresh,
     select_due_media_batch,
 )
+from src.jobs.news_broadcast import send_news_broadcast
 from src.jobs.series_notifications import send_release_notifications
 from src.logging_config import configure_logging
+from src.news_api import NewsApiAuthenticationError, NewsApiRateLimitError
 from src.tmdb_client import get_tmdb_request_count, reset_tmdb_request_count
 from src.tmdb_limiter import close_tmdb_request_limiter
 from src.tmdb_models import (
@@ -60,6 +64,8 @@ logger = logging.getLogger(__name__)
 LOCK_PREFIX = "media-refresh"
 REFRESH_HOUR = 2
 NOTIFICATION_HOUR = 12
+NEWS_HOURS = (9, 11, 13, 15, 17, 19, 21)
+NEWS_JITTER_SECONDS = 5 * 60
 ScheduledJob = Literal["daily", "weekly", "notifications"]
 
 
@@ -403,6 +409,72 @@ async def run_worker(
                 )
 
 
+def daily_news_targets(
+    day: date,
+    timezone: ZoneInfo,
+    *,
+    offsets: Sequence[int] | None = None,
+) -> tuple[datetime, ...]:
+    if offsets is None:
+        offsets = (
+            secrets.randbelow(NEWS_JITTER_SECONDS + 1),
+            *(
+                secrets.randbelow(2 * NEWS_JITTER_SECONDS + 1) - NEWS_JITTER_SECONDS
+                for _ in NEWS_HOURS[1:]
+            ),
+        )
+    if len(offsets) != len(NEWS_HOURS):
+        raise ValueError("One news jitter offset is required for every news hour")
+
+    targets = []
+    for hour, offset in zip(NEWS_HOURS, offsets, strict=True):
+        if not -NEWS_JITTER_SECONDS <= offset <= NEWS_JITTER_SECONDS:
+            raise ValueError("News jitter offset is outside the allowed range")
+        nominal = datetime.combine(day, datetime_time(hour=hour), tzinfo=timezone)
+        target = nominal + timedelta(seconds=offset)
+        if hour == NEWS_HOURS[0] and target < nominal:
+            target = nominal
+        targets.append(target)
+    return tuple(targets)
+
+
+async def run_news_scheduler(
+    redis: Redis,
+    bot: Bot,
+    *,
+    database_url: str | None = None,
+) -> None:
+    if not THENEWSAPI_KEY:
+        raise RuntimeError("THENEWSAPI_KEY is required for news broadcasts")
+    timezone = _worker_timezone()
+    scheduled_day: date | None = None
+    targets: tuple[datetime, ...] = ()
+
+    while True:
+        now = datetime.now(timezone)
+        if scheduled_day != now.date():
+            scheduled_day = now.date()
+            targets = daily_news_targets(scheduled_day, timezone)
+        target = next((item for item in targets if item > now), None)
+        if target is None:
+            scheduled_day = now.date() + timedelta(days=1)
+            targets = daily_news_targets(scheduled_day, timezone)
+            target = targets[0]
+
+        delay = max(0.0, (target - datetime.now(timezone)).total_seconds())
+        logger.info(
+            "Next news broadcast scheduled: at=%s sleep_seconds=%s",
+            target.isoformat(),
+            round(delay),
+        )
+        await asyncio.sleep(delay)
+        await _run_news_locked_or_log(
+            redis,
+            bot,
+            database_url=database_url,
+        )
+
+
 async def _run_notifications_locked_or_log(
     redis: Redis,
     bot: Bot,
@@ -418,6 +490,32 @@ async def _run_notifications_locked_or_log(
             await send_release_notifications(bot, database_url=database_url)
     except JobAlreadyRunningError:
         logger.warning("Series notifications skipped because lock is held")
+
+
+async def _run_news_locked_or_log(
+    redis: Redis,
+    bot: Bot,
+    *,
+    database_url: str | None,
+) -> None:
+    try:
+        async with RedisJobLock(
+            redis,
+            "news-broadcast",
+            MEDIA_REFRESH_LOCK_TTL_SECONDS,
+        ):
+            await send_news_broadcast(
+                redis,
+                bot,
+                datetime.now(_worker_timezone()),
+                database_url=database_url,
+            )
+    except JobAlreadyRunningError:
+        logger.warning("News broadcast skipped because lock is held")
+    except NewsApiAuthenticationError:
+        logger.error("News broadcast stopped because TheNewsAPI key is invalid")
+    except NewsApiRateLimitError:
+        logger.error("News broadcast stopped because TheNewsAPI limit was reached")
 
 
 async def _run_locked_or_log(
@@ -501,6 +599,7 @@ def _parser() -> argparse.ArgumentParser:
     selector.add_argument("--tmdb-id", type=int)
     single.add_argument("--dry-run", action="store_true")
     subparsers.add_parser("notify", help="send pending series notifications now")
+    subparsers.add_parser("news", help="broadcast one cinema news article now")
     return parser
 
 
@@ -527,11 +626,22 @@ async def async_main(arguments: list[str] | None = None) -> None:
                     bot,
                     database_url=DATABASE_URL,
                 )
+            elif options.command == "news":
+                if not THENEWSAPI_KEY:
+                    raise RuntimeError("THENEWSAPI_KEY is required for news broadcasts")
+                await _run_news_locked_or_log(
+                    redis,
+                    bot,
+                    database_url=DATABASE_URL,
+                )
             else:
                 logger.info(
                     "Media worker startup completed timezone=%s", MEDIA_WORKER_TIMEZONE
                 )
-                await run_worker(redis, bot)
+                await asyncio.gather(
+                    run_worker(redis, bot),
+                    run_news_scheduler(redis, bot),
+                )
     finally:
         await close_http_session()
         try:
