@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.database.connection import connection_scope
+from src.database.media import update_movie_release_availability
 from src.database.series_release import update_media_series_release_info
 from src.database.user_media import save_user_media
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot
@@ -32,6 +33,11 @@ async def save_planned_media(
 ) -> PlannedMediaResult:
     """Upsert catalogue metadata and attach it to the user's planned list."""
     snapshot = await _series_snapshot(workflow, database_url=database_url)
+    is_released = (
+        snapshot.available_episode_count > 0
+        if snapshot is not None
+        else release_date_has_passed(workflow.tmdb_release_date)
+    )
     async with connection_scope(database_url) as connection:
         media_id = await ensure_media(
             workflow.to_fsm_dict(),
@@ -41,13 +47,16 @@ async def save_planned_media(
             available_episode_count=(
                 snapshot.available_episode_count if snapshot else None
             ),
-            is_released=(
-                snapshot.available_episode_count > 0
-                if snapshot is not None
-                else release_date_has_passed(workflow.tmdb_release_date)
-            ),
+            is_released=is_released,
             connection=connection,
         )
+        if workflow.content_format == "full_length":
+            await update_movie_release_availability(
+                media_id,
+                workflow.tmdb_release_date,
+                is_released,
+                connection=connection,
+            )
         if snapshot is not None:
             await update_media_series_release_info(
                 media_id,

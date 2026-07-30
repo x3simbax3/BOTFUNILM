@@ -3,13 +3,13 @@ from html import escape
 from src.database.media_release_notifications import MediaReleaseNotification
 from src.database.series_subscriptions import NotificationItem
 
-TRACKED_HEADING = "╭ <b>Отслеживаемые сериалы</b>"
+TRACKED_HEADING = "╭ <b>Отслеживаемые</b>"
 TRACKED_EMPTY = (
-    "╭ <b>Отслеживаемые сериалы</b>\n"
+    "╭ <b>Отслеживаемые</b>\n"
     "╰ <i>Список пуст</i>\n\n"
-    "Включить отслеживание можно в настройках выходящего сериала."
+    "Добавь будущий фильм в «Хочу посмотреть» или включи отслеживание сериала."
 )
-TRACKED_OPEN_FAILED = "Не удалось открыть отслеживаемые сериалы."
+TRACKED_OPEN_FAILED = "Не удалось открыть отслеживаемые тайтлы."
 TRACKING_ENABLED = "Отслеживание активно."
 TRACKING_DISABLED = "Отслеживание не активно."
 TRACKING_UNAVAILABLE = "Этот сериал уже не выходит."
@@ -34,13 +34,17 @@ def replace_tracking_status(text: str, enabled: bool) -> str:
 def tracked_series_text(items: list, bot_username: str, offset: int = 0) -> str:
     if not items:
         return TRACKED_EMPTY
-    lines = [TRACKED_HEADING, "╰ <i>Новые серии — в одном месте</i>", ""]
+    lines = [TRACKED_HEADING, "╰ <i>Новые серии и премьеры — в одном месте</i>", ""]
     for index, item in enumerate(items, start=offset + 1):
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
         lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
-        watched = int(item["episodes_watched"] or 0)
-        available = int(item["available_episode_count"] or 0)
-        lines.append(f"Просмотрено · {watched} из {available} вышедших серий")
+        if item["content_format"] == "series":
+            watched = int(item["episodes_watched"] or 0)
+            available = int(item["available_episode_count"] or 0)
+            lines.append(f"Просмотрено · {watched} из {available} вышедших серий")
+        else:
+            release_date = item["release_date"] or "дата уточняется"
+            lines.append(f"Премьера · {escape(release_date)}")
         if index < offset + len(items):
             lines.append("")
     return "\n".join(lines)

@@ -48,6 +48,26 @@ async def get_media_by_tmdb(
             return await cursor.fetchone()
 
 
+async def update_movie_release_availability(
+    media_id: int,
+    release_date: str | None,
+    is_released: bool,
+    *,
+    connection: aiosqlite.Connection,
+) -> None:
+    """Persist an authoritative regional release check for an existing movie."""
+    cursor = await connection.execute(
+        """
+        UPDATE media
+        SET release_date = ?, is_released = ?, last_updated = CURRENT_TIMESTAMP
+        WHERE id = ? AND content_format = 'full_length'
+        """,
+        (release_date, int(is_released), media_id),
+    )
+    if cursor.rowcount == 0:
+        raise ValueError(f"Movie {media_id} does not exist")
+
+
 async def upsert_media(
     *,
     tmdb_id: int | None,
@@ -350,6 +370,7 @@ __all__ = (
     "replace_media_seasons",
     "upsert_media",
     "update_media_metadata",
+    "update_movie_release_availability",
     "update_media_poster",
     "update_media_telegram_poster_file_id",
     "update_media_series_release_info",

@@ -124,7 +124,14 @@ async def list_tracked_series(
                    um.episodes_watched, um.last_watched_at, um.is_tracking
             FROM user_media AS um
             JOIN media AS m ON m.id = um.media_id
-            WHERE um.user_id = ? AND um.is_tracking = 1
+            WHERE um.user_id = ? AND (
+                um.is_tracking = 1
+                OR (
+                    m.content_format = 'full_length'
+                    AND m.is_released = 0
+                    AND um.status = 'planned'
+                )
+            )
             ORDER BY m.title COLLATE NOCASE, m.id
             LIMIT ? OFFSET ?
             """,
