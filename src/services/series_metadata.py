@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.database.media import get_media_by_id
 from src.database.series import get_media_seasons
 from src.models import (
     SeriesReleaseSnapshot,
@@ -32,21 +33,38 @@ def snapshot_from_cached_rows(
 
 async def load_series_release_snapshot(
     fsm_data: Mapping[str, Any],
+    *,
+    database_url: str | None = None,
 ) -> SeriesReleaseSnapshot:
-    """Load either cached library metadata or fresh TMDB details."""
+    """Use catalogue metadata when present; fetch TMDB only for a new title."""
+    media_id = current_media_id(fsm_data)
+    if media_id is not None:
+        return await load_cached_series_release_snapshot(
+            media_id,
+            database_url=database_url,
+        )
     if fsm_data.get("library_progress_edit"):
-        media_id = current_media_id(fsm_data)
-        if media_id is None:
-            raise SeriesMetadataError("Library media id is missing")
-        rows = await get_media_seasons(media_id)
-        if not rows:
-            raise SeriesMetadataError("Cached seasons are missing")
-        return snapshot_from_cached_rows(fsm_data, rows)
+        raise SeriesMetadataError("Library media id is missing")
 
     return await fetch_tv_details(
         int(fsm_data.get("tmdb_id") or 0),
         include_episode_availability=True,
     )
+
+
+async def load_cached_series_release_snapshot(
+    media_id: int,
+    *,
+    database_url: str | None = None,
+) -> SeriesReleaseSnapshot:
+    media = await get_media_by_id(media_id, database_url=database_url)
+    if media is None:
+        raise SeriesMetadataError("Catalogue series is missing")
+    rows = await get_media_seasons(media_id, database_url=database_url)
+    if not rows:
+        raise SeriesMetadataError("Cached seasons are missing")
+    seasons = tuple(SeriesSeason.from_mapping(row) for row in rows)
+    return SeriesReleaseSnapshot.from_library_item(media, seasons=seasons)
 
 
 def normalize_seasons(snapshot: SeriesReleaseSnapshot) -> list[dict[str, Any]]:
@@ -62,6 +80,7 @@ __all__ = (
     "SeriesMetadataError",
     "count_available_episodes",
     "is_active_series",
+    "load_cached_series_release_snapshot",
     "load_series_release_snapshot",
     "normalize_seasons",
     "snapshot_from_cached_rows",

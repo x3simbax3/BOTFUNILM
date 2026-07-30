@@ -5,7 +5,7 @@ from unittest.mock import ANY, AsyncMock, patch
 from src.fsm import MenuState
 from src.handlers import series as series_handlers
 from src.services import media as media_service
-from src.services import series_metadata, series_tracking
+from src.services import series_tracking
 from src.tmdb import TmdbSeasonInfo, TmdbTvDetails
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
@@ -159,9 +159,8 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         ]
 
         with (
-            patch.object(
-                series_metadata,
-                "fetch_tv_details",
+            patch(
+                "src.handlers.series.start.load_series_release_snapshot",
                 AsyncMock(return_value=details),
             ),
             patch.object(
@@ -219,9 +218,8 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         ]
 
         with (
-            patch.object(
-                series_metadata,
-                "fetch_tv_details",
+            patch(
+                "src.handlers.series.start.load_series_release_snapshot",
                 AsyncMock(return_value=details),
             ),
             patch.object(
@@ -277,11 +275,21 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         ]
 
         with (
-            patch.object(
-                series_metadata,
-                "get_media_seasons",
-                AsyncMock(return_value=cached_seasons),
-            ) as get_seasons,
+            patch(
+                "src.handlers.series.start.load_series_release_snapshot",
+                AsyncMock(
+                    return_value=TmdbTvDetails(
+                        number_of_seasons=2,
+                        number_of_episodes=12,
+                        seasons=[
+                            TmdbSeasonInfo(1, "Сезон 1", 8, 8),
+                            TmdbSeasonInfo(2, "Сезон 2", 4, 2),
+                        ],
+                        status="Returning Series",
+                        in_production=True,
+                    )
+                ),
+            ),
             patch.object(
                 series_tracking,
                 "get_user_season_progress",
@@ -291,17 +299,11 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
                 series_tracking,
                 "get_media_seasons",
                 AsyncMock(return_value=cached_seasons),
-            ),
-            patch.object(
-                series_metadata,
-                "fetch_tv_details",
-                AsyncMock(),
-            ) as fetch,
+            ) as get_seasons,
         ):
             await series_handlers.start_series_tracking(callback, state)
 
         get_seasons.assert_awaited_once_with(7)
-        fetch.assert_not_awaited()
         self.assertEqual(state.data["total_episodes"], 10)
         self.assertEqual(state.data["announced_total_episodes"], 12)
         self.assertEqual(state.data["watched_by_season"], {1: 3})
@@ -327,11 +329,10 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(
-                series_metadata,
-                "fetch_tv_details",
+            patch(
+                "src.handlers.series.start.load_series_release_snapshot",
                 AsyncMock(return_value=details),
-            ) as fetch,
+            ),
             patch.object(
                 series_tracking,
                 "get_user_season_progress",
@@ -345,7 +346,6 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
         ):
             await series_handlers.start_series_tracking(callback, state)
 
-        fetch.assert_awaited_once_with(42, include_episode_availability=True)
         self.assertEqual(state.data["total_episodes"], 12)
         self.assertEqual(state.data["announced_total_episodes"], 12)
         self.assertEqual(state.data["watched_by_season"], {1: 12})

@@ -6,6 +6,7 @@ from src.handlers.menu import router as menu_router
 from src.handlers.rating import router as rating_router
 from src.handlers.search import router as search_router
 from src.handlers.series import router as series_router
+from src.handlers.tracking import router as tracking_router
 
 router = Router(name="main")
 router.include_routers(
@@ -15,6 +16,7 @@ router.include_routers(
     search_router,
     rating_router,
     series_router,
+    tracking_router,
 )
 
 

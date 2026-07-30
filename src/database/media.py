@@ -16,6 +16,19 @@ from src.models import SeriesEpisode, SeriesReleaseSnapshot, SeriesSeason
 from src.tmdb_matching import normalize_text
 
 
+async def get_media_by_id(
+    media_id: int,
+    *,
+    database_url: str | None = None,
+) -> aiosqlite.Row | None:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            "SELECT * FROM media WHERE id = ?",
+            (media_id,),
+        ) as cursor:
+            return await cursor.fetchone()
+
+
 async def get_media_by_tmdb(
     tmdb_id: int,
     content_format: str,
@@ -329,6 +342,7 @@ async def update_media_series_release_info(
 __all__ = (
     "clear_media_telegram_poster_file_id",
     "find_media_by_title",
+    "get_media_by_id",
     "get_media_by_tmdb",
     "replace_media_seasons",
     "upsert_media",

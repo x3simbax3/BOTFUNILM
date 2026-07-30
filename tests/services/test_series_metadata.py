@@ -6,7 +6,7 @@ from src.services import series_metadata
 
 
 class SeriesMetadataServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_library_edit_uses_cached_seasons(self) -> None:
+    async def test_existing_catalogue_series_uses_cached_seasons(self) -> None:
         rows = [
             {
                 "season_number": 1,
@@ -18,6 +18,23 @@ class SeriesMetadataServiceTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 series_metadata,
+                "get_media_by_id",
+                AsyncMock(
+                    return_value={
+                        "number_of_seasons": 1,
+                        "number_of_episodes": 12,
+                        "tmdb_status": "Returning Series",
+                        "tmdb_in_production": 1,
+                        "next_episode_air_date": None,
+                        "next_episode_season_number": 1,
+                        "next_episode_number": 6,
+                        "poster_path": None,
+                        "rating": None,
+                    }
+                ),
+            ) as media,
+            patch.object(
+                series_metadata,
                 "get_media_seasons",
                 AsyncMock(return_value=rows),
             ) as cached,
@@ -25,15 +42,12 @@ class SeriesMetadataServiceTests(unittest.IsolatedAsyncioTestCase):
         ):
             snapshot = await series_metadata.load_series_release_snapshot(
                 {
-                    "library_progress_edit": True,
                     "media_id": "7",
-                    "total_seasons": 1,
-                    "announced_total_episodes": 12,
-                    "tmdb_series_status": "Returning Series",
                 }
             )
 
-        cached.assert_awaited_once_with(7)
+        media.assert_awaited_once_with(7, database_url=None)
+        cached.assert_awaited_once_with(7, database_url=None)
         remote.assert_not_awaited()
         self.assertEqual(snapshot.available_episode_count, 5)
         self.assertEqual(snapshot.number_of_episodes, 12)
@@ -55,10 +69,17 @@ class SeriesMetadataServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(result, expected)
 
     async def test_library_edit_rejects_missing_cached_seasons(self) -> None:
-        with patch.object(
-            series_metadata,
-            "get_media_seasons",
-            AsyncMock(return_value=[]),
+        with (
+            patch.object(
+                series_metadata,
+                "get_media_by_id",
+                AsyncMock(return_value={"number_of_seasons": 1}),
+            ),
+            patch.object(
+                series_metadata,
+                "get_media_seasons",
+                AsyncMock(return_value=[]),
+            ),
         ):
             with self.assertRaises(series_metadata.SeriesMetadataError):
                 await series_metadata.load_series_release_snapshot(

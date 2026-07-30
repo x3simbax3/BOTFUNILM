@@ -11,6 +11,7 @@ services:
     env_file:
       - config/.env
     environment:
+      TZ: Europe/Moscow
       DATABASE_URL: sqlite:////data/bot.db
       ATLAS_DATABASE_URL: sqlite:///data/bot.db?_fk=1
       MEDIA_ROOT: /data/media
@@ -21,6 +22,33 @@ services:
         condition: service_healthy
     volumes:
       - bot_data:/data
+
+  media-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 512m
+    pids_limit: 128
+    env_file:
+      - config/.env
+    environment:
+      TZ: Europe/Moscow
+      MEDIA_WORKER_TIMEZONE: Europe/Moscow
+      DATABASE_URL: sqlite:////data/bot.db
+      ATLAS_DATABASE_URL: sqlite:///data/bot.db?_fk=1
+      MEDIA_ROOT: /data/media
+      REDIS_URL: redis://redis:6379/0
+      TMDB_MAX_CONCURRENCY: "3"
+      TMDB_MAX_REQUESTS_PER_SECOND: "9"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - bot_data:/data
+    command: ["python", "-m", "src.jobs.media_worker"]
 
   redis:
     image: redis:7.4.10-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2

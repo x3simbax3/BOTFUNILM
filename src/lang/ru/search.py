@@ -2,6 +2,7 @@ from html import escape
 
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import FORMAT_RESULT_TITLES
+from .tracking import tracking_status_line
 
 TMDB_SEARCHING = "⌕ Ищу по названию…"
 TMDB_SEARCHING_REMOTE = "⌕ Проверяю каталог TMDB…"
@@ -33,7 +34,7 @@ def tmdb_guess_text(content_format: str, title: str, overview: str | None) -> st
         "━━━  ⌕ <b>Результат поиска</b>  ━━━\n\n"
         f"<b>{escape(title)}</b>\n"
         f"<i>{FORMAT_RESULT_TITLES[content_format]}</i>\n\n"
-        f"<blockquote>{escape(description)}</blockquote>\n\n"
+        f"<b>Описание</b>\n{escape(description)}\n\n"
         "Это то, что ты искал?"
     )
 
@@ -49,12 +50,19 @@ def tmdb_not_found_text(query: str) -> str:
     )
 
 
-def planned_title_saved_text(title: str) -> str:
-    return (
+def planned_title_saved_text(
+    title: str,
+    *,
+    tracking_enabled: bool | None = None,
+) -> str:
+    result = (
         "✓ <b>Добавлено в библиотеку</b>\n\n"
         f"<b>{escape(title)}</b>\n"
         "Статус · <b>Хочу посмотреть</b>"
     )
+    if tracking_enabled is not None:
+        result += f"\n{tracking_status_line(tracking_enabled)}"
+    return result
 
 
 __all__ = (

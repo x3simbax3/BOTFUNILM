@@ -36,6 +36,7 @@ class SmokeImportTests(unittest.TestCase):
         from src.handlers.rating import router as rating_router
         from src.handlers.search import router as search_router
         from src.handlers.series import router as series_router
+        from src.handlers.tracking import router as tracking_router
         from src.routers import router
 
         sub_names = {r.name for r in router.sub_routers}
@@ -48,6 +49,7 @@ class SmokeImportTests(unittest.TestCase):
                 rating_router.name,
                 search_router.name,
                 series_router.name,
+                tracking_router.name,
             },
         )
 

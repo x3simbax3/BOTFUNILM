@@ -14,6 +14,11 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add")],
+            [
+                InlineKeyboardButton(
+                    text=text.MAIN_TRACKED, callback_data="menu:tracked"
+                )
+            ],
         ],
     )
 

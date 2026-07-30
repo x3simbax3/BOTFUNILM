@@ -60,7 +60,12 @@ from src.lang import (
     rating_categories,
     rating_prompt_text,
 )
-from src.models import MediaWorkflowData, SeriesReleaseSnapshot, current_media_id
+from src.models import (
+    MediaWorkflowData,
+    SeriesReleaseSnapshot,
+    current_media_id,
+    is_active_series,
+)
 from src.posters import poster_input, sent_photo_file_id
 from src.tmdb import TmdbError, fetch_title_details
 
@@ -293,7 +298,14 @@ async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> 
     await edit_message(
         callback.message,
         ITEM_EDIT_PROMPT,
-        reply_markup=library_edit_keyboard(series=item["content_format"] == "series"),
+        reply_markup=library_edit_keyboard(
+            series=item["content_format"] == "series",
+            tracking_available=(
+                item["content_format"] == "series"
+                and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
+            ),
+            tracking_enabled=bool(item["is_tracking"]),
+        ),
     )
     await callback.answer()
 

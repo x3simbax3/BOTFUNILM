@@ -17,6 +17,7 @@ from src.tmdb_limiter import get_tmdb_request_limiter
 from src.tmdb_models import (
     TmdbAuthenticationError,
     TmdbError,
+    TmdbNotFoundError,
     TmdbRateLimitError,
     TmdbUnavailableError,
 )
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_RATE_LIMIT_COOLDOWN = TMDB_RATE_LIMIT_COOLDOWN_SECONDS
 MAX_RATE_LIMIT_RETRIES = 1
 RESPONSE_READ_CHUNK_BYTES = 64 * 1024
+_request_count = 0
 
 
 async def fetch_json(
@@ -40,6 +42,7 @@ async def fetch_json(
         limiter = get_tmdb_request_limiter()
         for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
             async with limiter.request():
+                _increment_request_count()
                 async with session.get(
                     url,
                     params=params,
@@ -57,6 +60,8 @@ async def fetch_json(
                         raise TmdbRateLimitError
                     if response.status >= 500:
                         raise TmdbUnavailableError
+                    if response.status == 404:
+                        raise TmdbNotFoundError
                     if response.status != 200:
                         raise TmdbError(f"TMDB вернул HTTP {response.status}")
 
@@ -127,4 +132,18 @@ def _request_host(url: str) -> str:
     return urlsplit(url).hostname or "unknown"
 
 
-__all__ = ("fetch_json",)
+def _increment_request_count() -> None:
+    global _request_count
+    _request_count += 1
+
+
+def reset_tmdb_request_count() -> None:
+    global _request_count
+    _request_count = 0
+
+
+def get_tmdb_request_count() -> int:
+    return _request_count
+
+
+__all__ = ("fetch_json", "get_tmdb_request_count", "reset_tmdb_request_count")

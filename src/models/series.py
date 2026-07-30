@@ -76,6 +76,10 @@ class SeriesReleaseSnapshot:
     last_episode_to_air: SeriesEpisode | None = None
     poster_path: str | None = None
     rating: float | None = None
+    title: str | None = None
+    original_title: str | None = None
+    description: str | None = None
+    first_air_date: str | None = None
 
     def __post_init__(self) -> None:
         """Freeze season collections even when callers provide a list."""

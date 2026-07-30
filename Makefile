@@ -9,20 +9,27 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset commit
+.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify media-worker-logs commit
 .NOTPARALLEL: check
 
 help:
 	@echo "Docker targets:"
-	@echo "  make start          Build and start bot + Redis through Compose"
-	@echo "  make deploy         Rebuild and recreate only the bot service"
-	@echo "  make build          Build the production bot image"
+	@echo "  make start          Build and start bot + media worker + Redis"
+	@echo "  make deploy         Rebuild and recreate bot + media worker"
+	@echo "  make build          Build the production runtime image"
 	@echo "  make lint           Check formatting and lint in Docker"
 	@echo "  make format         Fix lint issues and format source files in Docker"
 	@echo "  make test           Build the test target and run tests in Docker"
 	@echo "  make check          Validate Compose/DB, then run lint and tests"
 	@echo "  make restart        Alias for make deploy"
-	@echo "  make logs           Follow bot and Redis logs"
+	@echo "  make logs           Follow bot, media worker and Redis logs"
+	@echo "  make media-worker-logs  Follow media worker logs"
+	@echo "  make media-refresh-daily   Refresh due active series now"
+	@echo "  make media-refresh-weekly  Refresh due series of every status now"
+	@echo "  make media-refresh id=42   Refresh one catalogue series"
+	@echo "  make media-refresh-tmdb id=1399  Refresh by TMDB id"
+	@echo "  make media-refresh-dry id=42  Preview one refresh without writes"
+	@echo "  make series-notify      Send pending series notifications now"
 	@echo "  make ps             Show Compose service status"
 	@echo "  make stop           Stop Compose without deleting persistent data"
 	@echo ""
@@ -60,7 +67,7 @@ test-local:
 	$(PYTEST) -q -n $(TEST_PROCESSES)
 
 build: compose-check
-	$(COMPOSE) build bot
+	$(COMPOSE) build bot media-worker
 
 start: up
 
@@ -68,7 +75,7 @@ up: secure-files compose-check
 	$(COMPOSE) up --detach --build
 
 deploy: secure-files compose-check
-	$(COMPOSE) up --detach --build bot
+	$(COMPOSE) up --detach --build bot media-worker
 
 start-local: migrate
 	$(PYTHON) -m src.bot
@@ -81,7 +88,31 @@ down:
 restart: deploy
 
 logs:
-	$(COMPOSE) logs --follow bot redis
+	$(COMPOSE) logs --follow bot media-worker redis
+
+media-worker-logs:
+	$(COMPOSE) logs --follow media-worker
+
+media-refresh-daily:
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker run daily
+
+media-refresh-weekly:
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker run weekly
+
+media-refresh:
+	@if [ -z "$(id)" ]; then echo "Usage: make media-refresh id=42"; exit 1; fi
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker single --id $(id)
+
+media-refresh-tmdb:
+	@if [ -z "$(id)" ]; then echo "Usage: make media-refresh-tmdb id=1399"; exit 1; fi
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker single --tmdb-id $(id)
+
+media-refresh-dry:
+	@if [ -z "$(id)" ]; then echo "Usage: make media-refresh-dry id=42"; exit 1; fi
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker single --id $(id) --dry-run
+
+series-notify:
+	$(COMPOSE) run --rm media-worker python -m src.jobs.media_worker notify
 
 ps:
 	$(COMPOSE) ps

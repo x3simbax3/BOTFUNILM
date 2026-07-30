@@ -48,3 +48,4 @@ USER botfunilm
 VOLUME ["/data"]
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["python", "-m", "src.bot"]

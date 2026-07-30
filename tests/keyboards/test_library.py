@@ -173,3 +173,58 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 ["library:item:edit:back"],
             ],
         )
+
+    def test_active_series_edit_menu_can_toggle_tracking(self) -> None:
+        self.assert_callback_rows(
+            keyboards.library_edit_keyboard(
+                series=True,
+                tracking_available=True,
+                tracking_enabled=True,
+            ),
+            [
+                ["library:item:edit:rating"],
+                ["library:item:edit:progress"],
+                ["series:tracking:toggle", "series:tracking:status"],
+                ["library:item:edit:back"],
+            ],
+        )
+        tracking_row = keyboards.library_edit_keyboard(
+            series=True,
+            tracking_available=True,
+            tracking_enabled=True,
+        ).inline_keyboard[2]
+        self.assertEqual(
+            [button.text for button in tracking_row],
+            ["×\u00a0Не отслеживать", "Активно"],
+        )
+
+    def test_post_add_tracking_has_action_status_and_main_menu(self) -> None:
+        keyboard = keyboards.post_add_tracking_keyboard(7, False)
+
+        self.assertEqual(
+            [
+                [button.callback_data for button in row]
+                for row in keyboard.inline_keyboard
+            ],
+            [["series:tracking:add:7", "series:tracking:status"], ["back:main"]],
+        )
+        self.assertEqual(
+            [[button.text for button in row] for row in keyboard.inline_keyboard],
+            [["＋\u00a0Отслеживать", "Не активно"], ["⌂\u00a0Главное меню"]],
+        )
+
+    def test_tracked_list_does_not_show_page_number_button(self) -> None:
+        first_page = keyboards.tracked_series_keyboard(page=0, has_more=False)
+        middle_page = keyboards.tracked_series_keyboard(page=1, has_more=True)
+
+        self.assertEqual(
+            [
+                [button.callback_data for button in row]
+                for row in first_page.inline_keyboard
+            ],
+            [["back:main"]],
+        )
+        self.assertEqual(
+            [[button.text for button in row] for row in middle_page.inline_keyboard],
+            [["《", "》"], ["⌂\u00a0Главное меню"]],
+        )

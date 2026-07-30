@@ -163,7 +163,7 @@ async def list_user_library(
         async with connection.execute(
             f"""
             SELECT m.*, um.status AS user_status, um.user_rating,
-                   um.episodes_watched, um.last_watched_at
+                   um.episodes_watched, um.last_watched_at, um.is_tracking
             FROM user_media AS um
             JOIN media AS m ON m.id = um.media_id
             WHERE um.user_id = ?
@@ -216,7 +216,7 @@ async def get_user_library_item(
         async with connection.execute(
             """
             SELECT m.*, um.status AS user_status, um.user_rating,
-                   um.episodes_watched, um.last_watched_at
+                   um.episodes_watched, um.last_watched_at, um.is_tracking
             FROM user_media AS um
             JOIN media AS m ON m.id = um.media_id
             WHERE um.user_id = ? AND um.media_id = ?

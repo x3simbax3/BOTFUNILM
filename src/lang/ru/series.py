@@ -1,6 +1,8 @@
 from datetime import date
 from html import escape
 
+from .tracking import tracking_status_line
+
 DETAILS_LOAD_FAILED = "Не удалось получить информацию о сериале. Попробуй позже."
 PROGRESS_LOAD_FAILED = "Не удалось загрузить сохранённый прогресс. Попробуй позже."
 SAVED_PROGRESS_INVALID = "Сохранённый прогресс сериала некорректен. Попробуй позже."
@@ -72,6 +74,7 @@ def tracking_complete_text(
     *,
     is_ongoing: bool = False,
     announced_episodes: int | None = None,
+    tracking_enabled: bool | None = None,
 ) -> str:
     remaining = _remaining_episodes(total_episodes, watched_episodes)
     if is_ongoing and remaining == 0:
@@ -86,14 +89,16 @@ def tracking_complete_text(
     rating_line = (
         f"Моя оценка · <b>{average:.1f}/10</b>\n" if average is not None else ""
     )
-    return (
+    result = (
         "✓ <b>Прогресс сохранён</b>\n\n"
         f"▣\u00a0<b>{escape(title)}</b>\n"
         f"Просмотрено · <b>{watched_episodes} из {total_text}</b>\n"
         f"Статус · <b>{status}</b>\n"
         f"{rating_line}"
-        f"<i>{date.today().strftime('%d.%m.%Y')}</i>"
     )
+    if tracking_enabled is not None:
+        result += f"{tracking_status_line(tracking_enabled)}\n"
+    return f"{result}<i>{date.today().strftime('%d.%m.%Y')}</i>"
 
 
 def _remaining_episodes(total_episodes: int, watched_episodes: int) -> int:

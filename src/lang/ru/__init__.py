@@ -12,6 +12,8 @@ from .search import *
 from .search import __all__ as _search_all
 from .series import *
 from .series import __all__ as _series_all
+from .tracking import *
+from .tracking import __all__ as _tracking_all
 
 __all__ = (
     *_common_all,
@@ -21,4 +23,5 @@ __all__ = (
     *_rating_all,
     *_search_all,
     *_series_all,
+    *_tracking_all,
 )

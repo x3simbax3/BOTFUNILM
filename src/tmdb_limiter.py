@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+from redis.asyncio import Redis
+
 from config.config import (
+    REDIS_URL,
     TMDB_MAX_CONCURRENCY,
     TMDB_MAX_REQUESTS_PER_SECOND,
     TMDB_QUEUE_TIMEOUT_SECONDS,
@@ -41,6 +45,9 @@ class TmdbRequestLimiter:
         self._rate_lock = asyncio.Lock()
         self._request_times: deque[float] = deque()
         self._cooldown_until = 0.0
+        self._redis: Redis | None = None
+        self._member_prefix = secrets.token_hex(16)
+        self._member_sequence = 0
 
     @asynccontextmanager
     async def request(self) -> AsyncIterator[None]:
@@ -63,6 +70,13 @@ class TmdbRequestLimiter:
         loop = asyncio.get_running_loop()
         async with self._rate_lock:
             self._cooldown_until = max(self._cooldown_until, loop.time() + delay)
+        if REDIS_URL and delay > 0:
+            redis = self._redis_client()
+            await redis.set(
+                "tmdb:rate-limit:cooldown",
+                "1",
+                px=max(1, round(delay * 1000)),
+            )
 
     async def _acquire(self) -> None:
         await self._semaphore.acquire()
@@ -73,6 +87,8 @@ class TmdbRequestLimiter:
             raise
 
     async def _wait_for_rate_slot(self) -> None:
+        if REDIS_URL:
+            await self._wait_for_distributed_rate_slot()
         loop = asyncio.get_running_loop()
         while True:
             async with self._rate_lock:
@@ -99,6 +115,57 @@ class TmdbRequestLimiter:
 
             await asyncio.sleep(wait_seconds)
 
+    async def _wait_for_distributed_rate_slot(self) -> None:
+        redis = self._redis_client()
+        window_ms = max(1, round(self.settings.window_seconds * 1000))
+        while True:
+            self._member_sequence += 1
+            member = f"{self._member_prefix}:{self._member_sequence}"
+            wait_ms = int(
+                await redis.eval(
+                    _DISTRIBUTED_RATE_LIMIT_SCRIPT,
+                    2,
+                    "tmdb:rate-limit:requests",
+                    "tmdb:rate-limit:cooldown",
+                    window_ms,
+                    self.settings.max_requests,
+                    member,
+                )
+            )
+            if wait_ms <= 0:
+                return
+            await asyncio.sleep(max(0.001, wait_ms / 1000))
+
+    def _redis_client(self) -> Redis:
+        if self._redis is None:
+            self._redis = Redis.from_url(REDIS_URL, decode_responses=True)
+        return self._redis
+
+    async def close(self) -> None:
+        if self._redis is not None:
+            await self._redis.aclose()
+            self._redis = None
+
+
+_DISTRIBUTED_RATE_LIMIT_SCRIPT = """
+local cooldown = redis.call('pttl', KEYS[2])
+if cooldown > 0 then
+    return cooldown
+end
+local redis_time = redis.call('time')
+local now = redis_time[1] * 1000 + math.floor(redis_time[2] / 1000)
+local window = tonumber(ARGV[1])
+redis.call('zremrangebyscore', KEYS[1], '-inf', now - window)
+local count = redis.call('zcard', KEYS[1])
+if count < tonumber(ARGV[2]) then
+    redis.call('zadd', KEYS[1], now, ARGV[3])
+    redis.call('pexpire', KEYS[1], window)
+    return 0
+end
+local oldest = redis.call('zrange', KEYS[1], 0, 0, 'withscores')
+return math.max(1, tonumber(oldest[2]) + window - now)
+"""
+
 
 _limiter: TmdbRequestLimiter | None = None
 _limiter_loop: asyncio.AbstractEventLoop | None = None
@@ -115,8 +182,17 @@ def get_tmdb_request_limiter() -> TmdbRequestLimiter:
     return _limiter
 
 
+async def close_tmdb_request_limiter() -> None:
+    global _limiter, _limiter_loop
+    if _limiter is not None:
+        await _limiter.close()
+    _limiter = None
+    _limiter_loop = None
+
+
 __all__ = (
     "TmdbLimiterSettings",
     "TmdbRequestLimiter",
+    "close_tmdb_request_limiter",
     "get_tmdb_request_limiter",
 )

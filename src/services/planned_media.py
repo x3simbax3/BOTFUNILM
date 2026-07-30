@@ -9,6 +9,10 @@ from src.database.series_release import update_media_series_release_info
 from src.database.user_media import save_user_media
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot
 from src.services.media import ensure_media
+from src.services.series_metadata import (
+    SeriesMetadataError,
+    load_cached_series_release_snapshot,
+)
 from src.tmdb_models import TmdbError
 from src.tmdb_series import fetch_tv_details
 
@@ -26,7 +30,7 @@ async def save_planned_media(
     database_url: str | None = None,
 ) -> PlannedMediaResult:
     """Upsert catalogue metadata and attach it to the user's planned list."""
-    snapshot = await _series_snapshot(workflow)
+    snapshot = await _series_snapshot(workflow, database_url=database_url)
     async with connection_scope(database_url) as connection:
         media_id = await ensure_media(
             workflow.to_fsm_dict(),
@@ -56,9 +60,19 @@ async def save_planned_media(
 
 async def _series_snapshot(
     workflow: MediaWorkflowData,
+    *,
+    database_url: str | None = None,
 ) -> SeriesReleaseSnapshot | None:
     if workflow.content_format != "series":
         return None
+    if workflow.media_id is not None:
+        try:
+            return await load_cached_series_release_snapshot(
+                workflow.media_id,
+                database_url=database_url,
+            )
+        except SeriesMetadataError:
+            return None
     try:
         return await fetch_tv_details(
             workflow.tmdb_id or 0,

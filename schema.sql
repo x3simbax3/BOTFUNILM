@@ -6,6 +6,8 @@ CREATE TABLE user_media (
     episodes_watched    INTEGER,
     last_watched_at     TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     added_at            TEXT NOT NULL DEFAULT '',
+    is_tracking         INTEGER NOT NULL DEFAULT 0
+                        CHECK (`is_tracking` IN (0, 1)),
     PRIMARY KEY (user_id, media_id),
     CONSTRAINT `0` FOREIGN KEY (media_id) REFERENCES media (id)
         ON UPDATE NO ACTION ON DELETE CASCADE,
@@ -17,6 +19,8 @@ CREATE TABLE user_media (
 );
 
 CREATE INDEX ix_user_media_media_id ON user_media (media_id);
+CREATE INDEX ix_user_media_tracked_by_media
+    ON user_media (media_id, user_id) WHERE `is_tracking` = 1;
 
 CREATE TABLE user_season_progress (
     user_id             INTEGER NOT NULL,
@@ -61,11 +65,18 @@ CREATE TABLE media (
     next_episode_season_number INTEGER,
     next_episode_number INTEGER,
     tmdb_release_checked_at TEXT,
+    tmdb_metadata_checked_at TEXT,
+    tmdb_refresh_error  TEXT,
+    last_episode_air_date TEXT,
+    last_episode_season_number INTEGER,
+    last_episode_number INTEGER,
     available_episode_count INTEGER,
     CHECK (`library_users_count` >= 0),
     CHECK (`tmdb_in_production` IS NULL OR `tmdb_in_production` IN (0, 1)),
     CHECK (`next_episode_season_number` IS NULL OR `next_episode_season_number` > 0),
     CHECK (`next_episode_number` IS NULL OR `next_episode_number` > 0),
+    CHECK (`last_episode_season_number` IS NULL OR `last_episode_season_number` > 0),
+    CHECK (`last_episode_number` IS NULL OR `last_episode_number` > 0),
     CHECK (`available_episode_count` IS NULL OR `available_episode_count` >= 0),
     CHECK (content_format IN ('full_length', 'series')),
     CHECK (content_type IN ('movie', 'anime', 'cartoon')),
@@ -81,6 +92,10 @@ CREATE INDEX ix_media_normalized_title
     ON media (content_format, content_type, normalized_title, id);
 CREATE INDEX ix_media_normalized_original_title
     ON media (content_format, content_type, normalized_original_title, id);
+CREATE INDEX ix_media_daily_refresh_due
+    ON media (content_format, tmdb_release_checked_at, id);
+CREATE INDEX ix_media_weekly_refresh_due
+    ON media (content_format, tmdb_metadata_checked_at, id);
 
 CREATE TABLE media_search_terms (
     media_id            INTEGER NOT NULL,
@@ -148,6 +163,44 @@ CREATE TABLE user_media_rating_details (
                   )),
     CHECK (score BETWEEN 1 AND 10)
 );
+
+CREATE TABLE series_notification_batches (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    sent_at             TEXT
+);
+
+CREATE INDEX ix_series_notification_batches_pending
+    ON series_notification_batches (sent_at, id);
+
+CREATE TABLE user_series_notifications (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id                  INTEGER NOT NULL,
+    media_id                 INTEGER NOT NULL,
+    previous_episode_count   INTEGER NOT NULL,
+    current_episode_count    INTEGER NOT NULL,
+    season_number            INTEGER,
+    episode_number           INTEGER,
+    detected_at              TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    batch_id                 INTEGER,
+    CONSTRAINT user_series_notifications_user_media
+        FOREIGN KEY (user_id, media_id)
+        REFERENCES user_media (user_id, media_id) ON DELETE CASCADE,
+    CONSTRAINT user_series_notifications_batch
+        FOREIGN KEY (batch_id) REFERENCES series_notification_batches (id)
+        ON DELETE CASCADE,
+    UNIQUE (user_id, media_id, current_episode_count),
+    CHECK (previous_episode_count >= 0),
+    CHECK (current_episode_count > previous_episode_count),
+    CHECK (season_number IS NULL OR season_number > 0),
+    CHECK (episode_number IS NULL OR episode_number > 0)
+);
+
+CREATE INDEX ix_user_series_notifications_unbatched
+    ON user_series_notifications (batch_id, user_id, id);
+CREATE INDEX ix_user_series_notifications_batch_page
+    ON user_series_notifications (batch_id, id);
 
 -- Library-count and series-progress triggers are installed by migrations.
 -- Atlas Community cannot represent SQLite triggers in a declarative schema.

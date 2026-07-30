@@ -86,7 +86,15 @@ async def fetch_tv_details(
             else None
         ),
         rating=_parse_rating(data.get("vote_average")),
+        title=_optional_text(data.get("name")),
+        original_title=_optional_text(data.get("original_name")),
+        description=_optional_text(data.get("overview")),
+        first_air_date=_optional_text(data.get("first_air_date")),
     )
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _infer_available_episode_count(

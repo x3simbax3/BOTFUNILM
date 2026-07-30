@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from src.handlers.navigation import reset_to_main
-from src.keyboards import main_menu_keyboard
+from src.keyboards import main_menu_keyboard, post_add_tracking_keyboard
 from src.lang import (
     DONE,
     INVALID_PROGRESS,
@@ -43,6 +43,7 @@ async def finish_series_tracking(
         return
 
     await state.update_data(watch_date=date.today().isoformat())
+    is_new_item = not bool(data.get("library_progress_edit"))
     await callback.message.edit_text(
         tracking_complete_text(
             result.title,
@@ -51,10 +52,17 @@ async def finish_series_tracking(
             result.average,
             is_ongoing=result.is_ongoing,
             announced_episodes=result.announced_episodes,
+            tracking_enabled=False if is_new_item and result.is_ongoing else None,
         ),
         parse_mode="HTML",
+        reply_markup=(
+            post_add_tracking_keyboard(result.media_id, False)
+            if is_new_item and result.is_ongoing
+            else None
+        ),
     )
-    await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
+    if not (is_new_item and result.is_ongoing):
+        await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
     await reset_to_main(state)
     await callback.answer()
 

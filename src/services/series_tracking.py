@@ -49,6 +49,7 @@ class SeriesTrackingStart:
 
 @dataclass(frozen=True)
 class SeriesTrackingResult:
+    media_id: int
     title: str
     total_episodes: int
     announced_episodes: int
@@ -304,6 +305,7 @@ async def save_series_tracking_result(
             connection=connection,
         )
     return SeriesTrackingResult(
+        media_id=media_id,
         title=str(fsm_data.get("tmdb_title") or ""),
         total_episodes=total,
         announced_episodes=announced_total,

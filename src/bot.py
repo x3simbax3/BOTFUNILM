@@ -24,6 +24,7 @@ from src.file_security import verify_private_files
 from src.http_client import close_http_session
 from src.logging_config import configure_logging
 from src.routers import router
+from src.tmdb_limiter import close_tmdb_request_limiter
 from src.update_throttling import UserThrottleMiddleware
 
 
@@ -104,7 +105,10 @@ async def main() -> None:
         try:
             await close_http_session()
         finally:
-            await bot.session.close()
+            try:
+                await close_tmdb_request_limiter()
+            finally:
+                await bot.session.close()
 
 
 if __name__ == "__main__":

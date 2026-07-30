@@ -14,6 +14,52 @@ async def connection_scope_stub(*args, **kwargs):
 
 
 class PlannedMediaServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_existing_series_plan_uses_cached_snapshot_without_tmdb(self) -> None:
+        workflow = MediaWorkflowData(
+            media_id=7,
+            tmdb_id=42,
+            tmdb_title="Сериал",
+            tmdb_description=None,
+            tmdb_poster_path=None,
+            tmdb_original_title=None,
+            tmdb_release_date=None,
+            tmdb_rating=None,
+            content_format="series",
+            content_type="movie",
+        )
+        snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=1,
+            number_of_episodes=12,
+            seasons=(SeriesSeason(1, "Сезон 1", 12, 3),),
+            status="Returning Series",
+            in_production=True,
+        )
+        with (
+            patch.object(
+                planned_media,
+                "load_cached_series_release_snapshot",
+                AsyncMock(return_value=snapshot),
+            ) as cached,
+            patch.object(planned_media, "fetch_tv_details", AsyncMock()) as fetch,
+            patch.object(
+                planned_media,
+                "ensure_media",
+                AsyncMock(return_value=7),
+            ),
+            patch.object(
+                planned_media,
+                "update_media_series_release_info",
+                AsyncMock(),
+            ),
+            patch.object(planned_media, "save_user_media", AsyncMock()),
+            patch.object(planned_media, "connection_scope", connection_scope_stub),
+        ):
+            result = await planned_media.save_planned_media(123, workflow)
+
+        cached.assert_awaited_once_with(7, database_url=None)
+        fetch.assert_not_awaited()
+        self.assertEqual(result.series_snapshot.available_episode_count, 3)
+
     async def test_series_plan_persists_release_snapshot_before_user_entry(
         self,
     ) -> None:

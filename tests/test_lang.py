@@ -19,13 +19,9 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(locale.keyboards.MAIN_ADD, "＋\u00a0Добавить")
         self.assertIs(locale, lang.get_locale("ru"))
 
-    def test_start_text_uses_left_bordered_headings(self) -> None:
+    def test_start_text_uses_asymmetric_action_heading(self) -> None:
         self.assertNotIn("(˶ᵔ ᵕ ᵔ˶)", lang.START_TEXT)
-        self.assertIn("╭ <b>BotFunilm</b>", lang.START_TEXT)
-        self.assertIn(
-            "╰ <i>Фильмы и сериалы — в одном месте</i>",
-            lang.START_TEXT,
-        )
+        self.assertIn("━━━  <b>BotFunilm</b>  ━━━", lang.START_TEXT)
         self.assertIn("╭ <b>Куда дальше?</b>", lang.START_TEXT)
         self.assertIn("╰ <i>Выбери действие ниже</i>", lang.START_TEXT)
 
@@ -104,7 +100,7 @@ class LocalizationTests(unittest.TestCase):
             "╰ <i>Сортировка по дате</i>",
             result,
         )
-        self.assertEqual(result.count("━━━━━━━━━━━━━"), 1)
+        self.assertEqual(result.count("•  ◇  •"), 1)
 
         rating_result = lang.library_text(
             [
@@ -146,6 +142,8 @@ class LocalizationTests(unittest.TestCase):
                     "number_of_episodes": 10,
                     "user_rating": 8,
                     "rating": 8.4,
+                    "tmdb_status": "Returning Series",
+                    "tmdb_in_production": 1,
                 }
             ],
             "BotFunilmBot",
@@ -155,10 +153,17 @@ class LocalizationTests(unittest.TestCase):
             "7 из 10 серий · Смотрю · Моя · 8/10 · TMDB · 8.4/10",
             result,
         )
+        self.assertIn(">1. Сериал</a> 🔴", result)
         self.assertNotIn(
             '<a href="https://t.me/BotFunilmBot?start=media_7">7 из 10',
             result,
         )
+
+    def test_search_result_shows_description_as_plain_text(self) -> None:
+        result = lang.tmdb_guess_text("full_length", "Фильм", "Описание")
+
+        self.assertIn("<b>Описание</b>\nОписание", result)
+        self.assertNotIn("<blockquote>", result)
 
     def test_library_item_uses_combined_media_kind_and_styled_watching_icon(
         self,

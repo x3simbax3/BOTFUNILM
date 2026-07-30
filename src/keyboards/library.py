@@ -234,7 +234,12 @@ def library_item_keyboard(*, planned: bool = False) -> InlineKeyboardMarkup:
     )
 
 
-def library_edit_keyboard(*, series: bool) -> InlineKeyboardMarkup:
+def library_edit_keyboard(
+    *,
+    series: bool,
+    tracking_available: bool = False,
+    tracking_enabled: bool = False,
+) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -250,6 +255,27 @@ def library_edit_keyboard(*, series: bool) -> InlineKeyboardMarkup:
                     text=text.EDIT_PROGRESS,
                     callback_data="library:item:edit:progress",
                 )
+            ]
+        )
+    if tracking_available:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        text.TRACKING_DISABLE
+                        if tracking_enabled
+                        else text.TRACKING_ENABLE
+                    ),
+                    callback_data="series:tracking:toggle",
+                ),
+                InlineKeyboardButton(
+                    text=(
+                        text.TRACKING_ACTIVE
+                        if tracking_enabled
+                        else text.TRACKING_INACTIVE
+                    ),
+                    callback_data="series:tracking:status",
+                ),
             ]
         )
     rows.append(

@@ -20,7 +20,7 @@ USER_STATUS_ICONS = {
     "on_hold": "Ⅱ",
     "dropped": "×",
 }
-LIBRARY_ITEM_DIVIDER = "━━━━━━━━━━━━━"
+LIBRARY_ITEM_DIVIDER = "•  ◇  •"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
 UNKNOWN_FILTER = "Неизвестный фильтр"
@@ -76,7 +76,13 @@ def library_text(
         if index > offset + 1:
             lines.append(LIBRARY_ITEM_DIVIDER)
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
-        lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
+        title = f'<a href="{url}">{index}. {escape(item["title"])}</a>'
+        if _item_value(item, "content_format") == "series" and is_active_series(
+            _item_value(item, "tmdb_status"),
+            _item_value(item, "tmdb_in_production"),
+        ):
+            title += " 🔴"
+        lines.append(title)
         lines.append(_library_item_summary(item))
     return "\n".join(lines)
 

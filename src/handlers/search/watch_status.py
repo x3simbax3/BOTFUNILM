@@ -7,7 +7,11 @@ from aiogram.types import CallbackQuery
 
 from src.fsm import MenuState
 from src.handlers.navigation import reset_to_main
-from src.keyboards import main_menu_keyboard, rating_keyboard
+from src.keyboards import (
+    main_menu_keyboard,
+    post_add_tracking_keyboard,
+    rating_keyboard,
+)
 from src.lang import (
     INVALID_WATCH_STATUS,
     TITLE_SAVE_FAILED,
@@ -38,19 +42,31 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
     workflow = MediaWorkflowData.from_fsm(data)
     if status == "planned":
         try:
-            await save_planned_media(callback.from_user.id, workflow)
+            result = await save_planned_media(callback.from_user.id, workflow)
         except (aiosqlite.Error, RuntimeError, ValueError):
             await callback.answer(TITLE_SAVE_FAILED, show_alert=True)
             return
 
+        is_ongoing = (
+            result.series_snapshot is not None and result.series_snapshot.active
+        )
         await callback.message.edit_text(
-            planned_title_saved_text(workflow.tmdb_title),
+            planned_title_saved_text(
+                workflow.tmdb_title,
+                tracking_enabled=False if is_ongoing else None,
+            ),
             parse_mode="HTML",
+            reply_markup=(
+                post_add_tracking_keyboard(result.media_id, False)
+                if is_ongoing
+                else None
+            ),
         )
-        await callback.message.answer(
-            "Готово — тайтл сохранён на потом.",
-            reply_markup=main_menu_keyboard(),
-        )
+        if not is_ongoing:
+            await callback.message.answer(
+                "Готово — тайтл сохранён на потом.",
+                reply_markup=main_menu_keyboard(),
+            )
         await reset_to_main(state)
         await callback.answer()
         return

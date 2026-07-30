@@ -8,4 +8,8 @@ atlas migrate apply \
     --dir "file:///app/migrations" \
     --url "$ATLAS_DATABASE_URL"
 
-exec python -m src.bot
+if [ "$#" -eq 0 ]; then
+    set -- python -m src.bot
+fi
+
+exec "$@"
