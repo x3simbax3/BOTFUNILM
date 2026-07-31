@@ -7,6 +7,7 @@ from src.callback_data import (
     FormatCallback,
     TypeCallback,
     parse_back_callback,
+    parse_badge_callback,
     parse_episode_callback,
     parse_format_callback,
     parse_library_filter_callback,
@@ -75,6 +76,8 @@ class CallbackDataTests(unittest.TestCase):
         self.assertEqual(parse_library_page_callback("library:page:0"), 0)
         self.assertEqual(parse_library_page_callback("library:page:100000"), 100_000)
         self.assertEqual(parse_rating_callback("rate:10"), 10)
+        self.assertEqual(parse_badge_callback("rating_badge:top"), "top")
+        self.assertEqual(parse_badge_callback("library_badge:none"), "none")
         self.assertEqual(parse_season_callback("season:1"), 1)
         self.assertEqual(parse_season_callback("season:done"), "done")
         self.assertEqual(parse_season_callback("season:all"), "all")
@@ -100,6 +103,8 @@ class CallbackDataTests(unittest.TestCase):
             (parse_rating_callback, "rate:01"),
             (parse_rating_callback, "rate:11"),
             (parse_rating_callback, "rate:1:extra"),
+            (parse_badge_callback, "rating_badge:unknown"),
+            (parse_badge_callback, "badge:top"),
             (parse_season_callback, "season:-1"),
             (parse_season_callback, "season:0"),
             (parse_season_callback, "season:01"),

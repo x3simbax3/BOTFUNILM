@@ -291,6 +291,14 @@ def library_edit_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
+                text=text.EDIT_BADGE,
+                callback_data="library:item:edit:badge",
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
                 text=text.BACK,
                 callback_data="library:item:edit:back",
             )

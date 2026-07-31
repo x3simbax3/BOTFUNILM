@@ -185,6 +185,7 @@ class LibraryKeyboardTests(KeyboardTestCase):
             [
                 ["library:item:edit:rating"],
                 ["library:item:edit:progress"],
+                ["library:item:edit:badge"],
                 ["library:item:edit:back"],
             ],
         )

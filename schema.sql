@@ -8,6 +8,7 @@ CREATE TABLE user_media (
     added_at            TEXT NOT NULL DEFAULT '',
     is_tracking         INTEGER NOT NULL DEFAULT 0
                         CHECK (`is_tracking` IN (0, 1)),
+    badge               TEXT,
     PRIMARY KEY (user_id, media_id),
     CONSTRAINT `0` FOREIGN KEY (media_id) REFERENCES media (id)
         ON UPDATE NO ACTION ON DELETE CASCADE,

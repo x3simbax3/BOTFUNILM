@@ -297,6 +297,7 @@ async def save_series_tracking_result(
             total_episodes=total,
             is_ongoing=is_ongoing,
             user_rating=round(average) if average is not None else None,
+            badge=fsm_data.get("badge"),
             rating_details=(
                 None
                 if fsm_data.get("library_progress_edit")

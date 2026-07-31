@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 
 from src.callback_data import (
+    parse_badge_callback,
     parse_library_filter_callback,
     parse_library_filter_group_callback,
     parse_library_page_callback,
@@ -23,7 +24,11 @@ from src.database.media import (
     update_media_metadata,
     update_media_telegram_poster_file_id,
 )
-from src.database.user_media import delete_user_media, set_user_media_status
+from src.database.user_media import (
+    delete_user_media,
+    set_user_media_status,
+    update_user_media_badge,
+)
 from src.fsm import MenuState
 from src.handlers.common import (
     CAPTION_ELLIPSIS,
@@ -35,6 +40,7 @@ from src.handlers.common import (
 from src.handlers.navigation import reset_to_main
 from src.handlers.series import start_series_tracking
 from src.keyboards import (
+    badge_keyboard,
     library_delete_keyboard,
     library_edit_keyboard,
     library_item_keyboard,
@@ -43,8 +49,10 @@ from src.keyboards import (
     rating_keyboard,
 )
 from src.lang import (
+    BADGE_UPDATED,
     DESCRIPTION_NOT_FOUND,
     FILTER_SAVE_FAILED,
+    INVALID_BADGE,
     INVALID_PAGE,
     ITEM_ACTION_FAILED,
     ITEM_DELETE_PROMPT,
@@ -56,6 +64,7 @@ from src.lang import (
     LIBRARY_OPEN_FAILED,
     UNKNOWN_FILTER,
     UNRELEASED_TITLE,
+    badge_prompt_text,
     library_item_text,
     library_text,
     rating_categories,
@@ -318,6 +327,87 @@ async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> 
         ),
     )
     await callback.answer()
+
+
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data == "library:item:edit:badge",
+)
+async def open_library_item_badge(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    if not is_library_item_editable(item):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    await edit_message(
+        callback.message,
+        badge_prompt_text(item["title"]),
+        parse_mode="HTML",
+        reply_markup=badge_keyboard("library_badge"),
+    )
+    await state.set_state(MenuState.choosing_badge)
+    await callback.answer()
+
+
+@router.callback_query(
+    MenuState.choosing_badge,
+    F.data.startswith("library_badge:"),
+)
+async def change_library_item_badge(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.data or not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    if not is_library_item_editable(item):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+
+    value = parse_badge_callback(callback.data)
+    if value is None:
+        await callback.answer(INVALID_BADGE, show_alert=True)
+        return
+    if value == "back":
+        await edit_message(
+            callback.message,
+            ITEM_EDIT_PROMPT,
+            reply_markup=library_edit_keyboard(
+                series=item["content_format"] == "series",
+                released=bool(dict(item).get("is_released", True)),
+            ),
+        )
+        await state.set_state(MenuState.viewing_media)
+        await callback.answer()
+        return
+
+    badge = None if value == "none" else value
+    try:
+        updated = await update_user_media_badge(
+            callback.from_user.id,
+            int(item["id"]),
+            badge,
+        )
+        if not updated:
+            raise RuntimeError("Library item disappeared")
+        refreshed = await get_user_library_item(
+            callback.from_user.id,
+            int(item["id"]),
+        )
+    except (aiosqlite.Error, RuntimeError, ValueError):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    if refreshed is None:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return
+    await _edit_library_item_message(callback.message, refreshed)
+    await state.set_state(MenuState.viewing_media)
+    await callback.answer(BADGE_UPDATED)
 
 
 @router.callback_query(

@@ -45,6 +45,54 @@ class RatingNavigationHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_last_rating_opens_badge_selection_before_saving(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rate:9", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Фильм",
+                "content_format": "full_length",
+                "content_type": "movie",
+                "rating_index": 4,
+                "ratings": {
+                    "acting": 8,
+                    "story": 9,
+                    "visuals": 8,
+                    "sound": 9,
+                },
+            }
+        )
+
+        with patch.object(rating_handlers, "finish_movie", AsyncMock()) as finish:
+            await rating_handlers.handle_rating(callback, state)
+
+        finish.assert_not_awaited()
+        self.assertEqual(state.state, MenuState.choosing_badge)
+        self.assertEqual(state.data["rating_average"], 8.6)
+        callbacks = [
+            button.callback_data
+            for row in message.edit_text_calls[0]["reply_markup"].inline_keyboard
+            for button in row
+        ]
+        self.assertIn("rating_badge:top", callbacks)
+
+    async def test_badge_selection_continues_movie_saving(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("rating_badge:top", message)
+        state = StateStub(
+            {
+                "tmdb_title": "Фильм",
+                "content_format": "full_length",
+                "rating_average": 9.0,
+            }
+        )
+
+        with patch.object(rating_handlers, "finish_movie", AsyncMock()) as finish:
+            await rating_handlers.choose_badge(callback, state)
+
+        self.assertEqual(state.data["badge"], "top")
+        finish.assert_awaited_once_with(callback, state, 9.0)
+
     async def test_library_rating_edit_updates_existing_item_without_status_change(
         self,
     ) -> None:
@@ -72,6 +120,7 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             123,
             7,
             9,
+            badge=None,
             rating_details=ratings,
         )
         self.assertEqual(state.data, {})

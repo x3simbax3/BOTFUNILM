@@ -121,7 +121,8 @@ async def list_tracked_series(
         async with connection.execute(
             """
             SELECT m.*, um.status AS user_status, um.user_rating,
-                   um.episodes_watched, um.last_watched_at, um.is_tracking
+                   um.episodes_watched, um.last_watched_at, um.is_tracking,
+                   um.badge
             FROM user_media AS um
             JOIN media AS m ON m.id = um.media_id
             WHERE um.user_id = ? AND (

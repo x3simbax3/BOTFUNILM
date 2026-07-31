@@ -111,6 +111,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
             ],
             "watched_by_season": {"1": 4},
             "rating_average": 8.6,
+            "badge": "funny",
             "ratings": {"story": 9},
             "is_ongoing": True,
             "tmdb_series_status": "Returning Series",
@@ -156,6 +157,7 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
             total_episodes=5,
             is_ongoing=True,
             user_rating=9,
+            badge="funny",
             rating_details={"story": 9},
             connection=sentinel.connection,
         )

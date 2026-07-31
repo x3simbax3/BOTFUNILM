@@ -9,6 +9,7 @@ import aiosqlite
 
 from src.database.connection import connection_scope, existing_or_connection_scope
 from src.database.ratings import replace_user_rating_details
+from src.models import validate_media_badge
 
 
 async def get_media_seasons(
@@ -58,12 +59,14 @@ async def save_user_series_progress(
     total_episodes: int,
     is_ongoing: bool = False,
     user_rating: int | None = None,
+    badge: str | None = None,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
     connection: aiosqlite.Connection | None = None,
 ) -> None:
     """Save season details and refresh the aggregate series progress atomically."""
     _validate_progress_values(seasons, total_episodes)
+    validate_media_badge(badge)
 
     async with existing_or_connection_scope(
         connection,
@@ -82,15 +85,17 @@ async def save_user_series_progress(
         await active_connection.execute(
             """
             INSERT INTO user_media (
-                user_id, media_id, status, user_rating, episodes_watched, added_at
-            ) VALUES (?, ?, 'watching', ?, 0, CURRENT_TIMESTAMP)
+                user_id, media_id, status, user_rating, episodes_watched,
+                badge, added_at
+            ) VALUES (?, ?, 'watching', ?, 0, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(user_id, media_id) DO UPDATE SET
                 status = 'watching',
                 user_rating = excluded.user_rating,
                 episodes_watched = 0,
+                badge = COALESCE(excluded.badge, user_media.badge),
                 last_watched_at = CURRENT_TIMESTAMP
             """,
-            (user_id, media_id, user_rating),
+            (user_id, media_id, user_rating, badge),
         )
         if rating_details is not None:
             await replace_user_rating_details(

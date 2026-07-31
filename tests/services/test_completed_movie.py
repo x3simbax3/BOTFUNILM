@@ -42,6 +42,7 @@ class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
             "tmdb_id": 42,
             "tmdb_title": "Фильм",
             "content_type": "cartoon",
+            "badge": "top",
             "ratings": {"story": 9},
         }
         with (
@@ -82,6 +83,7 @@ class CompletedMovieServiceTests(unittest.IsolatedAsyncioTestCase):
             media_id=7,
             status="completed",
             user_rating=9,
+            badge="top",
             rating_details={"story": 9},
             connection=sentinel.connection,
         )

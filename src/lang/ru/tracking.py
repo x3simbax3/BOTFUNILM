@@ -3,6 +3,8 @@ from html import escape
 from src.database.media_release_notifications import MediaReleaseNotification
 from src.database.series_subscriptions import NotificationItem
 
+from .rating import media_badge_emoji
+
 TRACKED_HEADING = "╭ <b>Отслеживаемые</b>"
 TRACKED_EMPTY = (
     "╭ <b>Отслеживаемые</b>\n"
@@ -37,7 +39,11 @@ def tracked_series_text(items: list, bot_username: str, offset: int = 0) -> str:
     lines = [TRACKED_HEADING, "╰ <i>Новые серии и премьеры — в одном месте</i>", ""]
     for index, item in enumerate(items, start=offset + 1):
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
-        lines.append(f'<a href="{url}">{index}. {escape(item["title"])}</a>')
+        badge = media_badge_emoji(dict(item).get("badge"))
+        badge_suffix = f" {badge}" if badge else ""
+        lines.append(
+            f'<a href="{url}">{index}. {escape(item["title"])}</a>{badge_suffix}'
+        )
         if item["content_format"] == "series":
             watched = int(item["episodes_watched"] or 0)
             available = int(item["available_episode_count"] or 0)

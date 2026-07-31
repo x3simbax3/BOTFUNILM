@@ -10,7 +10,7 @@ from .menu import (
     main_menu_keyboard,
     selected_type_keyboard,
 )
-from .rating import rating_keyboard
+from .rating import badge_keyboard, rating_keyboard
 from .search import tmdb_guess_keyboard, tmdb_retry_keyboard, watch_status_keyboard
 from .series import EPISODES_PAGE_SIZE, episodes_keyboard, season_list_keyboard
 from .tracking import (
@@ -21,6 +21,7 @@ from .tracking import (
 
 __all__ = (
     "EPISODES_PAGE_SIZE",
+    "badge_keyboard",
     "content_type_keyboard",
     "episodes_keyboard",
     "format_keyboard",

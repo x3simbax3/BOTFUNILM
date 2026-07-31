@@ -19,6 +19,39 @@ class PhotoCachingMessageStub(MessageStub):
 
 
 class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_badge_can_be_changed_from_library_item(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("library_badge:funny", message)
+        state = StateStub({"media_id": 7})
+        item = {
+            "id": 7,
+            "content_format": "full_length",
+            "user_status": "completed",
+        }
+
+        with (
+            patch.object(
+                library_handlers,
+                "get_user_library_item",
+                AsyncMock(side_effect=[item, item | {"badge": "funny"}]),
+            ),
+            patch.object(
+                library_handlers,
+                "update_user_media_badge",
+                AsyncMock(return_value=True),
+            ) as update_badge,
+            patch.object(
+                library_handlers,
+                "_edit_library_item_message",
+                AsyncMock(),
+            ) as edit_item,
+        ):
+            await library_handlers.change_library_item_badge(callback, state)
+
+        update_badge.assert_awaited_once_with(123, 7, "funny")
+        edit_item.assert_awaited_once()
+        self.assertEqual(state.state, MenuState.viewing_media)
+
     async def test_opening_item_caches_telegram_photo_file_id(self) -> None:
         message = PhotoCachingMessageStub()
         state = StateStub()

@@ -48,6 +48,7 @@ async def save_completed_movie(
             media_id=media_id,
             status="completed",
             user_rating=round(average),
+            badge=fresh_workflow.get("badge"),
             rating_details=fresh_workflow.get("ratings"),
             connection=connection,
         )

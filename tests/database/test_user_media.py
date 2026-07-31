@@ -5,12 +5,46 @@ from src.database.user_media import (
     get_user_media,
     save_user_media,
     set_user_media_status,
+    update_user_media_badge,
     update_user_media_rating,
 )
 from tests.support.database import DatabaseTestCase
 
 
 class UserMediaTests(DatabaseTestCase):
+    async def test_badge_can_be_set_and_removed(self) -> None:
+        media_id = await self.create_user_media(status="completed")
+
+        self.assertTrue(
+            await update_user_media_badge(
+                123,
+                media_id,
+                "top",
+                database_url=self.database_url,
+            )
+        )
+        row = await get_user_media(123, media_id, database_url=self.database_url)
+        self.assertEqual(row["badge"], "top")
+
+        self.assertTrue(
+            await update_user_media_badge(
+                123,
+                media_id,
+                None,
+                database_url=self.database_url,
+            )
+        )
+        row = await get_user_media(123, media_id, database_url=self.database_url)
+        self.assertIsNone(row["badge"])
+
+        with self.assertRaises(ValueError):
+            await update_user_media_badge(
+                123,
+                media_id,
+                "unknown",
+                database_url=self.database_url,
+            )
+
     async def test_user_media_is_inserted_and_updated(self) -> None:
         media_id = await self.create_media(
             tmdb_id=42,

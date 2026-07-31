@@ -20,6 +20,14 @@ ANIMATION_RATING_CATEGORIES = [
 INVALID_RATING = "Некорректная оценка"
 RATING_ALREADY_SAVED = "Эта оценка уже сохранена"
 MOVIE_SAVE_FAILED = "Не удалось сохранить фильм. Попробуй ещё раз."
+INVALID_BADGE = "Неизвестная лычка"
+BADGE_UPDATED = "Лычка изменена."
+BADGE_OPTIONS = (
+    ("cry", "😭", "Поплакать"),
+    ("sad", "😔", "Грустный"),
+    ("top", "🔥", "Топовый"),
+    ("funny", "😂", "Смешной"),
+)
 
 
 def rating_categories(content_type: str) -> list[tuple[str, str]]:
@@ -50,7 +58,7 @@ def rating_summary_text(
 ) -> str:
     lines = [
         f"━━━  ✓ <b>{escape(title)}</b>  ━━━",
-        "<i>Оценка сохранена</i>",
+        "<i>Оценка рассчитана</i>",
         "",
     ]
     for key, name in categories or RATING_CATEGORIES:
@@ -59,6 +67,16 @@ def rating_summary_text(
     lines.append(f"\n★ <b>Итоговая оценка · {average:.1f}/10</b>")
     lines.append(f"<i>{_today()}</i>")
     return "\n".join(lines)
+
+
+def badge_prompt_text(title: str, summary: str | None = None) -> str:
+    heading = "" if summary else f"━━━  <b>{escape(title)}</b>  ━━━\n"
+    prompt = f"{heading}<b>Добавить лычку?</b>\nОна будет показана рядом с названием."
+    return f"{summary}\n\n{prompt}" if summary else prompt
+
+
+def media_badge_emoji(value: object) -> str:
+    return next((emoji for code, emoji, _ in BADGE_OPTIONS if code == value), "")
 
 
 def movie_watched_text(title: str, average: float) -> str:
@@ -76,10 +94,15 @@ def _today() -> str:
 
 __all__ = (
     "ANIMATION_RATING_CATEGORIES",
+    "BADGE_OPTIONS",
+    "BADGE_UPDATED",
+    "INVALID_BADGE",
     "INVALID_RATING",
     "MOVIE_SAVE_FAILED",
     "RATING_ALREADY_SAVED",
     "RATING_CATEGORIES",
+    "badge_prompt_text",
+    "media_badge_emoji",
     "movie_watched_text",
     "rating_categories",
     "rating_prompt_text",

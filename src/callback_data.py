@@ -3,6 +3,8 @@
 import re
 from dataclasses import dataclass
 
+from src.models.media_badge import MEDIA_BADGES
+
 Action = str
 ContentFormat = str
 ContentType = str
@@ -46,6 +48,7 @@ _LIBRARY_SORT_RE = re.compile(
 )
 _LIBRARY_PAGE_RE = re.compile(r"library:page:(0|[1-9][0-9]{0,5})\Z", re.ASCII)
 _RATING_RE = re.compile(r"rate:(10|[1-9])\Z", re.ASCII)
+_BADGE_RE = re.compile(r"(?:rating|library)_badge:([^:]+)\Z", re.ASCII)
 _SEASON_RE = re.compile(r"season:(done|all|[1-9][0-9]{0,4})\Z", re.ASCII)
 _EPISODE_RE = re.compile(
     r"ep:(?:done|back|noop|([1-9][0-9]{0,4}):([1-9][0-9]{0,5}))\Z",
@@ -161,6 +164,14 @@ def parse_library_page_callback(data: str) -> int | None:
 def parse_rating_callback(data: str) -> int | None:
     match = _RATING_RE.fullmatch(data)
     return int(match.group(1)) if match else None
+
+
+def parse_badge_callback(data: str) -> str | None:
+    match = _BADGE_RE.fullmatch(data)
+    if not match:
+        return None
+    value = match.group(1)
+    return value if value in MEDIA_BADGES or value in {"none", "back"} else None
 
 
 def parse_season_callback(data: str) -> int | str | None:

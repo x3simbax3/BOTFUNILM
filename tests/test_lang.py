@@ -118,6 +118,19 @@ class LocalizationTests(unittest.TestCase):
             rating_result,
         )
 
+        badge_result = lang.library_text(
+            [
+                {
+                    "id": 7,
+                    "title": "Топовый фильм",
+                    "content_format": "full_length",
+                    "badge": "top",
+                }
+            ],
+            "BotFunilmBot",
+        )
+        self.assertIn(">1. Топовый фильм</a> 🔥", badge_result)
+
     def test_empty_library_text_differs_from_empty_filtered_results(self) -> None:
         empty_library = lang.library_text(
             [],

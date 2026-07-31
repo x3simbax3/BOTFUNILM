@@ -436,6 +436,7 @@ class SeriesProgressHandlerTests(unittest.IsolatedAsyncioTestCase):
             total_episodes=10,
             is_ongoing=True,
             user_rating=9,
+            badge=None,
             rating_details={
                 "acting": 9,
                 "story": 8,

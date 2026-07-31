@@ -5,6 +5,7 @@ from src.models import is_active_series
 
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import CONTENT_TYPE_TITLES, MEDIA_KIND_TITLES
+from .rating import media_badge_emoji
 
 USER_STATUS_TITLES = {
     "planned": "Хочу посмотреть",
@@ -77,6 +78,9 @@ def library_text(
             lines.append(LIBRARY_ITEM_DIVIDER)
         url = f"https://t.me/{bot_username}?start=media_{int(item['id'])}"
         title = f'<a href="{url}">{index}. {escape(item["title"])}</a>'
+        badge = media_badge_emoji(_item_value(item, "badge"))
+        if badge:
+            title += f" {badge}"
         if _item_value(item, "content_format") == "series" and is_active_series(
             _item_value(item, "tmdb_status"),
             _item_value(item, "tmdb_in_production"),
@@ -127,7 +131,9 @@ def library_item_text(item, description: str | None = None) -> str:
     user_status = USER_STATUS_TITLES.get(item["user_status"], item["user_status"])
     date_value = item["release_date"] or item["first_air_date"]
 
-    lines = [f"━━━  <b>{escape(item['title'])}</b>  ━━━"]
+    badge = media_badge_emoji(_item_value(item, "badge"))
+    badge_suffix = f" {badge}" if badge else ""
+    lines = [f"━━━  <b>{escape(item['title'])}</b>{badge_suffix}  ━━━"]
     if item["original_title"] and item["original_title"] != item["title"]:
         lines.append(f"<i>{escape(item['original_title'])}</i>")
     lines.append(f"<i>{escape(media_kind)}</i>")

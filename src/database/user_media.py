@@ -8,6 +8,7 @@ import aiosqlite
 
 from src.database.connection import connection_scope, existing_or_connection_scope
 from src.database.ratings import replace_user_rating_details
+from src.models import validate_media_badge
 
 
 async def save_user_media(
@@ -18,10 +19,12 @@ async def save_user_media(
     user_rating: int | None = None,
     episodes_watched: int | None = None,
     is_tracking: bool = False,
+    badge: str | None = None,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
     connection: aiosqlite.Connection | None = None,
 ) -> None:
+    validate_media_badge(badge)
     async with existing_or_connection_scope(
         connection,
         database_url=database_url,
@@ -30,13 +33,14 @@ async def save_user_media(
             """
             INSERT INTO user_media (
                 user_id, media_id, status, user_rating, episodes_watched,
-                is_tracking, added_at
-            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                is_tracking, badge, added_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(user_id, media_id) DO UPDATE SET
                 status = excluded.status,
                 user_rating = excluded.user_rating,
                 episodes_watched = excluded.episodes_watched,
                 is_tracking = excluded.is_tracking,
+                badge = excluded.badge,
                 last_watched_at = CURRENT_TIMESTAMP
             """,
             (
@@ -46,6 +50,7 @@ async def save_user_media(
                 user_rating,
                 episodes_watched,
                 int(is_tracking),
+                badge,
             ),
         )
         if rating_details is not None:
@@ -101,19 +106,21 @@ async def update_user_media_rating(
     media_id: int,
     user_rating: int,
     *,
+    badge: str | None = None,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
 ) -> bool:
     if type(user_rating) is not int or not 1 <= user_rating <= 10:
         raise ValueError("Rating must be an integer from 1 to 10")
+    validate_media_badge(badge)
     async with connection_scope(database_url) as connection:
         cursor = await connection.execute(
             """
             UPDATE user_media
-            SET user_rating = ?, last_watched_at = CURRENT_TIMESTAMP
+            SET user_rating = ?, badge = ?, last_watched_at = CURRENT_TIMESTAMP
             WHERE user_id = ? AND media_id = ?
             """,
-            (user_rating, user_id, media_id),
+            (user_rating, badge, user_id, media_id),
         )
         updated = cursor.rowcount > 0
         if updated and rating_details is not None:
@@ -124,6 +131,25 @@ async def update_user_media_rating(
                 rating_details,
             )
         return updated
+
+
+async def update_user_media_badge(
+    user_id: int,
+    media_id: int,
+    badge: str | None,
+    *,
+    database_url: str | None = None,
+) -> bool:
+    validate_media_badge(badge)
+    async with connection_scope(database_url) as connection:
+        cursor = await connection.execute(
+            """
+            UPDATE user_media SET badge = ?
+            WHERE user_id = ? AND media_id = ?
+            """,
+            (badge, user_id, media_id),
+        )
+        return cursor.rowcount > 0
 
 
 async def delete_user_media(
@@ -146,4 +172,5 @@ __all__ = (
     "save_user_media",
     "set_user_media_status",
     "update_user_media_rating",
+    "update_user_media_badge",
 )
