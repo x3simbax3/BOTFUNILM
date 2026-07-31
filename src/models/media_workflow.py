@@ -104,6 +104,13 @@ def current_media_id(data: Mapping[str, Any]) -> int | None:
     return None
 
 
+def is_library_item_editable(item: Mapping[str, Any]) -> bool:
+    """Return whether a saved title has watch data that can be changed."""
+    if _get(item, "content_format") == "series":
+        return int(_get(item, "episodes_watched", 0) or 0) > 0
+    return _get(item, "user_status") == "completed"
+
+
 def _get(source: Mapping[str, Any], key: str, default: Any = None) -> Any:
     """Read dicts and sqlite-style rows through the same interface."""
     try:

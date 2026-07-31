@@ -154,21 +154,27 @@ class LibraryKeyboardTests(KeyboardTestCase):
             ["✓\u00a0Все"],
         )
 
-    def test_planned_library_item_has_management_actions(self) -> None:
+    def test_released_planned_item_can_be_marked_watched_but_not_edited(
+        self,
+    ) -> None:
         self.assert_callback_rows(
             keyboards.library_item_keyboard(planned=True),
             [
                 ["library:item:watched"],
-                ["library:item:edit", "library:item:delete"],
+                ["library:item:delete"],
                 ["library:back"],
             ],
         )
 
-    def test_unreleased_library_item_has_no_watched_action(self) -> None:
+    def test_unreleased_library_item_only_has_delete_and_back(self) -> None:
         self.assert_callback_rows(
-            keyboards.library_item_keyboard(planned=True, released=False),
+            keyboards.library_item_keyboard(
+                planned=True,
+                released=False,
+                tracking_available=True,
+            ),
             [
-                ["library:item:edit", "library:item:delete"],
+                ["library:item:delete"],
                 ["library:back"],
             ],
         )

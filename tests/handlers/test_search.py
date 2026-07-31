@@ -448,6 +448,7 @@ class TmdbRejectRetryHandlerTests(unittest.IsolatedAsyncioTestCase):
             user_id=123,
             media_id=7,
             status="planned",
+            is_tracking=False,
             connection=ANY,
         )
         update_release.assert_awaited_once_with(

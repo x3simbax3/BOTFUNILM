@@ -153,6 +153,8 @@ def library_item_text(item, description: str | None = None) -> str:
     lines.append(f"Добавили · <b>{item['library_users_count']}</b>")
     if date_value:
         lines.append(f"Премьера · <b>{escape(date_value)}</b>")
+    elif not bool(_item_value(item, "is_released", True)):
+        lines.append("Премьера · <b>Дата премьеры пока неизвестна</b>")
     if item["number_of_seasons"] is not None:
         lines.append(f"Сезонов · <b>{item['number_of_seasons']}</b>")
     if item["number_of_episodes"] is not None:

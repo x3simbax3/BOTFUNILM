@@ -127,8 +127,7 @@ async def list_tracked_series(
             WHERE um.user_id = ? AND (
                 um.is_tracking = 1
                 OR (
-                    m.content_format = 'full_length'
-                    AND m.is_released = 0
+                    m.is_released = 0
                     AND um.status = 'planned'
                 )
             )

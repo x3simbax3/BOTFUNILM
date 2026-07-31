@@ -66,6 +66,7 @@ from src.models import (
     SeriesReleaseSnapshot,
     current_media_id,
     is_active_series,
+    is_library_item_editable,
 )
 from src.posters import poster_input, sent_photo_file_id
 from src.tmdb import TmdbError, fetch_title_details
@@ -243,6 +244,7 @@ async def show_library_item(
     keyboard = library_item_keyboard(
         planned=item["user_status"] == "planned",
         released=bool(dict(item).get("is_released", True)),
+        editable=is_library_item_editable(item),
         tracking_available=(
             item["content_format"] == "series"
             and is_active_series(item["tmdb_status"], item["tmdb_in_production"])
@@ -304,6 +306,9 @@ async def open_library_item_edit(callback: CallbackQuery, state: FSMContext) -> 
     item = await _current_library_item(callback, state)
     if item is None:
         return
+    if not is_library_item_editable(item):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
     await edit_message(
         callback.message,
         ITEM_EDIT_PROMPT,
@@ -345,7 +350,9 @@ async def edit_library_item_rating(
     item = await _current_library_item(callback, state)
     if item is None:
         return
-    if not bool(dict(item).get("is_released", True)):
+    if not is_library_item_editable(item) or not bool(
+        dict(item).get("is_released", True)
+    ):
         await callback.answer(UNRELEASED_TITLE, show_alert=True)
         return
     categories = rating_categories(item["content_type"])
@@ -380,6 +387,11 @@ async def change_library_item_progress(
         return
     if not bool(dict(item).get("is_released", True)):
         await callback.answer(UNRELEASED_TITLE, show_alert=True)
+        return
+    if callback.data == "library:item:edit:progress" and not is_library_item_editable(
+        item
+    ):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
         return
 
     if item["content_format"] == "series":
@@ -498,6 +510,7 @@ async def _edit_library_item_message(message: Message, item) -> None:
         reply_markup=library_item_keyboard(
             planned=item["user_status"] == "planned",
             released=bool(dict(item).get("is_released", True)),
+            editable=is_library_item_editable(item),
             tracking_available=(
                 item["content_format"] == "series"
                 and is_active_series(item["tmdb_status"], item["tmdb_in_production"])

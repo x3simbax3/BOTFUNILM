@@ -17,6 +17,7 @@ async def save_user_media(
     status: str,
     user_rating: int | None = None,
     episodes_watched: int | None = None,
+    is_tracking: bool = False,
     rating_details: Mapping[str, int] | None = None,
     database_url: str | None = None,
     connection: aiosqlite.Connection | None = None,
@@ -28,15 +29,24 @@ async def save_user_media(
         await active_connection.execute(
             """
             INSERT INTO user_media (
-                user_id, media_id, status, user_rating, episodes_watched, added_at
-            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                user_id, media_id, status, user_rating, episodes_watched,
+                is_tracking, added_at
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(user_id, media_id) DO UPDATE SET
                 status = excluded.status,
                 user_rating = excluded.user_rating,
                 episodes_watched = excluded.episodes_watched,
+                is_tracking = excluded.is_tracking,
                 last_watched_at = CURRENT_TIMESTAMP
             """,
-            (user_id, media_id, status, user_rating, episodes_watched),
+            (
+                user_id,
+                media_id,
+                status,
+                user_rating,
+                episodes_watched,
+                int(is_tracking),
+            ),
         )
         if rating_details is not None:
             await replace_user_rating_details(

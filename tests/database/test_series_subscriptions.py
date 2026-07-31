@@ -79,6 +79,24 @@ class SeriesSubscriptionDatabaseTests(DatabaseTestCase):
 
         self.assertEqual([int(item["id"]) for item in items], [media_id])
 
+    async def test_subscription_list_contains_planned_future_series(self) -> None:
+        media_id = await self.create_user_media(
+            status="planned",
+            media_kwargs={
+                "tmdb_id": 100,
+                "content_format": "series",
+                "content_type": "movie",
+                "title": "Будущий сериал",
+                "first_air_date": "2999-08-06",
+                "available_episode_count": 0,
+                "is_released": False,
+            },
+        )
+
+        items = await list_tracked_series(123, database_url=self.database_url)
+
+        self.assertEqual([int(item["id"]) for item in items], [media_id])
+
     async def test_subscription_limit_is_fifty(self) -> None:
         for tmdb_id in range(1000, 1050):
             media_id = await self._active_user_series(tmdb_id)

@@ -125,10 +125,63 @@ class PlannedMediaServiceTests(DatabaseTestCase):
             user_id=123,
             media_id=7,
             status="planned",
+            is_tracking=False,
             connection=sentinel.connection,
         )
         self.assertEqual(result.media_id, 7)
         self.assertIs(result.series_snapshot, snapshot)
+        self.assertFalse(result.tracking_enabled)
+
+    async def test_future_series_is_automatically_tracked(self) -> None:
+        workflow = MediaWorkflowData(
+            media_id=None,
+            tmdb_id=42,
+            tmdb_title="Будущий сериал",
+            tmdb_description=None,
+            tmdb_poster_path=None,
+            tmdb_original_title=None,
+            tmdb_release_date=None,
+            tmdb_rating=None,
+            content_format="series",
+            content_type="movie",
+            is_released=False,
+        )
+        snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=1,
+            number_of_episodes=8,
+            seasons=(SeriesSeason(1, "Сезон 1", 8, 0),),
+            status="Planned",
+            in_production=True,
+        )
+        with (
+            patch.object(
+                planned_media,
+                "fetch_tv_details",
+                AsyncMock(return_value=snapshot),
+            ),
+            patch.object(
+                planned_media,
+                "ensure_media",
+                AsyncMock(return_value=7),
+            ),
+            patch.object(
+                planned_media,
+                "update_media_series_release_info",
+                AsyncMock(),
+            ),
+            patch.object(planned_media, "save_user_media", AsyncMock()) as save,
+            patch.object(planned_media, "connection_scope", connection_scope_stub),
+        ):
+            result = await planned_media.save_planned_media(123, workflow)
+
+        save.assert_awaited_once_with(
+            user_id=123,
+            media_id=7,
+            status="planned",
+            is_tracking=True,
+            connection=sentinel.connection,
+        )
+        self.assertTrue(result.tracking_enabled)
 
     async def test_movie_plan_does_not_request_series_metadata(self) -> None:
         workflow = MediaWorkflowData(

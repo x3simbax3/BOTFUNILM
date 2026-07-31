@@ -1,6 +1,6 @@
 import unittest
 
-from src.models import MediaWorkflowData, current_media_id
+from src.models import MediaWorkflowData, current_media_id, is_library_item_editable
 
 
 class MediaWorkflowDataTests(unittest.TestCase):
@@ -59,6 +59,42 @@ class MediaWorkflowDataTests(unittest.TestCase):
 
         self.assertEqual(workflow.tmdb_release_date, "2026-01-01")
         self.assertEqual(workflow.content_format, "series")
+
+    def test_item_is_editable_only_after_watch_data_is_saved(self) -> None:
+        self.assertFalse(
+            is_library_item_editable(
+                {
+                    "content_format": "full_length",
+                    "user_status": "planned",
+                }
+            )
+        )
+        self.assertTrue(
+            is_library_item_editable(
+                {
+                    "content_format": "full_length",
+                    "user_status": "completed",
+                }
+            )
+        )
+        self.assertFalse(
+            is_library_item_editable(
+                {
+                    "content_format": "series",
+                    "user_status": "planned",
+                    "episodes_watched": 0,
+                }
+            )
+        )
+        self.assertTrue(
+            is_library_item_editable(
+                {
+                    "content_format": "series",
+                    "user_status": "watching",
+                    "episodes_watched": 1,
+                }
+            )
+        )
 
 
 if __name__ == "__main__":

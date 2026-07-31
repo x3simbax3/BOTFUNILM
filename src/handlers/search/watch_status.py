@@ -57,11 +57,14 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.message.edit_text(
             planned_title_saved_text(
                 workflow.tmdb_title,
-                tracking_enabled=False if is_ongoing else None,
+                tracking_enabled=result.tracking_enabled if is_ongoing else None,
             ),
             parse_mode="HTML",
             reply_markup=(
-                post_add_tracking_keyboard(result.media_id, False)
+                post_add_tracking_keyboard(
+                    result.media_id,
+                    result.tracking_enabled,
+                )
                 if is_ongoing
                 else None
             ),

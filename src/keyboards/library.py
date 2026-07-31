@@ -202,6 +202,7 @@ def library_item_keyboard(
     *,
     planned: bool = False,
     released: bool = True,
+    editable: bool = True,
     tracking_available: bool = False,
     tracking_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
@@ -215,7 +216,7 @@ def library_item_keyboard(
                 )
             ]
         )
-    if tracking_available:
+    if tracking_available and released:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -228,8 +229,8 @@ def library_item_keyboard(
                 )
             ]
         )
-    rows.extend(
-        [
+    if editable and not planned:
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=text.EDIT_ITEM,
@@ -239,13 +240,23 @@ def library_item_keyboard(
                     text=text.DELETE_ITEM,
                     callback_data="library:item:delete",
                 ),
-            ],
+            ]
+        )
+    else:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    text=text.TO_LIBRARY,
-                    callback_data="library:back",
+                    text=text.DELETE_ITEM,
+                    callback_data="library:item:delete",
                 )
-            ],
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=text.TO_LIBRARY,
+                callback_data="library:back",
+            )
         ]
     )
     return InlineKeyboardMarkup(

@@ -1,4 +1,8 @@
-from .media_workflow import MediaWorkflowData, current_media_id
+from .media_workflow import (
+    MediaWorkflowData,
+    current_media_id,
+    is_library_item_editable,
+)
 from .series import (
     ACTIVE_SERIES_STATUSES,
     SeriesEpisode,
@@ -15,4 +19,5 @@ __all__ = (
     "SeriesSeason",
     "current_media_id",
     "is_active_series",
+    "is_library_item_editable",
 )

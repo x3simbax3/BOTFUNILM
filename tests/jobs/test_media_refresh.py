@@ -9,6 +9,7 @@ from src.database.media_release_notifications import (
 from src.database.series import get_user_season_progress, save_user_series_progress
 from src.database.series_subscriptions import (
     get_notification_batch,
+    list_tracked_series,
     prepare_notification_batches,
     set_series_subscription,
 )
@@ -148,6 +149,50 @@ class MediaRefreshDatabaseTests(DatabaseTestCase):
         )
         self.assertEqual(items[0].released_count, 1)
         self.assertEqual(items[0].episode_number, 4)
+
+    async def test_series_premiere_sends_one_notification_and_stays_tracked(
+        self,
+    ) -> None:
+        media_id = await self.create_user_media(
+            status="planned",
+            is_tracking=True,
+            media_kwargs={
+                "tmdb_id": 301,
+                "content_format": "series",
+                "content_type": "movie",
+                "title": "Будущий сериал",
+                "number_of_episodes": 8,
+                "available_episode_count": 0,
+                "is_released": False,
+            },
+        )
+        snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=1,
+            number_of_episodes=8,
+            seasons=(SeriesSeason(1, "Season 1", 8, 1),),
+            status="Returning Series",
+            in_production=True,
+            last_episode_to_air=SeriesEpisode(1, 1, "2026-07-30"),
+        )
+
+        await save_media_refresh(
+            media_id,
+            snapshot,
+            "daily",
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(
+            await get_pending_release_users(database_url=self.database_url),
+            [123],
+        )
+        self.assertEqual(
+            await prepare_notification_batches(database_url=self.database_url),
+            [],
+        )
+        tracked = await list_tracked_series(123, database_url=self.database_url)
+        self.assertEqual([int(item["id"]) for item in tracked], [media_id])
+        self.assertEqual(tracked[0]["user_status"], "planned")
 
     async def test_daily_selects_only_due_active_series(self) -> None:
         active_id = await self.create_series(tmdb_id=101, title="Active")

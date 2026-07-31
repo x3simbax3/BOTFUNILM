@@ -38,7 +38,7 @@ from src.lang import (
     replace_tracking_status,
     tracked_series_text,
 )
-from src.models import current_media_id, is_active_series
+from src.models import current_media_id, is_active_series, is_library_item_editable
 
 router = Router(name="tracking")
 TRACKED_PAGE_SIZE = 10
@@ -124,6 +124,7 @@ async def toggle_library_subscription(
         reply_markup=library_item_keyboard(
             planned=item["user_status"] == "planned",
             released=bool(dict(item).get("is_released", True)),
+            editable=is_library_item_editable(item),
             tracking_available=is_active_series(
                 item["tmdb_status"], item["tmdb_in_production"]
             ),

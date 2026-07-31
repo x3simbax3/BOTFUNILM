@@ -9,7 +9,6 @@ from src.database.media import update_movie_release_availability
 from src.database.series_release import update_media_series_release_info
 from src.database.user_media import save_user_media
 from src.models import MediaWorkflowData, SeriesReleaseSnapshot
-from src.release_availability import release_date_has_passed
 from src.services.media import ensure_media
 from src.services.series_metadata import (
     SeriesMetadataError,
@@ -23,6 +22,7 @@ from src.tmdb_series import fetch_tv_details
 class PlannedMediaResult:
     media_id: int
     series_snapshot: SeriesReleaseSnapshot | None = None
+    tracking_enabled: bool = False
 
 
 async def save_planned_media(
@@ -36,8 +36,9 @@ async def save_planned_media(
     is_released = (
         snapshot.available_episode_count > 0
         if snapshot is not None
-        else release_date_has_passed(workflow.tmdb_release_date)
+        else workflow.is_released
     )
+    tracking_enabled = workflow.content_format == "series" and not is_released
     async with connection_scope(database_url) as connection:
         media_id = await ensure_media(
             workflow.to_fsm_dict(),
@@ -68,9 +69,14 @@ async def save_planned_media(
             user_id=user_id,
             media_id=media_id,
             status="planned",
+            is_tracking=tracking_enabled,
             connection=connection,
         )
-    return PlannedMediaResult(media_id=media_id, series_snapshot=snapshot)
+    return PlannedMediaResult(
+        media_id=media_id,
+        series_snapshot=snapshot,
+        tracking_enabled=tracking_enabled,
+    )
 
 
 async def _series_snapshot(

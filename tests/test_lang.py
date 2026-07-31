@@ -165,6 +165,28 @@ class LocalizationTests(unittest.TestCase):
         self.assertIn("<b>Описание</b>\nОписание", result)
         self.assertNotIn("<blockquote>", result)
 
+    def test_unreleased_item_without_date_shows_unknown_premiere(self) -> None:
+        result = lang.library_item_text(
+            {
+                "title": "Будущий фильм",
+                "original_title": None,
+                "description": None,
+                "content_format": "full_length",
+                "content_type": "movie",
+                "user_status": "planned",
+                "user_rating": None,
+                "rating": None,
+                "release_date": None,
+                "first_air_date": None,
+                "number_of_seasons": None,
+                "number_of_episodes": None,
+                "library_users_count": 1,
+                "is_released": False,
+            }
+        )
+
+        self.assertIn("Дата премьеры пока неизвестна", result)
+
     def test_library_item_uses_combined_media_kind_and_styled_watching_icon(
         self,
     ) -> None:
