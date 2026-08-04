@@ -1,8 +1,10 @@
 from src.database.admin import (
     get_admin_libraries,
     get_admin_overview,
+    get_admin_system,
     get_admin_user,
     get_admin_users,
+    toggle_feature,
 )
 from src.database.bot_users import (
     mark_bot_user_inactive,
@@ -197,3 +199,30 @@ class AdminLibrariesDatabaseTests(DatabaseTestCase):
         self.assertIsNone(libraries.average_rating)
         self.assertEqual(libraries.popular_movies, ())
         self.assertEqual(libraries.popular_series, ())
+
+
+class AdminSystemDatabaseTests(DatabaseTestCase):
+    async def test_returns_catalog_queues_database_and_features(self) -> None:
+        await self.create_series(title="Due series")
+        await self.create_media(title="Movie")
+
+        system = await get_admin_system(database_url=self.database_url)
+
+        self.assertEqual(system.catalog_items, 2)
+        self.assertEqual(system.weekly_overdue, 1)
+        self.assertEqual(system.daily_overdue, 0)
+        self.assertGreater(system.database_size_bytes, 0)
+        self.assertEqual(system.database_journal_mode, "wal")
+        self.assertEqual(system.media_refresh_enabled, 1)
+        self.assertEqual(system.notifications_enabled, 1)
+        self.assertEqual(system.news_enabled, 1)
+
+    async def test_toggles_only_known_feature(self) -> None:
+        enabled = await toggle_feature("news", 123, database_url=self.database_url)
+        self.assertFalse(enabled)
+
+        system = await get_admin_system(database_url=self.database_url)
+        self.assertEqual(system.news_enabled, 0)
+
+        with self.assertRaisesRegex(ValueError, "Unknown feature"):
+            await toggle_feature("unknown", 123, database_url=self.database_url)

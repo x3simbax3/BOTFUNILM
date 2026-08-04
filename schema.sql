@@ -270,5 +270,14 @@ CREATE TABLE notification_delivery_runs (
 CREATE INDEX ix_notification_delivery_runs_created
     ON notification_delivery_runs (created_at, notification_type);
 
+CREATE TABLE bot_features (
+    feature      TEXT NOT NULL PRIMARY KEY,
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    updated_at   TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    updated_by   INTEGER,
+    CHECK (`feature` IN ('media_refresh', 'notifications', 'news')),
+    CHECK (`enabled` IN (0, 1))
+);
+
 -- Library-count and series-progress triggers are installed by migrations.
 -- Atlas Community cannot represent SQLite triggers in a declarative schema.

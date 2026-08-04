@@ -18,6 +18,7 @@ class AdminKeyboardTests(KeyboardTestCase):
                 ["admin:activity:7"],
                 ["admin:libraries"],
                 ["admin:notifications"],
+                ["admin:system", "admin:manage"],
                 ["admin:overview"],
             ],
         )

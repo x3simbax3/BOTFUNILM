@@ -9,6 +9,8 @@ ADMIN_INVALID_CALLBACK = "Некорректная команда"
 ADMIN_ACTIVITY_FAILED = "Не удалось загрузить активность"
 ADMIN_LIBRARIES_FAILED = "Не удалось загрузить статистику библиотек"
 ADMIN_NOTIFICATIONS_FAILED = "Не удалось загрузить статистику уведомлений"
+ADMIN_SYSTEM_FAILED = "Не удалось загрузить состояние системы"
+ADMIN_ACTION_FAILED = "Не удалось выполнить действие"
 
 
 def admin_overview_text(
@@ -258,6 +260,72 @@ def admin_notifications_text(
 Последняя рассылка · {last_delivery}"""
 
 
+def admin_system_text(
+    *,
+    catalog_items: int,
+    tmdb_errors: int,
+    daily_overdue: int,
+    weekly_overdue: int,
+    pending_series_notifications: int,
+    pending_release_notifications: int,
+    database_size_bytes: int,
+    database_free_bytes: int,
+    database_journal_mode: str,
+    redis_available: bool,
+    queued_jobs: int,
+    worker_state: str | None,
+    worker_job: str | None,
+    worker_updated_at: str | None,
+    generated_at: str,
+) -> str:
+    redis = "доступен" if redis_available else "недоступен"
+    worker = {
+        "idle": "ожидает",
+        "running": "выполняет задачу",
+        "failed": "ошибка последней задачи",
+    }.get(worker_state, "нет heartbeat")
+    worker_details = f" · {html.escape(worker_job)}" if worker_job else ""
+    heartbeat = worker_updated_at or "—"
+    size_mb = database_size_bytes / 1024**2
+    free_mb = database_free_bytes / 1024**2
+    return f"""━━━  <b>Админка · Система</b>  ━━━
+<i>Обновлено {generated_at} UTC</i>
+
+<b>Каталог и TMDB</b>
+Тайтлов · <b>{catalog_items}</b>
+Ошибок последнего обновления · {tmdb_errors}
+Просрочены: ежедневные / недельные · {daily_overdue} / {weekly_overdue}
+
+<b>Очереди уведомлений</b>
+Новые серии / релизы · {pending_series_notifications} / {pending_release_notifications}
+Ручные задачи · {queued_jobs}
+
+<b>Инфраструктура</b>
+Media worker · {worker}{worker_details}
+Heartbeat · {heartbeat}
+Redis · {redis}
+SQLite · доступна · {size_mb:.1f} МБ, свободно {free_mb:.1f} МБ
+Журнал SQLite · {html.escape(database_journal_mode)}"""
+
+
+def admin_management_text(
+    *, media_refresh: bool, notifications: bool, news: bool
+) -> str:
+    def status(enabled: bool) -> str:
+        return "включено" if enabled else "выключено"
+
+    return f"""━━━  <b>Админка · Управление</b>  ━━━
+
+Ручные задачи ставятся в очередь media worker.
+
+<b>Автоматические функции</b>
+Обновление каталога · {status(media_refresh)}
+Уведомления о релизах · {status(notifications)}
+Новости · {status(news)}
+
+<i>Каждое изменение потребует отдельного подтверждения.</i>"""
+
+
 __all__ = (
     "ADMIN_ACCESS_DENIED",
     "ADMIN_ACTIVITY_FAILED",
@@ -266,12 +334,16 @@ __all__ = (
     "ADMIN_INVALID_CALLBACK",
     "ADMIN_LIBRARIES_FAILED",
     "ADMIN_NOTIFICATIONS_FAILED",
+    "ADMIN_SYSTEM_FAILED",
+    "ADMIN_ACTION_FAILED",
     "ADMIN_USERS_FAILED",
     "ADMIN_USER_NOT_FOUND",
     "admin_overview_text",
     "admin_activity_text",
     "admin_libraries_text",
     "admin_notifications_text",
+    "admin_system_text",
+    "admin_management_text",
     "admin_user_text",
     "admin_users_text",
 )

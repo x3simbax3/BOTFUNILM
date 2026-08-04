@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import secrets
@@ -31,6 +32,13 @@ from config.config import (
     REDIS_URL,
     THENEWSAPI_KEY,
 )
+from src.admin_runtime import (
+    ADMIN_JOB_QUEUE,
+    ADMIN_JOBS,
+    MEDIA_WORKER_HEARTBEAT,
+    WORKER_HEARTBEAT_TTL_SECONDS,
+)
+from src.database.admin import is_feature_enabled
 from src.database.connection import connect_database
 from src.http_client import close_http_session
 from src.jobs.media_refresh import (
@@ -383,11 +391,17 @@ async def run_worker(
     database_url: str | None = None,
 ) -> None:
     timezone = _worker_timezone()
-    if await has_due_media("weekly", database_url=database_url):
+    refresh_enabled = await is_feature_enabled(
+        "media_refresh", database_url=database_url
+    )
+    if refresh_enabled and await has_due_media("weekly", database_url=database_url):
         await _run_locked_or_log("weekly", redis, database_url=database_url)
-    if await has_due_media("daily", database_url=database_url):
+    if refresh_enabled and await has_due_media("daily", database_url=database_url):
         await _run_locked_or_log("daily", redis, database_url=database_url)
-    if datetime.now(timezone).hour >= NOTIFICATION_HOUR:
+    if (
+        await is_feature_enabled("notifications", database_url=database_url)
+        and datetime.now(timezone).hour >= NOTIFICATION_HOUR
+    ):
         await _run_notifications_locked_or_log(
             redis,
             bot,
@@ -404,19 +418,26 @@ async def run_worker(
             round(delay),
         )
         await asyncio.sleep(delay)
-        if job == "notifications":
+        if job == "notifications" and await is_feature_enabled(
+            "notifications", database_url=database_url
+        ):
             await _run_notifications_locked_or_log(
                 redis,
                 bot,
                 database_url=database_url,
             )
-        else:
+        elif job != "notifications" and await is_feature_enabled(
+            "media_refresh", database_url=database_url
+        ):
             await _run_locked_or_log(job, redis, database_url=database_url)
             if job == "weekly" and await has_due_media(
                 "daily", database_url=database_url
             ):
                 await _run_locked_or_log("daily", redis, database_url=database_url)
-            if datetime.now(timezone).hour >= NOTIFICATION_HOUR:
+            if (
+                await is_feature_enabled("notifications", database_url=database_url)
+                and datetime.now(timezone).hour >= NOTIFICATION_HOUR
+            ):
                 await _run_notifications_locked_or_log(
                     redis,
                     bot,
@@ -483,11 +504,62 @@ async def run_news_scheduler(
             round(delay),
         )
         await asyncio.sleep(delay)
-        await _run_news_locked_or_log(
-            redis,
-            bot,
-            database_url=database_url,
-        )
+        if await is_feature_enabled("news", database_url=database_url):
+            await _run_news_locked_or_log(
+                redis,
+                bot,
+                database_url=database_url,
+            )
+
+
+async def run_admin_job_listener(
+    redis: Redis,
+    bot: Bot,
+    *,
+    database_url: str | None = None,
+) -> None:
+    """Consume the fixed set of commands confirmed in the Telegram admin UI."""
+    while True:
+        await _set_worker_heartbeat(redis, "idle")
+        item = await redis.blpop(ADMIN_JOB_QUEUE, timeout=5)
+        if item is None:
+            continue
+        job: str | None = None
+        try:
+            payload = json.loads(item[1])
+            job = payload.get("job")
+            if job not in ADMIN_JOBS:
+                raise ValueError("Unknown admin job")
+            await _set_worker_heartbeat(redis, "running", job)
+            if job in {"daily", "weekly"}:
+                await _run_locked_or_log(job, redis, database_url=database_url)
+            elif job == "notifications":
+                await _run_notifications_locked_or_log(
+                    redis, bot, database_url=database_url
+                )
+            else:
+                if not THENEWSAPI_KEY:
+                    raise RuntimeError("THENEWSAPI_KEY is required")
+                await _run_news_locked_or_log(redis, bot, database_url=database_url)
+        except Exception:
+            logger.exception("Admin worker job failed")
+            await _set_worker_heartbeat(redis, "failed", job)
+
+
+async def _set_worker_heartbeat(
+    redis: Redis, state: str, job: str | None = None
+) -> None:
+    await redis.set(
+        MEDIA_WORKER_HEARTBEAT,
+        json.dumps(
+            {
+                "state": state,
+                "job": job,
+                "updated_at": datetime.now(ZoneInfo("UTC")).isoformat(),
+            }
+        ),
+        ex=WORKER_HEARTBEAT_TTL_SECONDS,
+    )
 
 
 async def _run_notifications_locked_or_log(
@@ -656,6 +728,7 @@ async def async_main(arguments: list[str] | None = None) -> None:
                 await asyncio.gather(
                     run_worker(redis, bot),
                     run_news_scheduler(redis, bot),
+                    run_admin_job_listener(redis, bot),
                 )
     finally:
         await close_http_session()

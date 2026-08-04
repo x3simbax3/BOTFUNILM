@@ -17,4 +17,10 @@ class MenuState(StatesGroup):
     tracking_series = State()
 
 
-__all__ = ("MenuState",)
+class AdminState(StatesGroup):
+    waiting_message_user = State()
+    waiting_message_text = State()
+    confirming_message = State()
+
+
+__all__ = ("AdminState", "MenuState")

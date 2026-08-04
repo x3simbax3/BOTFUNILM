@@ -1,8 +1,12 @@
 from .admin import (
     admin_activity_keyboard,
+    admin_confirmation_keyboard,
     admin_libraries_keyboard,
+    admin_management_keyboard,
+    admin_message_confirmation_keyboard,
     admin_notifications_keyboard,
     admin_overview_keyboard,
+    admin_system_keyboard,
     admin_user_keyboard,
     admin_users_keyboard,
 )
@@ -32,6 +36,10 @@ __all__ = (
     "admin_activity_keyboard",
     "admin_libraries_keyboard",
     "admin_notifications_keyboard",
+    "admin_system_keyboard",
+    "admin_management_keyboard",
+    "admin_confirmation_keyboard",
+    "admin_message_confirmation_keyboard",
     "admin_overview_keyboard",
     "admin_user_keyboard",
     "admin_users_keyboard",
