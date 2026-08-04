@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, patch
 from src.database.admin import (
     AdminActivity,
     AdminActivityDay,
+    AdminLibraries,
+    AdminNotifications,
     AdminOverview,
+    AdminPopularTitle,
     AdminUserDetails,
     AdminUserPage,
     AdminUserSummary,
@@ -13,6 +16,8 @@ from src.database.admin import (
 from src.handlers import admin as admin_handlers
 from src.keyboards import (
     admin_activity_keyboard,
+    admin_libraries_keyboard,
+    admin_notifications_keyboard,
     admin_overview_keyboard,
     admin_user_keyboard,
     admin_users_keyboard,
@@ -109,6 +114,51 @@ def activity() -> AdminActivity:
             ),
         ),
         generated_at="2026-08-04 12:00:00",
+    )
+
+
+def libraries() -> AdminLibraries:
+    return AdminLibraries(
+        total_items=12,
+        users_with_library=3,
+        planned_items=3,
+        watching_items=2,
+        completed_items=5,
+        on_hold_items=1,
+        dropped_items=1,
+        full_length_items=7,
+        series_items=5,
+        movie_items=6,
+        anime_items=4,
+        cartoon_items=2,
+        rated_items=6,
+        average_rating=8.5,
+        tracked_series=2,
+        popular_movies=(AdminPopularTitle(1, "Movie <One>", 3),),
+        popular_series=(AdminPopularTitle(2, "Series & Two", 2),),
+        generated_at="2026-08-04 12:00:00",
+    )
+
+
+def notifications() -> AdminNotifications:
+    return AdminNotifications(
+        news_subscribers=8,
+        news_opted_out=2,
+        series_subscribers=4,
+        series_subscriptions=7,
+        pending_series_notifications=3,
+        sent_series_notifications=12,
+        pending_release_notifications=2,
+        sent_release_notifications=5,
+        news_sent_30d=20,
+        release_messages_sent_30d=6,
+        selected_30d=30,
+        sent_30d=26,
+        failed_30d=3,
+        deactivated_30d=1,
+        blocked_users=2,
+        last_delivery_at="2026-08-04 12:00:00",
+        generated_at="2026-08-04 12:05:00",
     )
 
 
@@ -257,6 +307,51 @@ class AdminHandlerTests(unittest.IsolatedAsyncioTestCase):
             callback.answers,
             [{"text": "Некорректная команда", "show_alert": True}],
         )
+
+    async def test_shows_library_statistics_and_escapes_titles(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("admin:libraries", message)
+
+        with patch.object(
+            admin_handlers,
+            "get_admin_libraries",
+            new=AsyncMock(return_value=libraries()),
+        ) as get_libraries:
+            await admin_handlers.show_admin_libraries(callback)
+
+        get_libraries.assert_awaited_once_with()
+        text = message.edit_text_calls[0]["text"]
+        self.assertIn("Всего записей · <b>12</b>", text)
+        self.assertIn("Movie &lt;One&gt; · 3", text)
+        self.assertIn("Series &amp; Two · 2", text)
+        self.assertEqual(
+            message.edit_text_calls[0]["reply_markup"],
+            admin_libraries_keyboard(),
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_shows_notification_statistics(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("admin:notifications", message)
+
+        with patch.object(
+            admin_handlers,
+            "get_admin_notifications",
+            new=AsyncMock(return_value=notifications()),
+        ) as get_notifications:
+            await admin_handlers.show_admin_notifications(callback)
+
+        get_notifications.assert_awaited_once_with()
+        text = message.edit_text_calls[0]["text"]
+        self.assertIn("Получают новости · 8", text)
+        self.assertIn("Доставлено · 26 (86.7%)", text)
+        self.assertIn("Ошибки Telegram · 3", text)
+        self.assertIn("Заблокировали бота · 2", text)
+        self.assertEqual(
+            message.edit_text_calls[0]["reply_markup"],
+            admin_notifications_keyboard(),
+        )
+        self.assertEqual(callback.answers, [{"text": None}])
 
     async def test_denies_unconfigured_user_command(self) -> None:
         message = MessageStub("/admin")

@@ -9,6 +9,7 @@ import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
+import aiosqlite
 from aiogram import Bot
 from aiogram.exceptions import (
     TelegramAPIError,
@@ -19,6 +20,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from redis.asyncio import Redis
 
 from src.database.bot_users import get_news_recipients, mark_bot_user_inactive
+from src.database.notification_delivery import record_notification_delivery
 from src.news_api import (
     NewsApiAuthenticationError,
     NewsApiError,
@@ -157,6 +159,17 @@ async def send_news_broadcast(
         stats.failed,
         stats.deactivated,
     )
+    try:
+        await record_notification_delivery(
+            "news",
+            selected=stats.selected,
+            sent=stats.sent,
+            failed=stats.failed,
+            deactivated=stats.deactivated,
+            database_url=database_url,
+        )
+    except aiosqlite.Error:
+        logger.exception("Failed to persist news delivery statistics")
     return stats
 
 

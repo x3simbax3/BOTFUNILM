@@ -1,4 +1,9 @@
-from src.database.admin import get_admin_overview, get_admin_user, get_admin_users
+from src.database.admin import (
+    get_admin_libraries,
+    get_admin_overview,
+    get_admin_user,
+    get_admin_users,
+)
 from src.database.bot_users import (
     mark_bot_user_inactive,
     register_bot_user,
@@ -122,3 +127,73 @@ class AdminOverviewDatabaseTests(DatabaseTestCase):
         self.assertEqual(overview.total_users, 0)
         self.assertEqual(overview.activation_percent, 0)
         self.assertEqual(overview.average_library_items, 0)
+
+
+class AdminLibrariesDatabaseTests(DatabaseTestCase):
+    async def test_returns_distributions_ratings_and_popular_titles(self) -> None:
+        movie_id = await self.create_media(title="Popular Movie")
+        series_id = await self.create_media(
+            tmdb_id=43,
+            content_format="series",
+            content_type="anime",
+            title="Popular Series",
+        )
+        cartoon_id = await self.create_media(
+            tmdb_id=44,
+            content_type="cartoon",
+            title="Cartoon",
+        )
+        await self.create_user_media(
+            user_id=1,
+            media_id=movie_id,
+            status="completed",
+            user_rating=8,
+        )
+        await self.create_user_media(
+            user_id=2,
+            media_id=movie_id,
+            status="planned",
+            user_rating=10,
+        )
+        await self.create_user_media(
+            user_id=1,
+            media_id=series_id,
+            status="watching",
+            is_tracking=True,
+        )
+        await self.create_user_media(
+            user_id=1,
+            media_id=cartoon_id,
+            status="dropped",
+        )
+
+        libraries = await get_admin_libraries(database_url=self.database_url)
+
+        self.assertEqual(libraries.total_items, 4)
+        self.assertEqual(libraries.users_with_library, 2)
+        self.assertEqual(libraries.average_items_per_user, 2)
+        self.assertEqual(libraries.planned_items, 1)
+        self.assertEqual(libraries.watching_items, 1)
+        self.assertEqual(libraries.completed_items, 1)
+        self.assertEqual(libraries.on_hold_items, 0)
+        self.assertEqual(libraries.dropped_items, 1)
+        self.assertEqual(libraries.full_length_items, 3)
+        self.assertEqual(libraries.series_items, 1)
+        self.assertEqual(libraries.movie_items, 2)
+        self.assertEqual(libraries.anime_items, 1)
+        self.assertEqual(libraries.cartoon_items, 1)
+        self.assertEqual(libraries.rated_items, 2)
+        self.assertEqual(libraries.average_rating, 9)
+        self.assertEqual(libraries.tracked_series, 1)
+        self.assertEqual(libraries.popular_movies[0].title, "Popular Movie")
+        self.assertEqual(libraries.popular_movies[0].library_users, 2)
+        self.assertEqual(libraries.popular_series[0].title, "Popular Series")
+
+    async def test_empty_database_returns_zeroes_and_empty_tops(self) -> None:
+        libraries = await get_admin_libraries(database_url=self.database_url)
+
+        self.assertEqual(libraries.total_items, 0)
+        self.assertEqual(libraries.average_items_per_user, 0)
+        self.assertIsNone(libraries.average_rating)
+        self.assertEqual(libraries.popular_movies, ())
+        self.assertEqual(libraries.popular_series, ())

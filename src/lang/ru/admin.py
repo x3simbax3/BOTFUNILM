@@ -7,6 +7,8 @@ ADMIN_USERS_FAILED = "Не удалось загрузить пользоват�
 ADMIN_USER_NOT_FOUND = "Пользователь не найден"
 ADMIN_INVALID_CALLBACK = "Некорректная команда"
 ADMIN_ACTIVITY_FAILED = "Не удалось загрузить активность"
+ADMIN_LIBRARIES_FAILED = "Не удалось загрузить статистику библиотек"
+ADMIN_NOTIFICATIONS_FAILED = "Не удалось загрузить статистику уведомлений"
 
 
 def admin_overview_text(
@@ -146,16 +148,130 @@ DAU / WAU / MAU · <b>{dau} / {wau} / {mau}</b>
 <code>{daily_lines}</code>"""
 
 
+def admin_libraries_text(
+    *,
+    total_items: int,
+    users_with_library: int,
+    average_items_per_user: float,
+    planned_items: int,
+    watching_items: int,
+    completed_items: int,
+    on_hold_items: int,
+    dropped_items: int,
+    full_length_items: int,
+    series_items: int,
+    movie_items: int,
+    anime_items: int,
+    cartoon_items: int,
+    rated_items: int,
+    average_rating: float | None,
+    tracked_series: int,
+    popular_movies: tuple[tuple[str, int], ...],
+    popular_series: tuple[tuple[str, int], ...],
+    generated_at: str,
+) -> str:
+    rating = "—" if average_rating is None else f"{average_rating:.1f}"
+
+    def popular_text(items: tuple[tuple[str, int], ...]) -> str:
+        if not items:
+            return "—"
+        return "\n".join(
+            f"{index}. {html.escape(title)} · {users}"
+            for index, (title, users) in enumerate(items, start=1)
+        )
+
+    return f"""━━━  <b>Админка · Библиотеки</b>  ━━━
+<i>Обновлено {generated_at} UTC</i>
+
+<b>Объём</b>
+Всего записей · <b>{total_items}</b>
+Пользователей с библиотекой · {users_with_library}
+В среднем на такого пользователя · {average_items_per_user:.1f}
+
+<b>Статусы</b>
+Хочу посмотреть · {planned_items}
+Смотрю · {watching_items}
+Просмотрено · {completed_items}
+Отложено · {on_hold_items}
+Брошено · {dropped_items}
+
+<b>Форматы и категории</b>
+Полный метр / сериалы · {full_length_items} / {series_items}
+Кино / аниме / мультфильмы · {movie_items} / {anime_items} / {cartoon_items}
+
+<b>Оценки и отслеживание</b>
+С оценкой · {rated_items} · средняя {rating}
+Активные отслеживания · {tracked_series}
+
+<b>Популярный полный метр</b>
+{popular_text(popular_movies)}
+
+<b>Популярные сериалы</b>
+{popular_text(popular_series)}"""
+
+
+def admin_notifications_text(
+    *,
+    news_subscribers: int,
+    news_opted_out: int,
+    series_subscribers: int,
+    series_subscriptions: int,
+    pending_series_notifications: int,
+    sent_series_notifications: int,
+    pending_release_notifications: int,
+    sent_release_notifications: int,
+    news_sent_30d: int,
+    release_messages_sent_30d: int,
+    selected_30d: int,
+    sent_30d: int,
+    failed_30d: int,
+    deactivated_30d: int,
+    success_percent_30d: float,
+    blocked_users: int,
+    last_delivery_at: str | None,
+    generated_at: str,
+) -> str:
+    last_delivery = f"{last_delivery_at} UTC" if last_delivery_at else "ещё не было"
+    return f"""━━━  <b>Админка · Уведомления</b>  ━━━
+<i>Обновлено {generated_at} UTC</i>
+
+<b>Подписки</b>
+Получают новости · {news_subscribers}
+Отключили новости · {news_opted_out}
+Подписчики сериалов · {series_subscribers}
+Активные подписки на сериалы · {series_subscriptions}
+
+<b>Очереди и история</b>
+Новые серии: ожидают / отправлены · {pending_series_notifications} / {sent_series_notifications}
+Выход тайтлов: ожидают / отправлены · {pending_release_notifications} / {sent_release_notifications}
+
+<b>Доставка за 30 дней</b>
+Выбрано получателей · {selected_30d}
+Доставлено · {sent_30d} ({success_percent_30d:.1f}%)
+Новости доставлены · {news_sent_30d}
+Сообщения о релизах · {release_messages_sent_30d}
+Ошибки Telegram · {failed_30d}
+Блокировки при отправке · {deactivated_30d}
+
+<b>Доступность</b>
+Заблокировали бота · {blocked_users}
+Последняя рассылка · {last_delivery}"""
+
+
 __all__ = (
     "ADMIN_ACCESS_DENIED",
     "ADMIN_ACTIVITY_FAILED",
     "ADMIN_CALLBACK_DENIED",
     "ADMIN_OVERVIEW_FAILED",
     "ADMIN_INVALID_CALLBACK",
+    "ADMIN_LIBRARIES_FAILED",
+    "ADMIN_NOTIFICATIONS_FAILED",
     "ADMIN_USERS_FAILED",
     "ADMIN_USER_NOT_FOUND",
     "admin_overview_text",
     "admin_activity_text",
+    "admin_libraries_text",
+    "admin_notifications_text",
     "admin_user_text",
     "admin_users_text",
 )

@@ -105,6 +105,68 @@ class AdminActivity:
     generated_at: str
 
 
+@dataclass(frozen=True)
+class AdminPopularTitle:
+    media_id: int
+    title: str
+    library_users: int
+
+
+@dataclass(frozen=True)
+class AdminLibraries:
+    total_items: int
+    users_with_library: int
+    planned_items: int
+    watching_items: int
+    completed_items: int
+    on_hold_items: int
+    dropped_items: int
+    full_length_items: int
+    series_items: int
+    movie_items: int
+    anime_items: int
+    cartoon_items: int
+    rated_items: int
+    average_rating: float | None
+    tracked_series: int
+    popular_movies: tuple[AdminPopularTitle, ...]
+    popular_series: tuple[AdminPopularTitle, ...]
+    generated_at: str
+
+    @property
+    def average_items_per_user(self) -> float:
+        if not self.users_with_library:
+            return 0.0
+        return self.total_items / self.users_with_library
+
+
+@dataclass(frozen=True)
+class AdminNotifications:
+    news_subscribers: int
+    news_opted_out: int
+    series_subscribers: int
+    series_subscriptions: int
+    pending_series_notifications: int
+    sent_series_notifications: int
+    pending_release_notifications: int
+    sent_release_notifications: int
+    news_sent_30d: int
+    release_messages_sent_30d: int
+    selected_30d: int
+    sent_30d: int
+    failed_30d: int
+    deactivated_30d: int
+    blocked_users: int
+    last_delivery_at: str | None
+    generated_at: str
+
+    @property
+    def success_percent_30d(self) -> float:
+        if not self.selected_30d:
+            return 0.0
+        return self.sent_30d * 100 / self.selected_30d
+
+
 async def get_admin_overview(
     *,
     database_url: str | None = None,
@@ -352,16 +414,177 @@ async def get_admin_activity(
     return AdminActivity(days=days, daily=daily, **totals)
 
 
+async def get_admin_libraries(
+    *,
+    database_url: str | None = None,
+) -> AdminLibraries:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT
+                COUNT(*) AS total_items,
+                COUNT(DISTINCT user_media.user_id) AS users_with_library,
+                COUNT(*) FILTER (WHERE user_media.status = 'planned')
+                    AS planned_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'watching')
+                    AS watching_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'completed')
+                    AS completed_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
+                    AS on_hold_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'dropped')
+                    AS dropped_items,
+                COUNT(*) FILTER (WHERE media.content_format = 'full_length')
+                    AS full_length_items,
+                COUNT(*) FILTER (WHERE media.content_format = 'series')
+                    AS series_items,
+                COUNT(*) FILTER (WHERE media.content_type = 'movie')
+                    AS movie_items,
+                COUNT(*) FILTER (WHERE media.content_type = 'anime')
+                    AS anime_items,
+                COUNT(*) FILTER (WHERE media.content_type = 'cartoon')
+                    AS cartoon_items,
+                COUNT(*) FILTER (WHERE user_media.user_rating IS NOT NULL)
+                    AS rated_items,
+                AVG(user_media.user_rating) AS average_rating,
+                COUNT(*) FILTER (WHERE user_media.is_tracking = 1)
+                    AS tracked_series,
+                CURRENT_TIMESTAMP AS generated_at
+            FROM user_media
+            JOIN media ON media.id = user_media.media_id
+            """
+        ) as cursor:
+            totals = dict(await cursor.fetchone())
+
+        popular_by_format: dict[str, tuple[AdminPopularTitle, ...]] = {}
+        for content_format in ("full_length", "series"):
+            async with connection.execute(
+                """
+                SELECT
+                    media.id AS media_id,
+                    media.title,
+                    COUNT(*) AS library_users
+                FROM user_media
+                JOIN media ON media.id = user_media.media_id
+                WHERE media.content_format = ?
+                GROUP BY media.id
+                ORDER BY library_users DESC, media.title, media.id
+                LIMIT 5
+                """,
+                (content_format,),
+            ) as cursor:
+                popular_by_format[content_format] = tuple(
+                    AdminPopularTitle(**dict(row)) for row in await cursor.fetchall()
+                )
+
+    return AdminLibraries(
+        popular_movies=popular_by_format["full_length"],
+        popular_series=popular_by_format["series"],
+        **totals,
+    )
+
+
+async def get_admin_notifications(
+    *,
+    database_url: str | None = None,
+) -> AdminNotifications:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT
+                (
+                    SELECT COUNT(*) FROM bot_users
+                    WHERE is_active = 1 AND news_enabled = 1
+                ) AS news_subscribers,
+                (
+                    SELECT COUNT(*) FROM bot_users
+                    WHERE news_enabled = 0
+                ) AS news_opted_out,
+                (
+                    SELECT COUNT(DISTINCT user_id) FROM user_media
+                    WHERE is_tracking = 1
+                ) AS series_subscribers,
+                (
+                    SELECT COUNT(*) FROM user_media
+                    WHERE is_tracking = 1
+                ) AS series_subscriptions,
+                (
+                    SELECT COUNT(*)
+                    FROM user_series_notifications AS notifications
+                    LEFT JOIN series_notification_batches AS batches
+                        ON batches.id = notifications.batch_id
+                    WHERE notifications.batch_id IS NULL
+                       OR batches.sent_at IS NULL
+                ) AS pending_series_notifications,
+                (
+                    SELECT COUNT(*)
+                    FROM user_series_notifications AS notifications
+                    JOIN series_notification_batches AS batches
+                        ON batches.id = notifications.batch_id
+                    WHERE batches.sent_at IS NOT NULL
+                ) AS sent_series_notifications,
+                (
+                    SELECT COUNT(*) FROM user_media_release_notifications
+                    WHERE sent_at IS NULL
+                ) AS pending_release_notifications,
+                (
+                    SELECT COUNT(*) FROM user_media_release_notifications
+                    WHERE sent_at IS NOT NULL
+                ) AS sent_release_notifications,
+                COALESCE((
+                    SELECT SUM(sent) FROM notification_delivery_runs
+                    WHERE notification_type = 'news'
+                      AND created_at >= datetime('now', '-30 days')
+                ), 0) AS news_sent_30d,
+                COALESCE((
+                    SELECT SUM(sent) FROM notification_delivery_runs
+                    WHERE notification_type = 'release'
+                      AND created_at >= datetime('now', '-30 days')
+                ), 0) AS release_messages_sent_30d,
+                COALESCE((
+                    SELECT SUM(selected) FROM notification_delivery_runs
+                    WHERE created_at >= datetime('now', '-30 days')
+                ), 0) AS selected_30d,
+                COALESCE((
+                    SELECT SUM(sent) FROM notification_delivery_runs
+                    WHERE created_at >= datetime('now', '-30 days')
+                ), 0) AS sent_30d,
+                COALESCE((
+                    SELECT SUM(failed) FROM notification_delivery_runs
+                    WHERE created_at >= datetime('now', '-30 days')
+                ), 0) AS failed_30d,
+                COALESCE((
+                    SELECT SUM(deactivated) FROM notification_delivery_runs
+                    WHERE created_at >= datetime('now', '-30 days')
+                ), 0) AS deactivated_30d,
+                (
+                    SELECT COUNT(*) FROM bot_users WHERE is_active = 0
+                ) AS blocked_users,
+                (SELECT MAX(created_at) FROM notification_delivery_runs)
+                    AS last_delivery_at,
+                CURRENT_TIMESTAMP AS generated_at
+            """
+        ) as cursor:
+            row = await cursor.fetchone()
+
+    return AdminNotifications(**dict(row))
+
+
 __all__ = (
     "ADMIN_USERS_PAGE_SIZE",
     "AdminActivity",
     "AdminActivityDay",
+    "AdminLibraries",
+    "AdminNotifications",
     "AdminOverview",
+    "AdminPopularTitle",
     "AdminUserDetails",
     "AdminUserPage",
     "AdminUserSummary",
     "get_admin_overview",
     "get_admin_activity",
+    "get_admin_libraries",
+    "get_admin_notifications",
     "get_admin_user",
     "get_admin_users",
 )

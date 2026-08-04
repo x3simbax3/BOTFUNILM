@@ -27,6 +27,8 @@ class MigrationTests(DatabaseTestCase):
         self.assertIn(("ix_bot_users_last_activity", "index"), objects)
         self.assertIn(("bot_user_daily_events", "table"), objects)
         self.assertIn(("ix_bot_user_daily_events_metric", "index"), objects)
+        self.assertIn(("notification_delivery_runs", "table"), objects)
+        self.assertIn(("ix_notification_delivery_runs_created", "index"), objects)
         self.assertIn(("ix_media_search_terms_term", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
         self.assertIn(("ix_user_season_progress_media_id", "index"), objects)

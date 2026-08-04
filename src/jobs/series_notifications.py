@@ -6,14 +6,17 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+import aiosqlite
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 
+from src.database.bot_users import mark_bot_user_inactive
 from src.database.media_release_notifications import (
     get_pending_release_users,
     get_release_notifications,
     mark_release_notifications_sent,
 )
+from src.database.notification_delivery import record_notification_delivery
 from src.database.series_subscriptions import (
     get_notification_batch,
     mark_notification_batch_sent,
@@ -32,6 +35,7 @@ class NotificationStats:
     selected: int = 0
     sent: int = 0
     failed: int = 0
+    deactivated: int = 0
 
 
 async def send_release_notifications(
@@ -72,6 +76,14 @@ async def send_release_notifications(
                 parse_mode="HTML",
                 reply_markup=notification_keyboard(batch.batch_id, 0, total_pages),
             )
+        except TelegramForbiddenError:
+            stats.deactivated += 1
+            await mark_bot_user_inactive(batch.user_id, database_url=database_url)
+            logger.info(
+                "Series notification recipient deactivated: user_id=%s",
+                batch.user_id,
+            )
+            continue
         except TelegramAPIError:
             stats.failed += 1
             logger.exception(
@@ -88,11 +100,23 @@ async def send_release_notifications(
         await asyncio.sleep(SEND_INTERVAL_SECONDS)
 
     logger.info(
-        "Series notifications completed: selected=%s sent=%s failed=%s",
+        "Series notifications completed: selected=%s sent=%s failed=%s deactivated=%s",
         stats.selected,
         stats.sent,
         stats.failed,
+        stats.deactivated,
     )
+    try:
+        await record_notification_delivery(
+            "release",
+            selected=stats.selected,
+            sent=stats.sent,
+            failed=stats.failed,
+            deactivated=stats.deactivated,
+            database_url=database_url,
+        )
+    except aiosqlite.Error:
+        logger.exception("Failed to persist release delivery statistics")
     return stats
 
 
@@ -119,6 +143,17 @@ async def _send_media_release_notifications(
                         text=media_release_notification_text(items),
                         parse_mode="HTML",
                     )
+                except TelegramForbiddenError:
+                    stats.deactivated += 1
+                    await mark_bot_user_inactive(
+                        user_id,
+                        database_url=database_url,
+                    )
+                    logger.info(
+                        "Media release notification recipient deactivated: user_id=%s",
+                        user_id,
+                    )
+                    break
                 except TelegramAPIError:
                     stats.failed += 1
                     logger.exception(

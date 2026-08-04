@@ -252,5 +252,23 @@ CREATE TABLE user_media_release_notifications (
 CREATE INDEX ix_user_media_release_notifications_pending
     ON user_media_release_notifications (sent_at, user_id, id);
 
+CREATE TABLE notification_delivery_runs (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    notification_type   TEXT NOT NULL,
+    selected            INTEGER NOT NULL,
+    sent                INTEGER NOT NULL,
+    failed              INTEGER NOT NULL,
+    deactivated         INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    CHECK (`notification_type` IN ('news', 'release')),
+    CHECK (`selected` >= 0),
+    CHECK (`sent` >= 0),
+    CHECK (`failed` >= 0),
+    CHECK (`deactivated` >= 0)
+);
+
+CREATE INDEX ix_notification_delivery_runs_created
+    ON notification_delivery_runs (created_at, notification_type);
+
 -- Library-count and series-progress triggers are installed by migrations.
 -- Atlas Community cannot represent SQLite triggers in a declarative schema.

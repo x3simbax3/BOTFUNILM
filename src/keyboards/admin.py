@@ -18,6 +18,18 @@ def admin_overview_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="▤\u00a0Библиотеки",
+                    callback_data="admin:libraries",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔔\u00a0Уведомления",
+                    callback_data="admin:notifications",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="↻\u00a0Обновить",
                     callback_data="admin:overview",
                 )
@@ -96,8 +108,38 @@ def admin_activity_keyboard(days: int) -> InlineKeyboardMarkup:
     )
 
 
+def admin_libraries_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="↻\u00a0Обновить",
+                    callback_data="admin:libraries",
+                )
+            ],
+            [InlineKeyboardButton(text="‹\u00a0Обзор", callback_data="admin:overview")],
+        ]
+    )
+
+
+def admin_notifications_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="↻\u00a0Обновить",
+                    callback_data="admin:notifications",
+                )
+            ],
+            [InlineKeyboardButton(text="‹\u00a0Обзор", callback_data="admin:overview")],
+        ]
+    )
+
+
 __all__ = (
     "admin_activity_keyboard",
+    "admin_libraries_keyboard",
+    "admin_notifications_keyboard",
     "admin_overview_keyboard",
     "admin_user_keyboard",
     "admin_users_keyboard",

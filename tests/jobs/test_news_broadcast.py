@@ -185,3 +185,15 @@ class NewsBroadcastTests(DatabaseTestCase):
         self.assertEqual(stats.failed, 1)
         self.assertEqual(stats.sent, 0)
         bot.send_message.assert_not_awaited()
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                """
+                SELECT selected, sent, failed FROM notification_delivery_runs
+                WHERE notification_type = 'news'
+                """
+            ) as cursor:
+                delivery = await cursor.fetchone()
+        self.assertEqual(
+            (delivery["selected"], delivery["sent"], delivery["failed"]),
+            (1, 0, 1),
+        )

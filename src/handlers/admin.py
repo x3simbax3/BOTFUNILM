@@ -12,10 +12,14 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from config.config import ADMIN_USER_IDS
 from src.database.admin import (
     AdminActivity,
+    AdminLibraries,
+    AdminNotifications,
     AdminOverview,
     AdminUserDetails,
     AdminUserSummary,
     get_admin_activity,
+    get_admin_libraries,
+    get_admin_notifications,
     get_admin_overview,
     get_admin_user,
     get_admin_users,
@@ -23,6 +27,8 @@ from src.database.admin import (
 from src.handlers.common import edit_message
 from src.keyboards import (
     admin_activity_keyboard,
+    admin_libraries_keyboard,
+    admin_notifications_keyboard,
     admin_overview_keyboard,
     admin_user_keyboard,
     admin_users_keyboard,
@@ -32,10 +38,14 @@ from src.lang import (
     ADMIN_ACTIVITY_FAILED,
     ADMIN_CALLBACK_DENIED,
     ADMIN_INVALID_CALLBACK,
+    ADMIN_LIBRARIES_FAILED,
+    ADMIN_NOTIFICATIONS_FAILED,
     ADMIN_OVERVIEW_FAILED,
     ADMIN_USER_NOT_FOUND,
     ADMIN_USERS_FAILED,
     admin_activity_text,
+    admin_libraries_text,
+    admin_notifications_text,
     admin_overview_text,
     admin_user_text,
     admin_users_text,
@@ -124,6 +134,41 @@ def _activity_text(activity: AdminActivity) -> str:
             for day in activity.daily
         ),
         generated_at=activity.generated_at,
+    )
+
+
+def _libraries_text(libraries: AdminLibraries) -> str:
+    return admin_libraries_text(
+        total_items=libraries.total_items,
+        users_with_library=libraries.users_with_library,
+        average_items_per_user=libraries.average_items_per_user,
+        planned_items=libraries.planned_items,
+        watching_items=libraries.watching_items,
+        completed_items=libraries.completed_items,
+        on_hold_items=libraries.on_hold_items,
+        dropped_items=libraries.dropped_items,
+        full_length_items=libraries.full_length_items,
+        series_items=libraries.series_items,
+        movie_items=libraries.movie_items,
+        anime_items=libraries.anime_items,
+        cartoon_items=libraries.cartoon_items,
+        rated_items=libraries.rated_items,
+        average_rating=libraries.average_rating,
+        tracked_series=libraries.tracked_series,
+        popular_movies=tuple(
+            (item.title, item.library_users) for item in libraries.popular_movies
+        ),
+        popular_series=tuple(
+            (item.title, item.library_users) for item in libraries.popular_series
+        ),
+        generated_at=libraries.generated_at,
+    )
+
+
+def _notifications_text(notifications: AdminNotifications) -> str:
+    return admin_notifications_text(
+        **asdict(notifications),
+        success_percent_30d=notifications.success_percent_30d,
     )
 
 
@@ -255,6 +300,46 @@ async def show_admin_activity(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data == "admin:libraries", admin_filter)
+async def show_admin_libraries(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    try:
+        libraries = await get_admin_libraries()
+    except aiosqlite.Error:
+        await callback.answer(ADMIN_LIBRARIES_FAILED, show_alert=True)
+        return
+
+    await edit_message(
+        callback.message,
+        _libraries_text(libraries),
+        parse_mode="HTML",
+        reply_markup=admin_libraries_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin:notifications", admin_filter)
+async def show_admin_notifications(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    try:
+        notifications = await get_admin_notifications()
+    except aiosqlite.Error:
+        await callback.answer(ADMIN_NOTIFICATIONS_FAILED, show_alert=True)
+        return
+
+    await edit_message(
+        callback.message,
+        _notifications_text(notifications),
+        parse_mode="HTML",
+        reply_markup=admin_notifications_keyboard(),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("admin:"))
 async def deny_admin_callback(callback: CallbackQuery) -> None:
     await callback.answer(ADMIN_CALLBACK_DENIED, show_alert=True)
@@ -269,5 +354,7 @@ __all__ = (
     "show_admin_user",
     "show_admin_users",
     "show_admin_activity",
+    "show_admin_libraries",
+    "show_admin_notifications",
     "show_admin_overview",
 )
