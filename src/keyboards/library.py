@@ -58,8 +58,8 @@ def library_keyboard(
             InlineKeyboardButton(
                 text=_compact_filter_value(
                     filters,
-                    ("completed", "planned", "unfinished", "ongoing", "dropped"),
-                    ("Готово", "Хочу", "Не досм.", "Выходит", "Брошено"),
+                    ("completed", "planned", "unfinished", "ongoing"),
+                    ("Готово", "Хочу", "Не досм.", "Выходит"),
                 ),
                 callback_data="library:filters:status",
             ),
@@ -145,7 +145,6 @@ def _library_filter_group_keyboard(
                 ("planned", text.FILTER_PLANNED),
                 ("unfinished", text.FILTER_UNFINISHED),
                 ("ongoing", text.FILTER_ONGOING),
-                ("dropped", text.FILTER_DROPPED),
             ),
         ),
     }
@@ -206,8 +205,6 @@ def library_item_keyboard(
     editable: bool = True,
     tracking_available: bool = False,
     tracking_enabled: bool = False,
-    series: bool = False,
-    dropped: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if planned and released:
@@ -229,17 +226,6 @@ def library_item_keyboard(
                         else text.TRACKING_ENABLE
                     ),
                     callback_data="series:tracking:toggle",
-                )
-            ]
-        )
-    if series and (not planned or dropped):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=(text.RESUME_WATCHING if dropped else text.MARK_DROPPED),
-                    callback_data=(
-                        "library:item:resume" if dropped else "library:item:dropped"
-                    ),
                 )
             ]
         )

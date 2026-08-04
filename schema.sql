@@ -12,9 +12,7 @@ CREATE TABLE user_media (
     PRIMARY KEY (user_id, media_id),
     CONSTRAINT `0` FOREIGN KEY (media_id) REFERENCES media (id)
         ON UPDATE NO ACTION ON DELETE CASCADE,
-    CHECK (status IN (
-                            'planned', 'watching', 'completed', 'on_hold', 'dropped'
-                        )),
+    CHECK (status IN ('planned', 'watching', 'completed', 'on_hold')),
     CHECK (user_rating IS NULL OR user_rating BETWEEN 1 AND 10),
     CHECK (episodes_watched IS NULL OR episodes_watched >= 0)
 );
@@ -154,13 +152,11 @@ CREATE TABLE user_library_filters (
     planned             INTEGER NOT NULL DEFAULT 1,
     unfinished          INTEGER NOT NULL DEFAULT 1,
     ongoing             INTEGER NOT NULL DEFAULT 1,
-    dropped             INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (user_id),
     CHECK (`completed` IN (0, 1)),
     CHECK (`planned` IN (0, 1)),
     CHECK (`unfinished` IN (0, 1)),
     CHECK (`ongoing` IN (0, 1)),
-    CHECK (`dropped` IN (0, 1)),
     CHECK (full_length IN (0, 1)),
     CHECK (series IN (0, 1)),
     CHECK (movie IN (0, 1)),

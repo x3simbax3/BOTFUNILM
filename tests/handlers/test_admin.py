@@ -57,7 +57,6 @@ def statistics():
             watching_items=2,
             completed_items=5,
             on_hold_items=1,
-            dropped_items=1,
             full_length_items=7,
             series_items=5,
             movie_items=6,
@@ -126,7 +125,8 @@ class AdminHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         text = message.edit_text_calls[0]["text"]
         self.assertIn("Всего · <b>4</b>", text)
-        self.assertIn("Отложено / брошено · 1 / 1", text)
+        self.assertIn("Отложено · 1", text)
+        self.assertNotIn("брошено", text.lower())
         self.assertIn("Осталось по тарифу · <b>93 из 100</b>", text)
         self.assertEqual(
             message.edit_text_calls[0]["reply_markup"],

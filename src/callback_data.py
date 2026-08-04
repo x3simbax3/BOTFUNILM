@@ -24,7 +24,6 @@ VALID_LIBRARY_FILTERS = frozenset(
         "planned",
         "unfinished",
         "ongoing",
-        "dropped",
         "format_all",
         "category_all",
         "status_all",

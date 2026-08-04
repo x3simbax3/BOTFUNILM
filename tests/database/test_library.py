@@ -106,7 +106,6 @@ class LibraryTests(DatabaseTestCase):
                     "planned",
                     "unfinished",
                     "ongoing",
-                    "dropped",
                 )
             )
         )

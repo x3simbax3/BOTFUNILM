@@ -18,6 +18,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from redis.asyncio import Redis
 
 from config.config import (
@@ -56,7 +57,7 @@ from src.jobs.media_refresh import (
     save_movie_release_refresh,
     select_due_media_batch,
 )
-from src.jobs.news_broadcast import send_news_broadcast
+from src.jobs.news_broadcast import NewsBroadcastStats, send_news_broadcast
 from src.jobs.series_notifications import send_release_notifications
 from src.logging_config import configure_logging
 from src.news_api import NewsApiAuthenticationError, NewsApiRateLimitError
@@ -527,6 +528,7 @@ async def run_admin_job_listener(
         if item is None:
             continue
         job: str | None = None
+        payload: dict[str, object] = {}
         try:
             payload = json.loads(item[1])
             job = payload.get("job")
@@ -542,7 +544,16 @@ async def run_admin_job_listener(
             elif job == "news":
                 if not THENEWSAPI_KEY:
                     raise RuntimeError("THENEWSAPI_KEY is required")
-                await _run_news_locked_or_log(redis, bot, database_url=database_url)
+                stats = await _run_news_locked_or_log(
+                    redis,
+                    bot,
+                    database_url=database_url,
+                )
+                await _send_admin_job_result(
+                    bot,
+                    payload.get("requested_by"),
+                    _news_result_text(stats),
+                )
             else:
                 text = payload.get("text")
                 photo_file_id = payload.get("photo_file_id")
@@ -550,15 +561,27 @@ async def run_admin_job_listener(
                     photo_file_id is not None and not isinstance(photo_file_id, str)
                 ):
                     raise ValueError("Invalid custom broadcast payload")
-                await send_custom_broadcast(
+                stats = await send_custom_broadcast(
                     bot,
                     text,
                     photo_file_id=photo_file_id,
                     database_url=database_url,
                 )
+                await _send_admin_job_result(
+                    bot,
+                    payload.get("requested_by"),
+                    "Рассылка завершена: "
+                    f"отправлено {stats.sent} из {stats.selected}, "
+                    f"ошибок {stats.failed}.",
+                )
         except Exception:
             logger.exception("Admin worker job failed")
             await _set_worker_heartbeat(redis, "failed", job)
+            await _send_admin_job_result(
+                bot,
+                payload.get("requested_by"),
+                "Задача не выполнена. Проверьте состояние воркера в статистике.",
+            )
 
 
 async def _set_worker_heartbeat(
@@ -599,14 +622,14 @@ async def _run_news_locked_or_log(
     bot: Bot,
     *,
     database_url: str | None,
-) -> None:
+) -> NewsBroadcastStats | None:
     try:
         async with RedisJobLock(
             redis,
             "news-broadcast",
             MEDIA_REFRESH_LOCK_TTL_SECONDS,
         ):
-            await send_news_broadcast(
+            return await send_news_broadcast(
                 redis,
                 bot,
                 datetime.now(_worker_timezone()),
@@ -620,6 +643,30 @@ async def _run_news_locked_or_log(
         logger.error("News broadcast stopped because TheNewsAPI limit was reached")
     except NewsApiDailyBudgetError:
         logger.info("News broadcast skipped because the daily API budget is exhausted")
+    return None
+
+
+async def _send_admin_job_result(
+    bot: Bot,
+    requested_by: object,
+    text: str,
+) -> None:
+    if type(requested_by) is not int:
+        return
+    try:
+        await bot.send_message(requested_by, text)
+    except TelegramAPIError:
+        logger.exception("Failed to send admin job result: user_id=%s", requested_by)
+
+
+def _news_result_text(stats: NewsBroadcastStats | None) -> str:
+    if stats is None:
+        return "Новость не отправлена: воркер не смог выполнить задачу."
+    if stats.article_uuid is None:
+        return "Новость не отправлена: свежая статья не найдена или нет подписчиков."
+    return (
+        f"Новость отправлена: {stats.sent} из {stats.selected}, ошибок {stats.failed}."
+    )
 
 
 async def _run_locked_or_log(

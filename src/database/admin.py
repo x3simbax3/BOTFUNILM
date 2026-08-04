@@ -74,7 +74,6 @@ class AdminUserDetails:
     watching_items: int
     completed_items: int
     on_hold_items: int
-    dropped_items: int
     rated_items: int
     average_rating: float | None
     tracked_series: int
@@ -95,7 +94,6 @@ class AdminExportUser:
     watching_items: int
     completed_items: int
     on_hold_items: int
-    dropped_items: int
     rated_items: int
     tracked_series: int
 
@@ -140,7 +138,6 @@ class AdminLibraries:
     watching_items: int
     completed_items: int
     on_hold_items: int
-    dropped_items: int
     full_length_items: int
     series_items: int
     movie_items: int
@@ -439,8 +436,6 @@ async def get_admin_user(
                     AS completed_items,
                 COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
                     AS on_hold_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'dropped')
-                    AS dropped_items,
                 COUNT(*) FILTER (WHERE user_media.user_rating IS NOT NULL)
                     AS rated_items,
                 AVG(user_media.user_rating) AS average_rating,
@@ -579,8 +574,6 @@ async def get_admin_libraries(
                     AS completed_items,
                 COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
                     AS on_hold_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'dropped')
-                    AS dropped_items,
                 COUNT(*) FILTER (WHERE media.content_format = 'full_length')
                     AS full_length_items,
                 COUNT(*) FILTER (WHERE media.content_format = 'series')
@@ -742,8 +735,6 @@ async def get_admin_export_users(
                     AS completed_items,
                 COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
                     AS on_hold_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'dropped')
-                    AS dropped_items,
                 COUNT(*) FILTER (WHERE user_media.user_rating IS NOT NULL)
                     AS rated_items,
                 COUNT(*) FILTER (WHERE user_media.is_tracking = 1)

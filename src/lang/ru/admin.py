@@ -78,7 +78,6 @@ def admin_user_text(
     watching_items: int,
     completed_items: int,
     on_hold_items: int,
-    dropped_items: int,
     rated_items: int,
     average_rating: float | None,
     tracked_series: int,
@@ -105,7 +104,6 @@ def admin_user_text(
 Смотрю · {watching_items}
 Просмотрено · {completed_items}
 Отложено · {on_hold_items}
-Брошено · {dropped_items}
 С оценкой · {rated_items} · средняя {rating}
 Отслеживаются · {tracked_series}"""
 
@@ -159,7 +157,6 @@ def admin_libraries_text(
     watching_items: int,
     completed_items: int,
     on_hold_items: int,
-    dropped_items: int,
     full_length_items: int,
     series_items: int,
     movie_items: int,
@@ -195,7 +192,6 @@ def admin_libraries_text(
 Смотрю · {watching_items}
 Просмотрено · {completed_items}
 Отложено · {on_hold_items}
-Брошено · {dropped_items}
 
 <b>Форматы и категории</b>
 Полный метр / сериалы · {full_length_items} / {series_items}

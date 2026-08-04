@@ -23,7 +23,6 @@ class AdminExportTests(unittest.TestCase):
             watching_items=1,
             completed_items=2,
             on_hold_items=0,
-            dropped_items=1,
             rated_items=2,
             tracked_series=1,
         )
@@ -34,4 +33,5 @@ class AdminExportTests(unittest.TestCase):
         self.assertEqual(sheet.cell(2, 1).value, 123)
         self.assertEqual(sheet.cell(2, 4).value, "Да")
         self.assertEqual(sheet.cell(2, 5).value, "Нет")
-        self.assertEqual(sheet.cell(2, 14).value, 1)
+        self.assertEqual(sheet.cell(2, 14).value, 2)
+        self.assertEqual(sheet.cell(2, 15).value, 1)

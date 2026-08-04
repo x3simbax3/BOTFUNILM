@@ -166,7 +166,7 @@ class AdminLibrariesDatabaseTests(DatabaseTestCase):
         await self.create_user_media(
             user_id=1,
             media_id=cartoon_id,
-            status="dropped",
+            status="on_hold",
         )
 
         libraries = await get_admin_libraries(database_url=self.database_url)
@@ -177,8 +177,7 @@ class AdminLibrariesDatabaseTests(DatabaseTestCase):
         self.assertEqual(libraries.planned_items, 1)
         self.assertEqual(libraries.watching_items, 1)
         self.assertEqual(libraries.completed_items, 1)
-        self.assertEqual(libraries.on_hold_items, 0)
-        self.assertEqual(libraries.dropped_items, 1)
+        self.assertEqual(libraries.on_hold_items, 1)
         self.assertEqual(libraries.full_length_items, 3)
         self.assertEqual(libraries.series_items, 1)
         self.assertEqual(libraries.movie_items, 2)

@@ -71,7 +71,7 @@ def admin_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Отправить всем",
+                    text="Отправить",
                     callback_data="admin:broadcast:send",
                 )
             ],

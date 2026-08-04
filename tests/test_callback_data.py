@@ -42,10 +42,6 @@ class CallbackDataTests(unittest.TestCase):
             parse_library_filter_callback("library:filter:planned"),
             "planned",
         )
-        self.assertEqual(
-            parse_library_filter_callback("library:filter:dropped"),
-            "dropped",
-        )
         self.assertEqual(parse_library_sort_callback("library:sort:rating"), "rating")
         self.assertEqual(parse_library_sort_callback("library:sort:recent"), "recent")
         self.assertEqual(
@@ -67,6 +63,7 @@ class CallbackDataTests(unittest.TestCase):
             (parse_back_callback, "back:format"),
             (parse_back_callback, "back:content_type:add:unknown"),
             (parse_library_filter_callback, "library:filter:unknown"),
+            (parse_library_filter_callback, "library:filter:dropped"),
             (parse_library_filter_callback, "library:filter:anime:extra"),
             (parse_library_sort_callback, "library:sort:unknown"),
             (parse_library_sort_callback, "library:sort:rating:extra"),

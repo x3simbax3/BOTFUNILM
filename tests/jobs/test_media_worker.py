@@ -1,8 +1,15 @@
 import unittest
 from datetime import date, datetime
+from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
-from src.jobs.media_worker import daily_news_targets, next_scheduled_run
+from src.jobs.media_worker import (
+    _news_result_text,
+    _send_admin_job_result,
+    daily_news_targets,
+    next_scheduled_run,
+)
+from src.jobs.news_broadcast import NewsBroadcastStats
 
 
 class MediaWorkerScheduleTests(unittest.TestCase):
@@ -54,6 +61,30 @@ class MediaWorkerScheduleTests(unittest.TestCase):
         self.assertEqual(targets[-1].hour, 21)
         self.assertEqual(targets[-1].minute, 5)
         self.assertLess(targets[-1], datetime(2026, 7, 30, 22, tzinfo=self.timezone))
+
+    def test_admin_news_result_explains_empty_and_successful_runs(self) -> None:
+        self.assertIn("не найдена", _news_result_text(NewsBroadcastStats()))
+        self.assertEqual(
+            _news_result_text(
+                NewsBroadcastStats(
+                    selected=3,
+                    sent=2,
+                    failed=1,
+                    article_uuid="article-id",
+                )
+            ),
+            "Новость отправлена: 2 из 3, ошибок 1.",
+        )
+
+
+class MediaWorkerAdminResultTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sends_job_result_only_for_valid_admin_id(self) -> None:
+        bot = AsyncMock()
+
+        await _send_admin_job_result(bot, 123, "Готово")
+        await _send_admin_job_result(bot, "123", "Не отправлять")
+
+        bot.send_message.assert_awaited_once_with(123, "Готово")
 
 
 if __name__ == "__main__":

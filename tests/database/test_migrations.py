@@ -2,10 +2,34 @@ import sqlite3
 
 from src.database.connection import connect_database, connection_scope, database_path
 from src.database.media import upsert_media
-from tests.support.database import DatabaseTestCase
+from tests.support.database import MIGRATIONS, DatabaseTestCase
 
 
 class MigrationTests(DatabaseTestCase):
+    async def test_dropped_entries_are_migrated_to_on_hold(self) -> None:
+        with sqlite3.connect(":memory:") as connection:
+            for migration in MIGRATIONS[:-1]:
+                connection.executescript(migration.read_text(encoding="utf-8"))
+            connection.execute(
+                """
+                INSERT INTO media (content_format, content_type, title)
+                VALUES ('series', 'movie', 'Legacy series')
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO user_media (user_id, media_id, status)
+                VALUES (123, 1, 'dropped')
+                """
+            )
+
+            connection.executescript(MIGRATIONS[-1].read_text(encoding="utf-8"))
+
+            status = connection.execute(
+                "SELECT status FROM user_media WHERE user_id = 123"
+            ).fetchone()[0]
+        self.assertEqual(status, "on_hold")
+
     async def test_migration_creates_tables_and_indexes(self) -> None:
         async with connection_scope(self.database_url) as connection:
             async with connection.execute(
@@ -54,7 +78,7 @@ class MigrationTests(DatabaseTestCase):
                 "PRAGMA table_info(user_library_filters)"
             ) as cursor:
                 filter_columns = {row["name"] for row in await cursor.fetchall()}
-        self.assertIn("dropped", filter_columns)
+        self.assertNotIn("dropped", filter_columns)
 
     async def test_transaction_rolls_back_on_error(self) -> None:
         with self.assertRaises(RuntimeError):

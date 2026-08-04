@@ -211,14 +211,6 @@ class LibraryKeyboardTests(KeyboardTestCase):
             ["×\u00a0Не отслеживать"],
         )
 
-    def test_dropped_series_can_be_resumed(self) -> None:
-        keyboard = keyboards.library_item_keyboard(series=True, dropped=True)
-
-        callbacks = [
-            button.callback_data for row in keyboard.inline_keyboard for button in row
-        ]
-        self.assertIn("library:item:resume", callbacks)
-
     def test_post_add_tracking_has_action_status_and_main_menu(self) -> None:
         keyboard = keyboards.post_add_tracking_keyboard(7, False)
 

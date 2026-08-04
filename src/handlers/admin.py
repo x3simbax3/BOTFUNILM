@@ -116,7 +116,7 @@ DAU / WAU / MAU · <b>{activity.dau} / {activity.wau} / {activity.mau}</b>
 <b>📚 Библиотеки</b>
 Записей / пользователей · <b>{libraries.total_items}</b> / {libraries.users_with_library}
 Хочу / смотрю / просмотрено · {libraries.planned_items} / {libraries.watching_items} / {libraries.completed_items}
-Отложено / брошено · {libraries.on_hold_items} / {libraries.dropped_items}
+Отложено · {libraries.on_hold_items}
 Полный метр / сериалы · {libraries.full_length_items} / {libraries.series_items}
 Кино / аниме / мультфильмы · {libraries.movie_items} / {libraries.anime_items} / {libraries.cartoon_items}
 С оценкой · {libraries.rated_items}, средняя · {rating}
@@ -217,7 +217,9 @@ async def start_custom_broadcast(callback: CallbackQuery, state: FSMContext) -> 
     if callback.message:
         await edit_message(
             callback.message,
-            "<b>Своя рассылка</b>\n\nВыберите формат сообщения.",
+            "<b>Своя рассылка</b>\n\n"
+            "Сообщение получат все активные пользователи независимо от настройки "
+            "«Новости».\n\nВыберите формат сообщения.",
             parse_mode="HTML",
             reply_markup=admin_broadcast_format_keyboard(),
         )
@@ -337,6 +339,7 @@ async def confirm_api_news(callback: CallbackQuery) -> None:
     await edit_message(
         callback.message,
         "<b>Запустить новость из API?</b>\n\n"
+        "Её получат только пользователи с включёнными новостями.\n"
         f"Осталось запросов в дневном бюджете: {remaining}.",
         parse_mode="HTML",
         reply_markup=admin_confirmation_keyboard("news"),

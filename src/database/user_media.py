@@ -87,18 +87,16 @@ async def set_user_media_status(
     *,
     database_url: str | None = None,
 ) -> bool:
-    if status not in {"planned", "watching", "completed", "on_hold", "dropped"}:
+    if status not in {"planned", "watching", "completed", "on_hold"}:
         raise ValueError("Unknown user media status")
     async with connection_scope(database_url) as connection:
         cursor = await connection.execute(
             """
             UPDATE user_media
-            SET status = ?,
-                is_tracking = CASE WHEN ? = 'dropped' THEN 0 ELSE is_tracking END,
-                last_watched_at = CURRENT_TIMESTAMP
+            SET status = ?, last_watched_at = CURRENT_TIMESTAMP
             WHERE user_id = ? AND media_id = ?
             """,
-            (status, status, user_id, media_id),
+            (status, user_id, media_id),
         )
         return cursor.rowcount > 0
 

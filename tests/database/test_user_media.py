@@ -12,6 +12,17 @@ from tests.support.database import DatabaseTestCase
 
 
 class UserMediaTests(DatabaseTestCase):
+    async def test_dropped_status_is_not_supported(self) -> None:
+        media_id = await self.create_user_media(status="watching")
+
+        with self.assertRaises(ValueError):
+            await set_user_media_status(
+                123,
+                media_id,
+                "dropped",
+                database_url=self.database_url,
+            )
+
     async def test_badge_can_be_set_and_removed(self) -> None:
         media_id = await self.create_user_media(status="completed")
 

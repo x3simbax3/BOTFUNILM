@@ -10,14 +10,12 @@ USER_STATUS_TITLES = {
     "watching": "Смотрю",
     "completed": "Просмотрено",
     "on_hold": "Отложено",
-    "dropped": "Брошено",
 }
 USER_STATUS_ICONS = {
     "planned": "○",
     "watching": "◉",
     "completed": "✓",
     "on_hold": "Ⅱ",
-    "dropped": "×",
 }
 LIBRARY_ITEM_DIVIDER = "•  ◇  •"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
@@ -33,8 +31,6 @@ ITEM_DELETED = "Запись удалена из библиотеки."
 ITEM_DELETE_PROMPT = "Удалить эту запись из библиотеки?"
 ITEM_EDIT_PROMPT = "Что изменить?"
 ITEM_MARKED_WATCHED = "Отмечено как просмотренное."
-ITEM_MARKED_DROPPED = "Отмечено как брошенное."
-ITEM_RESUMED = "Возвращено к просмотру."
 RATING_UPDATED = "Оценка изменена."
 RATING_EDIT_CANCELLED = "Изменение оценки отменено."
 
@@ -228,9 +224,7 @@ __all__ = (
     "ITEM_DELETED",
     "ITEM_DELETE_PROMPT",
     "ITEM_EDIT_PROMPT",
-    "ITEM_MARKED_DROPPED",
     "ITEM_MARKED_WATCHED",
-    "ITEM_RESUMED",
     "LIBRARY_OPEN_FAILED",
     "UNKNOWN_FILTER",
     "RATING_UPDATED",

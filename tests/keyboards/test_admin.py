@@ -34,6 +34,10 @@ class AdminKeyboardTests(KeyboardTestCase):
             admin_broadcast_confirmation_keyboard(),
             [["admin:broadcast:send"], ["admin:menu"]],
         )
+        self.assertEqual(
+            admin_broadcast_confirmation_keyboard().inline_keyboard[0][0].text,
+            "Отправить",
+        )
 
     def test_news_confirmation_returns_to_menu(self) -> None:
         self.assert_callback_rows(
