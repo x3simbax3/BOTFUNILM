@@ -77,7 +77,6 @@ class SeriesNotificationJobTests(DatabaseTestCase):
                 4,
                 season_number=1,
                 episode_number=4,
-                active=True,
             )
         bot = AsyncMock()
 

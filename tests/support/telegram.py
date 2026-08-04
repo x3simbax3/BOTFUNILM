@@ -38,11 +38,13 @@ class SentMessageStub:
 class MessageStub:
     def __init__(self, text: str | None = "Title", message_id: int = 10) -> None:
         self.text = text
+        self.caption = None
         self.message_id = message_id
         self.answers = []
         self.photo_answers = []
         self.edit_text_calls = []
         self.edit_reply_markup_calls = []
+        self.document_answers = []
         self.photo = []
         self.deleted = False
         self.from_user = SimpleNamespace(id=123)
@@ -57,6 +59,11 @@ class MessageStub:
     async def answer_photo(self, photo: str, **kwargs) -> SentMessageStub:
         stub = SentMessageStub(200 + len(self.answers) + len(self.photo_answers))
         self.photo_answers.append({"photo": photo, "stub": stub, **kwargs})
+        return stub
+
+    async def answer_document(self, document, **kwargs) -> SentMessageStub:
+        stub = SentMessageStub(300 + len(self.document_answers))
+        self.document_answers.append({"document": document, "stub": stub, **kwargs})
         return stub
 
     async def edit_text(self, text: str, **kwargs) -> None:

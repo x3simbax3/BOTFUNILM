@@ -63,8 +63,11 @@ class NewsApiParsingTests(unittest.TestCase):
 
 
 class NewsApiRequestTests(unittest.IsolatedAsyncioTestCase):
-    async def test_fetches_top_news_and_ignores_articles_without_images(self) -> None:
-        response = SimpleNamespace(status=200)
+    async def test_fetches_top_news_with_quota_and_optional_images(self) -> None:
+        response = SimpleNamespace(
+            status=200,
+            headers={"X-UsageLimit-Limit": "100", "X-UsageLimit-Remaining": "93"},
+        )
         request_context = MagicMock()
         request_context.__aenter__ = AsyncMock(return_value=response)
         request_context.__aexit__ = AsyncMock(return_value=None)
@@ -100,12 +103,16 @@ class NewsApiRequestTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=payload),
             ),
         ):
-            articles = await fetch_news(
+            result = await fetch_news(
                 "кино",
                 published_after=datetime(2026, 7, 28, tzinfo=timezone.utc),
             )
 
-        self.assertEqual([article.uuid for article in articles], ["with-image"])
+        self.assertEqual(
+            [article.uuid for article in result.articles],
+            ["with-image", "without-image"],
+        )
+        self.assertEqual((result.api_limit, result.api_remaining), (100, 93))
         url = session.get.call_args.args[0]
         params = session.get.call_args.kwargs["params"]
         self.assertEqual(url, "https://api.thenewsapi.com/v1/news/top")

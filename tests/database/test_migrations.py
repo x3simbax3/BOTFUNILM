@@ -28,6 +28,7 @@ class MigrationTests(DatabaseTestCase):
         self.assertIn(("bot_user_daily_events", "table"), objects)
         self.assertIn(("ix_bot_user_daily_events_metric", "index"), objects)
         self.assertIn(("notification_delivery_runs", "table"), objects)
+        self.assertIn(("news_api_daily_usage", "table"), objects)
         self.assertIn(("ix_notification_delivery_runs_created", "index"), objects)
         self.assertIn(("ix_media_search_terms_term", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
@@ -47,6 +48,13 @@ class MigrationTests(DatabaseTestCase):
 
         self.assertIn("username", bot_user_columns)
         self.assertIn("display_name", bot_user_columns)
+
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                "PRAGMA table_info(user_library_filters)"
+            ) as cursor:
+                filter_columns = {row["name"] for row in await cursor.fetchall()}
+        self.assertIn("dropped", filter_columns)
 
     async def test_transaction_rolls_back_on_error(self) -> None:
         with self.assertRaises(RuntimeError):

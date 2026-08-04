@@ -65,6 +65,8 @@ cp .env.example config/.env
 BOT_TOKEN=токен_от_BotFather
 TMDB_API=TMDB_API_Read_Access_Token
 THENEWSAPI_KEY=ключ_от_TheNewsAPI
+NEWS_API_DAILY_LIMIT=100
+NEWS_API_DAILY_BUDGET=20
 ```
 
 `TMDB_API` — именно Bearer-токен **API Read Access Token**, а не короткий API
@@ -129,6 +131,8 @@ SQLite-база находится в именованном volume `bot_data`, 
 | `ADMIN_USER_IDS` | Telegram ID администраторов через запятую | пусто |
 | `TMDB_API` | TMDB API Read Access Token | обязательна для поиска |
 | `THENEWSAPI_KEY` | ключ TheNewsAPI для новостной рассылки | обязательна для worker |
+| `NEWS_API_DAILY_LIMIT` | суточный лимит тарифа TheNewsAPI | `100` |
+| `NEWS_API_DAILY_BUDGET` | максимум запросов новостей от приложения в сутки | `20` |
 | `DATABASE_URL` | URL SQLite при локальном запуске | `sqlite:///bot.db` |
 | `DEBUG` | диагностика приложения без текста сообщений и raw updates | `false` |
 | `TMDB_URL` | HTTPS-адрес TMDB API; хост должен входить в allowlist | `https://api.themoviedb.org/3` |

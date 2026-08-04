@@ -12,7 +12,7 @@ from src.jobs.news_broadcast import (
     select_news_article,
     send_news_broadcast,
 )
-from src.news_api import NewsArticle
+from src.news_api import NewsArticle, NewsFetchResult
 from tests.support.database import DatabaseTestCase
 
 
@@ -38,11 +38,12 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         with patch(
             "src.jobs.news_broadcast.fetch_news",
-            new=AsyncMock(return_value=articles),
+            new=AsyncMock(return_value=NewsFetchResult(tuple(articles), 100, 99)),
         ):
             selected = await select_news_article(
                 redis,
                 datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
             )
 
         self.assertIsNotNone(selected)
@@ -52,7 +53,7 @@ class NewsBroadcastTests(DatabaseTestCase):
         redis.expire.assert_awaited_once()
         redis.set.assert_awaited_once()
 
-    async def test_skips_article_without_image(self) -> None:
+    async def test_selects_article_without_image_for_text_delivery(self) -> None:
         redis = AsyncMock()
         redis.get.return_value = None
         redis.zadd.return_value = 1
@@ -63,15 +64,16 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         with patch(
             "src.jobs.news_broadcast.fetch_news",
-            new=AsyncMock(return_value=articles),
+            new=AsyncMock(return_value=NewsFetchResult(tuple(articles), 100, 99)),
         ):
             selected = await select_news_article(
                 redis,
                 datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
             )
 
         self.assertIsNotNone(selected)
-        self.assertEqual(selected[1].uuid, "with-image")
+        self.assertEqual(selected[1].uuid, "no-image")
         redis.zadd.assert_awaited_once()
 
     async def test_broadcasts_in_batches_and_reuses_telegram_photo(self) -> None:
@@ -159,7 +161,7 @@ class NewsBroadcastTests(DatabaseTestCase):
         visible_caption = html.unescape(caption.replace("<b>", "").replace("</b>", ""))
         self.assertLessEqual(len(visible_caption), 1024)
 
-    async def test_does_not_fall_back_to_text_when_image_is_rejected(self) -> None:
+    async def test_falls_back_to_text_when_image_is_rejected(self) -> None:
         async with connection_scope(self.database_url) as connection:
             await connection.execute("INSERT INTO bot_users (user_id) VALUES (1)")
         bot = AsyncMock()
@@ -182,9 +184,9 @@ class NewsBroadcastTests(DatabaseTestCase):
                 database_url=self.database_url,
             )
 
-        self.assertEqual(stats.failed, 1)
-        self.assertEqual(stats.sent, 0)
-        bot.send_message.assert_not_awaited()
+        self.assertEqual(stats.failed, 0)
+        self.assertEqual(stats.sent, 1)
+        bot.send_message.assert_awaited_once()
         async with connection_scope(self.database_url) as connection:
             async with connection.execute(
                 """
@@ -195,5 +197,5 @@ class NewsBroadcastTests(DatabaseTestCase):
                 delivery = await cursor.fetchone()
         self.assertEqual(
             (delivery["selected"], delivery["sent"], delivery["failed"]),
-            (1, 0, 1),
+            (1, 1, 0),
         )

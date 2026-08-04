@@ -123,6 +123,8 @@ async def toggle_library_subscription(
         parse_mode="HTML",
         reply_markup=library_item_keyboard(
             planned=item["user_status"] == "planned",
+            dropped=item["user_status"] == "dropped",
+            series=True,
             released=bool(dict(item).get("is_released", True)),
             editable=is_library_item_editable(item),
             tracking_available=is_active_series(

@@ -191,7 +191,6 @@ async def save_media_refresh(
                     episode_number=(
                         last_episode.episode_number if last_episode else None
                     ),
-                    active=snapshot.active,
                 )
         else:
             await _touch_checked_at(connection, media_id, mode, error=None)
@@ -352,16 +351,9 @@ async def _collect_changes(
         "tmdb_in_production": (
             int(snapshot.in_production) if snapshot.in_production is not None else None
         ),
-        "number_of_seasons": max(
-            int(media["number_of_seasons"] or 0), snapshot.number_of_seasons
-        ),
-        "number_of_episodes": max(
-            int(media["number_of_episodes"] or 0), snapshot.number_of_episodes
-        ),
-        "available_episode_count": max(
-            int(media["available_episode_count"] or 0),
-            snapshot.available_episode_count,
-        ),
+        "number_of_seasons": snapshot.number_of_seasons,
+        "number_of_episodes": snapshot.number_of_episodes,
+        "available_episode_count": snapshot.available_episode_count,
         "next_episode_air_date": next_episode.air_date if next_episode else None,
         "next_episode_season_number": (
             next_episode.season_number if next_episode else None
@@ -402,8 +394,8 @@ async def _collect_changes(
         old = old_seasons.get(season.season_number)
         fresh_season = (
             season.name,
-            max(season.announced_episode_count, old[1] if old else 0),
-            max(season.aired_episode_count, old[2] if old else 0),
+            season.announced_episode_count,
+            season.aired_episode_count,
         )
         if old != fresh_season:
             changes.append(

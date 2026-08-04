@@ -60,11 +60,9 @@ async def update_media_series_release_info(
             """
             UPDATE media
             SET tmdb_status = ?, tmdb_in_production = ?,
-                number_of_seasons = MAX(COALESCE(number_of_seasons, 0), ?),
-                number_of_episodes = MAX(COALESCE(number_of_episodes, 0), ?),
-                available_episode_count = MAX(
-                    COALESCE(available_episode_count, 0), ?
-                ),
+                number_of_seasons = ?,
+                number_of_episodes = ?,
+                available_episode_count = ?,
                 poster_path = COALESCE(?, poster_path),
                 rating = COALESCE(?, rating),
                 next_episode_air_date = ?, next_episode_season_number = ?,
@@ -95,7 +93,7 @@ async def replace_media_seasons(
     *,
     database_url: str | None = None,
 ) -> None:
-    """Merge a release snapshot without decreasing cached availability."""
+    """Merge current release data without losing saved user progress."""
     async with connection_scope(database_url) as connection:
         await _replace_media_seasons(connection, media_id, snapshot)
 
@@ -129,15 +127,8 @@ async def _replace_media_seasons(
             ) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(media_id, season_number) DO UPDATE SET
                 name = excluded.name,
-                announced_episode_count = MAX(
-                    excluded.announced_episode_count,
-                    media_seasons.announced_episode_count,
-                    media_seasons.available_episode_count
-                ),
-                available_episode_count = MAX(
-                    excluded.available_episode_count,
-                    media_seasons.available_episode_count
-                ),
+                announced_episode_count = excluded.announced_episode_count,
+                available_episode_count = excluded.available_episode_count,
                 last_updated = CURRENT_TIMESTAMP
             """,
             [

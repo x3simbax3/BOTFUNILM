@@ -18,6 +18,7 @@ LIBRARY_FILTER_NAMES = frozenset(
         "planned",
         "unfinished",
         "ongoing",
+        "dropped",
     }
 )
 LIBRARY_SORT_ORDERS = frozenset({"recent", "rating", "tmdb_rating", "title"})
@@ -26,11 +27,11 @@ ACTIVE_SERIES_STATUS_SQL = ", ".join(
 )
 FORMAT_FILTERS = frozenset({"full_length", "series"})
 TYPE_FILTERS = frozenset({"movie", "anime", "cartoon"})
-STATUS_FILTERS = frozenset({"completed", "planned", "unfinished", "ongoing"})
+STATUS_FILTERS = frozenset({"completed", "planned", "unfinished", "ongoing", "dropped"})
 FILTER_GROUPS = {
     "format_all": ("full_length", "series"),
     "category_all": ("movie", "anime", "cartoon"),
-    "status_all": ("completed", "planned", "unfinished", "ongoing"),
+    "status_all": ("completed", "planned", "unfinished", "ongoing", "dropped"),
 }
 
 
@@ -86,7 +87,7 @@ async def update_user_library_filter(
                 SET full_length = 1, series = 1,
                     movie = 1, anime = 1, cartoon = 1,
                     completed = 1, planned = 1,
-                    unfinished = 1, ongoing = 1
+                    unfinished = 1, ongoing = 1, dropped = 1
                 WHERE user_id = ?
                 """,
                 (user_id,),
@@ -99,7 +100,7 @@ async def update_user_library_filter(
             elif filter_name in TYPE_FILTERS:
                 group = ("movie", "anime", "cartoon")
             elif filter_name in STATUS_FILTERS:
-                group = ("completed", "planned", "unfinished", "ongoing")
+                group = ("completed", "planned", "unfinished", "ongoing", "dropped")
             else:
                 raise ValueError("Unknown library filter")
 
@@ -157,7 +158,7 @@ async def list_user_library(
     }[sort_order]
     status_unfiltered = all(
         filters.get(name, False)
-        for name in ("completed", "planned", "unfinished", "ongoing")
+        for name in ("completed", "planned", "unfinished", "ongoing", "dropped")
     )
     async with connection_scope(database_url) as connection:
         async with connection.execute(
@@ -183,8 +184,10 @@ async def list_user_library(
                               < COALESCE(m.available_episode_count,
                                          m.number_of_episodes, 0))
                    OR (? AND m.content_format = 'series'
+                          AND um.status != 'dropped'
                           AND (COALESCE(m.tmdb_in_production, 0) = 1
-                               OR m.tmdb_status IN ({ACTIVE_SERIES_STATUS_SQL}))))
+                               OR m.tmdb_status IN ({ACTIVE_SERIES_STATUS_SQL})))
+                   OR (? AND um.status = 'dropped'))
             ORDER BY {order_by}
             LIMIT ? OFFSET ?
             """,
@@ -200,6 +203,7 @@ async def list_user_library(
                 filters.get("planned", False),
                 filters.get("unfinished", False),
                 filters.get("ongoing", False),
+                filters.get("dropped", False),
                 limit,
                 offset,
             ),

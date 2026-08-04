@@ -65,6 +65,61 @@ class SeriesTrackingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(start.seasons_data[0]["episode_count"], 12)
         self.assertTrue(start.release_data["is_ongoing"])
 
+    async def test_prepare_tracking_replaces_stale_future_episode_availability(
+        self,
+    ) -> None:
+        snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=2,
+            number_of_episodes=11,
+            seasons=(
+                SeriesSeason(1, "Сезон 1", 8, 8),
+                SeriesSeason(2, "Сезон 2", 3, 0),
+            ),
+            status="Returning Series",
+        )
+        with (
+            patch.object(
+                series_tracking,
+                "get_user_season_progress",
+                AsyncMock(return_value=[{"season_number": 1, "episodes_watched": 8}]),
+            ),
+            patch.object(
+                series_tracking,
+                "get_media_seasons",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "season_number": 1,
+                            "name": "Сезон 1",
+                            "announced_episode_count": 8,
+                            "available_episode_count": 8,
+                        },
+                        {
+                            "season_number": 2,
+                            "name": "Сезон 2",
+                            "announced_episode_count": 3,
+                            "available_episode_count": 3,
+                        },
+                    ]
+                ),
+            ),
+        ):
+            start = await series_tracking.prepare_series_tracking(
+                {"media_id": 7},
+                123,
+                snapshot,
+            )
+
+        self.assertEqual(start.total_episodes, 8)
+        self.assertEqual(start.release_data["announced_total_episodes"], 8)
+        self.assertEqual(
+            [
+                (season["season_number"], season["episode_count"])
+                for season in start.seasons_data
+            ],
+            [(1, 8)],
+        )
+
     def test_tracking_limits_keep_cached_seasons_missing_from_tmdb(self) -> None:
         merged = series_tracking.merge_tracking_season_limits(
             [

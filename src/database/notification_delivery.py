@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from src.database.connection import connection_scope
 
-NOTIFICATION_TYPES = frozenset({"news", "release"})
+NOTIFICATION_TYPES = frozenset({"news", "release", "broadcast"})
 
 
 async def record_notification_delivery(

@@ -72,6 +72,7 @@ class SeriesModelTests(unittest.TestCase):
                 "total_seasons": 1,
                 "announced_total_episodes": 12,
                 "is_ongoing": True,
+                "is_airing": True,
                 "tmdb_series_status": "Returning Series",
                 "tmdb_series_in_production": None,
                 "tmdb_next_episode_air_date": None,

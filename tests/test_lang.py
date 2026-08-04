@@ -157,6 +157,8 @@ class LocalizationTests(unittest.TestCase):
                     "rating": 8.4,
                     "tmdb_status": "Returning Series",
                     "tmdb_in_production": 1,
+                    "next_episode_season_number": 1,
+                    "next_episode_number": 8,
                 }
             ],
             "BotFunilmBot",
@@ -171,6 +173,22 @@ class LocalizationTests(unittest.TestCase):
             '<a href="https://t.me/BotFunilmBot?start=media_7">7 из 10',
             result,
         )
+
+    def test_library_does_not_mark_series_between_seasons_as_airing(self) -> None:
+        result = lang.library_text(
+            [
+                {
+                    "id": 7,
+                    "title": "Сериал между сезонами",
+                    "content_format": "series",
+                    "tmdb_status": "Returning Series",
+                    "tmdb_in_production": 1,
+                }
+            ],
+            "BotFunilmBot",
+        )
+
+        self.assertNotIn("🔴", result)
 
     def test_search_result_shows_description_as_plain_text(self) -> None:
         result = lang.tmdb_guess_text("full_length", "Фильм", "Описание")

@@ -184,7 +184,7 @@ class SeriesTests(DatabaseTestCase):
             "movie",
             database_url=self.database_url,
         )
-        self.assertEqual(media["available_episode_count"], 10)
+        self.assertEqual(media["available_episode_count"], 8)
         async with connection_scope(self.database_url) as connection:
             async with connection.execute(
                 """
@@ -197,7 +197,7 @@ class SeriesTests(DatabaseTestCase):
                 season = await cursor.fetchone()
         self.assertEqual(season["available_episode_count"], 8)
 
-    async def test_series_availability_only_increases(self) -> None:
+    async def test_series_availability_can_be_corrected(self) -> None:
         media_id = await self.create_series(
             tmdb_id=47,
             title="Monotonic series",
@@ -235,7 +235,7 @@ class SeriesTests(DatabaseTestCase):
             "movie",
             database_url=self.database_url,
         )
-        self.assertEqual(media["available_episode_count"], 12)
+        self.assertEqual(media["available_episode_count"], 10)
         self.assertEqual(media["number_of_seasons"], 2)
         self.assertGreaterEqual(
             media["number_of_episodes"],
@@ -254,7 +254,7 @@ class SeriesTests(DatabaseTestCase):
                 seasons = await cursor.fetchall()
         self.assertEqual(
             [tuple(season) for season in seasons],
-            [(1, "Season 1 renamed", 10), (2, "Season 2", 2)],
+            [(1, "Season 1 renamed", 8), (2, "Season 2", 2)],
         )
 
     async def test_series_totals_cover_all_cached_seasons(self) -> None:
@@ -364,7 +364,7 @@ class SeriesTests(DatabaseTestCase):
             ratings,
         )
 
-    async def test_caught_up_active_series_stays_watching(self) -> None:
+    async def test_caught_up_active_series_is_completed(self) -> None:
         media_id = await self.create_series(
             tmdb_id=43,
             title="Active TV",
@@ -387,7 +387,7 @@ class SeriesTests(DatabaseTestCase):
         )
 
         self.assertEqual(progress["episodes_watched"], 5)
-        self.assertEqual(progress["status"], "watching")
+        self.assertEqual(progress["status"], "completed")
 
     async def test_deleting_user_media_cascades_to_season_progress(self) -> None:
         media_id = await self.create_series()

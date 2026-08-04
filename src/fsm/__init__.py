@@ -18,9 +18,9 @@ class MenuState(StatesGroup):
 
 
 class AdminState(StatesGroup):
-    waiting_message_user = State()
-    waiting_message_text = State()
-    confirming_message = State()
+    waiting_broadcast_text = State()
+    waiting_broadcast_photo = State()
+    confirming_broadcast = State()
 
 
 __all__ = ("AdminState", "MenuState")

@@ -101,7 +101,13 @@ class LibraryTests(DatabaseTestCase):
         self.assertTrue(
             all(
                 restored[name]
-                for name in ("completed", "planned", "unfinished", "ongoing")
+                for name in (
+                    "completed",
+                    "planned",
+                    "unfinished",
+                    "ongoing",
+                    "dropped",
+                )
             )
         )
 

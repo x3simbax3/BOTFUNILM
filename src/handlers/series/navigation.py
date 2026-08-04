@@ -48,7 +48,7 @@ async def show_season_list(
         series_tracking_text(
             data.get("tmdb_title", ""),
             seasons_data,
-            is_ongoing=bool(data.get("is_ongoing")),
+            is_ongoing=bool(data.get("is_airing")),
         ),
         parse_mode="HTML",
         reply_markup=season_list_keyboard(seasons_data, watched),

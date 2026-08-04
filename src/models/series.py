@@ -173,6 +173,7 @@ class SeriesReleaseSnapshot:
             "total_seasons": self.number_of_seasons,
             "announced_total_episodes": self.number_of_episodes,
             "is_ongoing": self.active,
+            "is_airing": self.next_episode is not None,
             "tmdb_series_status": self.status,
             "tmdb_series_in_production": self.in_production,
             "tmdb_next_episode_air_date": (

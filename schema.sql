@@ -154,11 +154,13 @@ CREATE TABLE user_library_filters (
     planned             INTEGER NOT NULL DEFAULT 1,
     unfinished          INTEGER NOT NULL DEFAULT 1,
     ongoing             INTEGER NOT NULL DEFAULT 1,
+    dropped             INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (user_id),
     CHECK (`completed` IN (0, 1)),
     CHECK (`planned` IN (0, 1)),
     CHECK (`unfinished` IN (0, 1)),
     CHECK (`ongoing` IN (0, 1)),
+    CHECK (`dropped` IN (0, 1)),
     CHECK (full_length IN (0, 1)),
     CHECK (series IN (0, 1)),
     CHECK (movie IN (0, 1)),
@@ -260,7 +262,7 @@ CREATE TABLE notification_delivery_runs (
     failed              INTEGER NOT NULL,
     deactivated         INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-    CHECK (`notification_type` IN ('news', 'release')),
+    CHECK (`notification_type` IN ('news', 'release', 'broadcast')),
     CHECK (`selected` >= 0),
     CHECK (`sent` >= 0),
     CHECK (`failed` >= 0),
@@ -268,7 +270,18 @@ CREATE TABLE notification_delivery_runs (
 );
 
 CREATE INDEX ix_notification_delivery_runs_created
-    ON notification_delivery_runs (created_at, notification_type);
+  ON notification_delivery_runs (created_at, notification_type);
+
+CREATE TABLE news_api_daily_usage (
+    usage_date          TEXT NOT NULL PRIMARY KEY,
+    requests            INTEGER NOT NULL DEFAULT 0,
+    api_limit           INTEGER,
+    api_remaining       INTEGER,
+    updated_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    CHECK (`requests` >= 0),
+    CHECK (`api_limit` IS NULL OR `api_limit` >= 0),
+    CHECK (`api_remaining` IS NULL OR `api_remaining` >= 0)
+);
 
 CREATE TABLE bot_features (
     feature      TEXT NOT NULL PRIMARY KEY,

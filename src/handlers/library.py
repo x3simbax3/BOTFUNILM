@@ -57,9 +57,11 @@ from src.lang import (
     ITEM_DELETE_PROMPT,
     ITEM_DELETED,
     ITEM_EDIT_PROMPT,
+    ITEM_MARKED_DROPPED,
     ITEM_MARKED_WATCHED,
     ITEM_NOT_FOUND,
     ITEM_OPEN_FAILED,
+    ITEM_RESUMED,
     LIBRARY_OPEN_FAILED,
     UNKNOWN_FILTER,
     UNRELEASED_TITLE,
@@ -253,6 +255,8 @@ async def show_library_item(
     photo = cached_file_id or fallback_photo
     keyboard = library_item_keyboard(
         planned=item["user_status"] == "planned",
+        dropped=item["user_status"] == "dropped",
+        series=item["content_format"] == "series",
         released=bool(dict(item).get("is_released", True)),
         editable=is_library_item_editable(item),
         tracking_available=(
@@ -520,6 +524,46 @@ async def change_library_item_progress(
     await callback.answer(ITEM_MARKED_WATCHED)
 
 
+@router.callback_query(
+    MenuState.viewing_media,
+    F.data.in_({"library:item:dropped", "library:item:resume"}),
+)
+async def change_library_item_status(
+    callback: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    if not callback.message:
+        return
+    item = await _current_library_item(callback, state)
+    if item is None:
+        return
+    if item["content_format"] != "series":
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    dropped = callback.data == "library:item:dropped"
+    if dropped == (item["user_status"] == "dropped"):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    status = "dropped" if dropped else "watching"
+    try:
+        updated = await set_user_media_status(
+            callback.from_user.id,
+            int(item["id"]),
+            status,
+        )
+        if not updated:
+            raise RuntimeError("Library item disappeared")
+        refreshed = await get_user_library_item(callback.from_user.id, int(item["id"]))
+    except (aiosqlite.Error, RuntimeError, ValueError):
+        await callback.answer(ITEM_ACTION_FAILED, show_alert=True)
+        return
+    if refreshed is None:
+        await callback.answer(ITEM_NOT_FOUND, show_alert=True)
+        return
+    await _edit_library_item_message(callback.message, refreshed)
+    await callback.answer(ITEM_MARKED_DROPPED if dropped else ITEM_RESUMED)
+
+
 @router.callback_query(MenuState.viewing_media, F.data == "library:item:delete")
 async def confirm_library_item_delete(
     callback: CallbackQuery,
@@ -600,6 +644,8 @@ async def _edit_library_item_message(message: Message, item) -> None:
         parse_mode="HTML",
         reply_markup=library_item_keyboard(
             planned=item["user_status"] == "planned",
+            dropped=item["user_status"] == "dropped",
+            series=item["content_format"] == "series",
             released=bool(dict(item).get("is_released", True)),
             editable=is_library_item_editable(item),
             tracking_available=(

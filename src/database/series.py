@@ -146,9 +146,7 @@ async def save_user_series_progress(
 
         if episodes_watched == 0:
             status = "planned"
-        elif (
-            not is_ongoing and total_episodes > 0 and episodes_watched == total_episodes
-        ):
+        elif total_episodes > 0 and episodes_watched == total_episodes:
             status = "completed"
         else:
             status = "watching"

@@ -1,8 +1,6 @@
 from datetime import date
 from html import escape
 
-from src.models import is_active_series
-
 from .common import DESCRIPTION_NOT_FOUND
 from .menu import CONTENT_TYPE_TITLES, MEDIA_KIND_TITLES
 from .rating import media_badge_emoji
@@ -35,6 +33,8 @@ ITEM_DELETED = "Запись удалена из библиотеки."
 ITEM_DELETE_PROMPT = "Удалить эту запись из библиотеки?"
 ITEM_EDIT_PROMPT = "Что изменить?"
 ITEM_MARKED_WATCHED = "Отмечено как просмотренное."
+ITEM_MARKED_DROPPED = "Отмечено как брошенное."
+ITEM_RESUMED = "Возвращено к просмотру."
 RATING_UPDATED = "Оценка изменена."
 RATING_EDIT_CANCELLED = "Изменение оценки отменено."
 
@@ -81,9 +81,8 @@ def library_text(
         badge = media_badge_emoji(_item_value(item, "badge"))
         if badge:
             title += f" {badge}"
-        if _item_value(item, "content_format") == "series" and is_active_series(
-            _item_value(item, "tmdb_status"),
-            _item_value(item, "tmdb_in_production"),
+        if _item_value(item, "content_format") == "series" and _has_upcoming_episode(
+            item
         ):
             title += " 🔴"
         lines.append(title)
@@ -187,26 +186,28 @@ def library_item_text(item, description: str | None = None) -> str:
 def _series_release_line(item) -> str | None:
     if _item_value(item, "content_format") != "series":
         return None
-    in_production = _item_value(item, "tmdb_in_production")
-    status = _item_value(item, "tmdb_status")
-    if not is_active_series(status, in_production):
+    if not _has_upcoming_episode(item):
         return None
 
     season_number = _item_value(item, "next_episode_season_number")
     episode_number = _item_value(item, "next_episode_number")
     air_date = _format_air_date(_item_value(item, "next_episode_air_date"))
-    if type(season_number) is int and type(episode_number) is int:
-        date_suffix = f" · {air_date}" if air_date is not None else ""
-        if episode_number == 1:
-            detail = f"Новый сезон · <b>{season_number} сезон{date_suffix}</b>"
-        else:
-            detail = (
-                "Следующая серия · "
-                f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
-            )
+    date_suffix = f" · {air_date}" if air_date is not None else ""
+    if episode_number == 1:
+        detail = f"Новый сезон · <b>{season_number} сезон{date_suffix}</b>"
     else:
-        detail = "Новые серии · <b>дата пока неизвестна</b>"
+        detail = (
+            "Следующая серия · "
+            f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
+        )
     return f"🔴 <b>Сейчас выходит</b>\n{detail}"
+
+
+def _has_upcoming_episode(item) -> bool:
+    return (
+        type(_item_value(item, "next_episode_season_number")) is int
+        and type(_item_value(item, "next_episode_number")) is int
+    )
 
 
 def _format_air_date(value) -> str | None:
@@ -227,7 +228,9 @@ __all__ = (
     "ITEM_DELETED",
     "ITEM_DELETE_PROMPT",
     "ITEM_EDIT_PROMPT",
+    "ITEM_MARKED_DROPPED",
     "ITEM_MARKED_WATCHED",
+    "ITEM_RESUMED",
     "LIBRARY_OPEN_FAILED",
     "UNKNOWN_FILTER",
     "RATING_UPDATED",

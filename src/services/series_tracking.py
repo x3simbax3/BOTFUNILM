@@ -16,7 +16,6 @@ from src.database.series import (
 from src.database.series_release import update_media_series_release_info
 from src.models import SeriesReleaseSnapshot, current_media_id
 from src.services.media import ensure_media
-from src.services.series_metadata import normalize_seasons
 
 
 class SeriesProgressError(ValueError):
@@ -150,7 +149,7 @@ def merge_tracking_season_limits(
     cached_seasons: Sequence[Mapping[str, Any]],
     progress: Mapping[int, int],
 ) -> list[dict[str, Any]]:
-    """Build non-decreasing UI limits from TMDB, cache and user progress."""
+    """Build UI limits from TMDB without losing saved user progress."""
     merged: dict[int, dict[str, Any]] = {}
     for season in cached_seasons:
         season_number = season.get("season_number")
@@ -179,15 +178,8 @@ def merge_tracking_season_limits(
         merged[season_number] = {
             "season_number": season_number,
             "name": str(season.get("name") or (current or {}).get("name") or ""),
-            "episode_count": max(
-                available,
-                int((current or {}).get("episode_count", 0)),
-            ),
-            "announced_episode_count": max(
-                announced,
-                int((current or {}).get("announced_episode_count", 0)),
-                available,
-            ),
+            "episode_count": available,
+            "announced_episode_count": max(announced, available),
         }
 
     for season_number, episodes_watched in progress.items():
@@ -234,7 +226,7 @@ async def prepare_series_tracking(
     user_id: int,
     snapshot: SeriesReleaseSnapshot,
 ) -> SeriesTrackingStart:
-    seasons_data = normalize_seasons(snapshot)
+    seasons_data = snapshot.season_dicts(include_empty=True)
     media_id = await _resolve_media_id(fsm_data)
     saved = await load_saved_progress(user_id, media_id)
     cached_seasons = await get_media_seasons(media_id) if media_id is not None else []
@@ -250,7 +242,12 @@ async def prepare_series_tracking(
         media_id=media_id,
         seasons_data=seasons_data,
         total_episodes=total_episodes,
-        release_data=snapshot.to_fsm_dict(),
+        release_data={
+            **snapshot.to_fsm_dict(),
+            "announced_total_episodes": sum(
+                int(season["announced_episode_count"]) for season in seasons_data
+            ),
+        },
         watched=watched,
     )
 

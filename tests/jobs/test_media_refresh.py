@@ -150,6 +150,97 @@ class MediaRefreshDatabaseTests(DatabaseTestCase):
         self.assertEqual(items[0].released_count, 1)
         self.assertEqual(items[0].episode_number, 4)
 
+    async def test_caught_up_series_returns_when_next_season_starts(self) -> None:
+        media_id = await self.create_user_media(
+            status="completed",
+            episodes_watched=8,
+            is_tracking=True,
+            media_kwargs={
+                "tmdb_id": 302,
+                "content_format": "series",
+                "content_type": "movie",
+                "title": "Молодой Шерлок",
+                "number_of_seasons": 2,
+                "number_of_episodes": 11,
+                "available_episode_count": 11,
+            },
+        )
+        async with connection_scope(self.database_url) as connection:
+            await connection.executemany(
+                """
+                INSERT INTO media_seasons (
+                    media_id, season_number, name,
+                    announced_episode_count, available_episode_count
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (media_id, 1, "Season 1", 8, 8),
+                    (media_id, 2, "Season 2", 3, 3),
+                ],
+            )
+
+        corrected_snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=2,
+            number_of_episodes=11,
+            seasons=(
+                SeriesSeason(1, "Season 1", 8, 8),
+                SeriesSeason(2, "Season 2", 3, 0),
+            ),
+            status="Returning Series",
+            in_production=True,
+            last_episode_to_air=SeriesEpisode(1, 8, "2026-03-04"),
+        )
+        await save_media_refresh(
+            media_id,
+            corrected_snapshot,
+            "daily",
+            database_url=self.database_url,
+        )
+
+        media = await get_media_by_tmdb(
+            302,
+            "series",
+            "movie",
+            database_url=self.database_url,
+        )
+        self.assertEqual(media["available_episode_count"], 8)
+        self.assertEqual(
+            await list_tracked_series(123, database_url=self.database_url),
+            [],
+        )
+
+        release_snapshot = SeriesReleaseSnapshot(
+            number_of_seasons=2,
+            number_of_episodes=11,
+            seasons=(
+                SeriesSeason(1, "Season 1", 8, 8),
+                SeriesSeason(2, "Season 2", 3, 1),
+            ),
+            status="Returning Series",
+            in_production=True,
+            last_episode_to_air=SeriesEpisode(2, 1, "2027-03-04"),
+        )
+        await save_media_refresh(
+            media_id,
+            release_snapshot,
+            "daily",
+            database_url=self.database_url,
+        )
+
+        batches = await prepare_notification_batches(database_url=self.database_url)
+        self.assertEqual([batch.user_id for batch in batches], [123])
+        items = await get_notification_batch(
+            batches[0].batch_id,
+            123,
+            database_url=self.database_url,
+        )
+        self.assertEqual(items[0].released_count, 1)
+        self.assertEqual(items[0].season_number, 2)
+        self.assertEqual(items[0].episode_number, 1)
+        tracked = await list_tracked_series(123, database_url=self.database_url)
+        self.assertEqual([int(item["id"]) for item in tracked], [media_id])
+        self.assertEqual(tracked[0]["user_status"], "watching")
+
     async def test_series_premiere_sends_one_notification_and_stays_tracked(
         self,
     ) -> None:

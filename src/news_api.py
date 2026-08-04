@@ -50,11 +50,18 @@ class NewsArticle:
     published_at: str
 
 
+@dataclass(frozen=True)
+class NewsFetchResult:
+    articles: tuple[NewsArticle, ...]
+    api_limit: int | None
+    api_remaining: int | None
+
+
 async def fetch_news(
     search: str,
     *,
     published_after: datetime,
-) -> list[NewsArticle]:
+) -> NewsFetchResult:
     if not THENEWSAPI_KEY:
         raise NewsApiAuthenticationError("THENEWSAPI_KEY is not configured")
 
@@ -75,6 +82,17 @@ async def fetch_news(
             timeout=aiohttp.ClientTimeout(total=20),
         ) as response:
             status = response.status
+            headers = getattr(response, "headers", {})
+            api_limit = _header_int(
+                headers,
+                "X-UsageLimit-Limit",
+                "X-Usage-Limit",
+            )
+            api_remaining = _header_int(
+                headers,
+                "X-UsageLimit-Remaining",
+                "X-Usage-Remaining",
+            )
             payload = await _read_response(response)
     except TimeoutError as exc:
         raise NewsApiUnavailableError("TheNewsAPI request timed out") from exc
@@ -93,11 +111,11 @@ async def fetch_news(
     data = payload.get("data")
     if not isinstance(data, list):
         raise NewsApiError("TheNewsAPI response has no data list")
-    return [
-        article
-        for item in data
-        if (article := _parse_article(item)) and article.image_url
-    ]
+    return NewsFetchResult(
+        articles=tuple(article for item in data if (article := _parse_article(item))),
+        api_limit=api_limit,
+        api_remaining=api_remaining,
+    )
 
 
 async def fetch_article_text(url: str) -> str | None:
@@ -270,12 +288,21 @@ def _error_message(payload: dict) -> str:
     return "TheNewsAPI request failed"
 
 
+def _header_int(headers, *names: str) -> int | None:
+    for name in names:
+        value = headers.get(name)
+        if value is not None and value.isascii() and value.isdigit():
+            return int(value)
+    return None
+
+
 __all__ = (
     "NewsApiAuthenticationError",
     "NewsApiError",
     "NewsApiRateLimitError",
     "NewsApiUnavailableError",
     "NewsArticle",
+    "NewsFetchResult",
     "fetch_article_text",
     "fetch_news",
 )

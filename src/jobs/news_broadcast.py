@@ -13,13 +13,19 @@ import aiosqlite
 from aiogram import Bot
 from aiogram.exceptions import (
     TelegramAPIError,
+    TelegramBadRequest,
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from redis.asyncio import Redis
 
+from config.config import NEWS_API_DAILY_BUDGET
 from src.database.bot_users import get_news_recipients, mark_bot_user_inactive
+from src.database.news_api_usage import (
+    reserve_news_api_request,
+    update_news_api_quota,
+)
 from src.database.notification_delivery import record_notification_delivery
 from src.news_api import (
     NewsApiAuthenticationError,
@@ -104,7 +110,7 @@ async def send_news_broadcast(
         logger.info("News broadcast skipped because there are no opted-in users")
         return stats
 
-    selected = await select_news_article(redis, now)
+    selected = await select_news_article(redis, now, database_url=database_url)
     if selected is None:
         logger.warning("News broadcast skipped because no fresh article was found")
         return stats
@@ -114,9 +120,6 @@ async def send_news_broadcast(
         if expanded_text:
             article = replace(article, description=expanded_text)
     stats.article_uuid = article.uuid
-    if not article.image_url:
-        logger.warning("News broadcast skipped because selected article has no image")
-        return stats
     photo = article.image_url
     after_user_id = 0
     batch = first_batch
@@ -176,6 +179,8 @@ async def send_news_broadcast(
 async def select_news_article(
     redis: Redis,
     now: datetime,
+    *,
+    database_url: str | None = None,
 ) -> tuple[NewsFilter, NewsArticle] | None:
     local_now = now
     sent_key = "news:sent"
@@ -190,8 +195,13 @@ async def select_news_article(
     )
 
     for article_filter in filters[:MAX_FILTERS_PER_RUN]:
+        await reserve_news_api_request(
+            local_now.date(),
+            NEWS_API_DAILY_BUDGET,
+            database_url=database_url,
+        )
         try:
-            articles = await fetch_news(
+            result = await fetch_news(
                 article_filter.search,
                 published_after=published_after,
             )
@@ -205,9 +215,14 @@ async def select_news_article(
             )
             continue
 
-        for article in articles:
-            if not article.image_url:
-                continue
+        await update_news_api_quota(
+            local_now.date(),
+            api_limit=result.api_limit,
+            api_remaining=result.api_remaining,
+            database_url=database_url,
+        )
+
+        for article in result.articles:
             if not await redis.zadd(
                 sent_key,
                 {article.uuid: local_now.timestamp()},
@@ -224,21 +239,32 @@ async def _deliver_article(
     bot: Bot,
     user_id: int,
     article: NewsArticle,
-    photo: str,
+    photo: str | None,
 ) -> Message:
-    text = _article_text(article)
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Читать источник", url=article.url)]
         ]
     )
+    if photo:
+        try:
+            return await _retry_after(
+                bot.send_photo,
+                chat_id=user_id,
+                photo=photo,
+                caption=_article_text(article, limit=1024),
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        except TelegramBadRequest:
+            logger.info("News photo rejected, using text: user_id=%s", user_id)
     return await _retry_after(
-        bot.send_photo,
+        bot.send_message,
         chat_id=user_id,
-        photo=photo,
-        caption=text,
+        text=_article_text(article, limit=4096),
         parse_mode="HTML",
         reply_markup=keyboard,
+        link_preview_options=None,
     )
 
 
@@ -253,11 +279,11 @@ async def _retry_after(method, **kwargs) -> Message:
     raise AssertionError("unreachable")
 
 
-def _article_text(article: NewsArticle) -> str:
+def _article_text(article: NewsArticle, *, limit: int = 1024) -> str:
     source_text = article.source or "Источник"
     description_limit = max(
         0,
-        1024 - len(article.title) - len(source_text) - len("\n\n\n\n"),
+        limit - len(article.title) - len(source_text) - len("\n\n\n\n"),
     )
     title = html.escape(article.title)
     description = html.escape(_truncate(article.description, description_limit))

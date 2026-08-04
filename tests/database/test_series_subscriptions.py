@@ -116,7 +116,7 @@ class SeriesSubscriptionDatabaseTests(DatabaseTestCase):
                 database_url=self.database_url,
             )
 
-    async def test_release_is_queued_for_each_subscriber_and_disables_ended(
+    async def test_release_is_queued_and_subscription_survives_inactive_status(
         self,
     ) -> None:
         media_id = await self._active_user_series(200, user_id=123)
@@ -137,7 +137,6 @@ class SeriesSubscriptionDatabaseTests(DatabaseTestCase):
                 4,
                 season_number=1,
                 episode_number=4,
-                active=False,
             )
 
         batches = await prepare_notification_batches(database_url=self.database_url)
@@ -150,7 +149,13 @@ class SeriesSubscriptionDatabaseTests(DatabaseTestCase):
             )
             self.assertEqual(items[0].released_count, 1)
             self.assertEqual(items[0].episode_number, 4)
-        self.assertEqual(
-            await list_tracked_series(123, database_url=self.database_url),
-            [],
-        )
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute(
+                """
+                SELECT is_tracking FROM user_media
+                WHERE user_id = 123 AND media_id = ?
+                """,
+                (media_id,),
+            ) as cursor:
+                subscription = await cursor.fetchone()
+        self.assertEqual(subscription["is_tracking"], 1)

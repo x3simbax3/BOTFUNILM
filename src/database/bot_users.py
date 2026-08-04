@@ -92,6 +92,28 @@ async def get_news_recipients(
             return [int(row["user_id"]) for row in await cursor.fetchall()]
 
 
+async def get_active_user_ids(
+    *,
+    after_user_id: int = 0,
+    limit: int = 100,
+    database_url: str | None = None,
+) -> list[int]:
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT user_id
+            FROM bot_users
+            WHERE is_active = 1 AND user_id > ?
+            ORDER BY user_id
+            LIMIT ?
+            """,
+            (after_user_id, limit),
+        ) as cursor:
+            return [int(row["user_id"]) for row in await cursor.fetchall()]
+
+
 async def get_news_enabled(
     user_id: int,
     *,
@@ -139,6 +161,7 @@ async def mark_bot_user_inactive(
 
 
 __all__ = (
+    "get_active_user_ids",
     "get_news_enabled",
     "get_news_recipients",
     "mark_bot_user_inactive",

@@ -81,6 +81,26 @@ class AdminUserDetails:
 
 
 @dataclass(frozen=True)
+class AdminExportUser:
+    user_id: int
+    username: str | None
+    display_name: str | None
+    is_active: int
+    news_enabled: int
+    started_at: str
+    last_started_at: str
+    last_activity_at: str
+    library_items: int
+    planned_items: int
+    watching_items: int
+    completed_items: int
+    on_hold_items: int
+    dropped_items: int
+    rated_items: int
+    tracked_series: int
+
+
+@dataclass(frozen=True)
 class AdminActivityDay:
     event_date: str
     active_users: int
@@ -697,10 +717,53 @@ async def get_admin_notifications(
     return AdminNotifications(**dict(row))
 
 
+async def get_admin_export_users(
+    *,
+    database_url: str | None = None,
+) -> tuple[AdminExportUser, ...]:
+    async with connection_scope(database_url) as connection:
+        async with connection.execute(
+            """
+            SELECT
+                bot_users.user_id,
+                bot_users.username,
+                bot_users.display_name,
+                bot_users.is_active,
+                bot_users.news_enabled,
+                bot_users.started_at,
+                bot_users.last_started_at,
+                bot_users.last_activity_at,
+                COUNT(user_media.media_id) AS library_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'planned')
+                    AS planned_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'watching')
+                    AS watching_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'completed')
+                    AS completed_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
+                    AS on_hold_items,
+                COUNT(*) FILTER (WHERE user_media.status = 'dropped')
+                    AS dropped_items,
+                COUNT(*) FILTER (WHERE user_media.user_rating IS NOT NULL)
+                    AS rated_items,
+                COUNT(*) FILTER (WHERE user_media.is_tracking = 1)
+                    AS tracked_series
+            FROM bot_users
+            LEFT JOIN user_media ON user_media.user_id = bot_users.user_id
+            GROUP BY bot_users.user_id
+            ORDER BY bot_users.user_id
+            """
+        ) as cursor:
+            return tuple(
+                AdminExportUser(**dict(row)) for row in await cursor.fetchall()
+            )
+
+
 __all__ = (
     "ADMIN_USERS_PAGE_SIZE",
     "AdminActivity",
     "AdminActivityDay",
+    "AdminExportUser",
     "AdminLibraries",
     "AdminNotifications",
     "AdminSystem",
@@ -711,6 +774,7 @@ __all__ = (
     "AdminUserSummary",
     "get_admin_overview",
     "get_admin_activity",
+    "get_admin_export_users",
     "get_admin_libraries",
     "get_admin_notifications",
     "get_admin_system",

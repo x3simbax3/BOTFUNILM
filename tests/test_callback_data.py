@@ -42,6 +42,10 @@ class CallbackDataTests(unittest.TestCase):
             parse_library_filter_callback("library:filter:planned"),
             "planned",
         )
+        self.assertEqual(
+            parse_library_filter_callback("library:filter:dropped"),
+            "dropped",
+        )
         self.assertEqual(parse_library_sort_callback("library:sort:rating"), "rating")
         self.assertEqual(parse_library_sort_callback("library:sort:recent"), "recent")
         self.assertEqual(

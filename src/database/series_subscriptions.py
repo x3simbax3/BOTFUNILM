@@ -126,7 +126,11 @@ async def list_tracked_series(
             FROM user_media AS um
             JOIN media AS m ON m.id = um.media_id
             WHERE um.user_id = ? AND (
-                um.is_tracking = 1
+                (
+                    um.is_tracking = 1
+                    AND COALESCE(um.episodes_watched, 0)
+                        < COALESCE(m.available_episode_count, 0)
+                )
                 OR (
                     m.is_released = 0
                     AND um.status = 'planned'
@@ -148,7 +152,6 @@ async def record_series_release(
     *,
     season_number: int | None,
     episode_number: int | None,
-    active: bool,
 ) -> None:
     """Fan out one catalogue release to subscribers without another TMDB call."""
     if current_episode_count > previous_episode_count:
@@ -170,9 +173,12 @@ async def record_series_release(
                 media_id,
             ),
         )
-    if not active:
         await connection.execute(
-            "UPDATE user_media SET is_tracking = 0 WHERE media_id = ?",
+            """
+            UPDATE user_media
+            SET status = 'watching'
+            WHERE media_id = ? AND is_tracking = 1 AND status = 'completed'
+            """,
             (media_id,),
         )
 

@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "aiogram[redis]==3.30.0",
     "aiosqlite==0.21.0",
+    "openpyxl==3.1.5",
     "python-dotenv==1.2.2",
 ]
 

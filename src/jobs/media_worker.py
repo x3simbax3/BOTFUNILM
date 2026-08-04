@@ -40,7 +40,9 @@ from src.admin_runtime import (
 )
 from src.database.admin import is_feature_enabled
 from src.database.connection import connect_database
+from src.database.news_api_usage import NewsApiDailyBudgetError
 from src.http_client import close_http_session
+from src.jobs.custom_broadcast import send_custom_broadcast
 from src.jobs.media_refresh import (
     MediaChange,
     MediaRefreshCandidate,
@@ -537,10 +539,23 @@ async def run_admin_job_listener(
                 await _run_notifications_locked_or_log(
                     redis, bot, database_url=database_url
                 )
-            else:
+            elif job == "news":
                 if not THENEWSAPI_KEY:
                     raise RuntimeError("THENEWSAPI_KEY is required")
                 await _run_news_locked_or_log(redis, bot, database_url=database_url)
+            else:
+                text = payload.get("text")
+                photo_file_id = payload.get("photo_file_id")
+                if not isinstance(text, str) or (
+                    photo_file_id is not None and not isinstance(photo_file_id, str)
+                ):
+                    raise ValueError("Invalid custom broadcast payload")
+                await send_custom_broadcast(
+                    bot,
+                    text,
+                    photo_file_id=photo_file_id,
+                    database_url=database_url,
+                )
         except Exception:
             logger.exception("Admin worker job failed")
             await _set_worker_heartbeat(redis, "failed", job)
@@ -603,6 +618,8 @@ async def _run_news_locked_or_log(
         logger.error("News broadcast stopped because TheNewsAPI key is invalid")
     except NewsApiRateLimitError:
         logger.error("News broadcast stopped because TheNewsAPI limit was reached")
+    except NewsApiDailyBudgetError:
+        logger.info("News broadcast skipped because the daily API budget is exhausted")
 
 
 async def _run_locked_or_log(
