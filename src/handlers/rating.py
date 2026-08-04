@@ -30,6 +30,7 @@ from src.lang import (
 )
 from src.models import current_media_id
 from src.services import UnreleasedMediaError, save_completed_movie
+from src.user_activity import track_user_event
 
 router = Router(name="rating")
 
@@ -210,6 +211,8 @@ async def finish_library_rating_edit(
         await callback.answer(MOVIE_SAVE_FAILED, show_alert=True)
         return
 
+    await track_user_event(callback.from_user.id, "rating_set")
+
     await state.update_data(library_rating_edit=False)
     await callback.message.answer(
         RATING_UPDATED,
@@ -240,6 +243,9 @@ async def finish_movie(
             show_alert=True,
         )
         return
+
+    await track_user_event(callback.from_user.id, "media_added")
+    await track_user_event(callback.from_user.id, "rating_set")
 
     await state.update_data(watch_date=date.today().isoformat())
     await callback.message.answer(

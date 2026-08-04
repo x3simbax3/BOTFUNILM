@@ -25,6 +25,8 @@ CREATE INDEX ix_user_media_tracked_by_media
 
 CREATE TABLE bot_users (
     user_id             INTEGER NOT NULL PRIMARY KEY,
+    username            TEXT,
+    display_name        TEXT,
     is_active           INTEGER NOT NULL DEFAULT 1,
     news_enabled        INTEGER NOT NULL DEFAULT 1,
     started_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
@@ -38,6 +40,18 @@ CREATE INDEX ix_bot_users_news_recipients
     ON bot_users (is_active, news_enabled, user_id);
 CREATE INDEX ix_bot_users_last_activity
     ON bot_users (last_activity_at);
+
+CREATE TABLE bot_user_daily_events (
+    user_id             INTEGER NOT NULL,
+    event_date          TEXT NOT NULL,
+    event_type          TEXT NOT NULL,
+    event_count         INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, event_date, event_type),
+    CHECK (`event_count` > 0)
+);
+
+CREATE INDEX ix_bot_user_daily_events_metric
+    ON bot_user_daily_events (event_type, event_date, user_id);
 
 CREATE TABLE user_season_progress (
     user_id             INTEGER NOT NULL,

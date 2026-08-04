@@ -1,4 +1,9 @@
-from .admin import admin_overview_keyboard
+from .admin import (
+    admin_activity_keyboard,
+    admin_overview_keyboard,
+    admin_user_keyboard,
+    admin_users_keyboard,
+)
 from .library import (
     library_delete_keyboard,
     library_edit_keyboard,
@@ -22,7 +27,10 @@ from .tracking import (
 
 __all__ = (
     "EPISODES_PAGE_SIZE",
+    "admin_activity_keyboard",
     "admin_overview_keyboard",
+    "admin_user_keyboard",
+    "admin_users_keyboard",
     "badge_keyboard",
     "content_type_keyboard",
     "episodes_keyboard",

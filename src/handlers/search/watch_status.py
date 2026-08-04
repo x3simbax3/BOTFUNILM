@@ -21,6 +21,7 @@ from src.lang import (
 )
 from src.models import MediaWorkflowData
 from src.services.planned_media import save_planned_media
+from src.user_activity import track_user_event
 
 from .router import router
 
@@ -49,6 +50,8 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
         except (aiosqlite.Error, RuntimeError, ValueError):
             await callback.answer(TITLE_SAVE_FAILED, show_alert=True)
             return
+
+        await track_user_event(callback.from_user.id, "media_added")
 
         is_ongoing = (
             result.series_snapshot is not None and result.series_snapshot.active

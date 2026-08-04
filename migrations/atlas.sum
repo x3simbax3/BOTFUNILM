@@ -1,4 +1,4 @@
-h1:w61asnJ+k7UTsIkFa3bDQgFsoya+OWewpMdhHdJwJu8=
+h1:4qhSJkQT0JJHaUOZUbSc3GlwfGNqlNhY9SuTHKjQv/A=
 20260723193218_initial.sql h1:SZU4jnB0oVHMGUfJXn0mXO4JxP/xppIEOzs5VxJ+xGY=
 20260724120000_add_user_season_progress.sql h1:e0jJrJZ0RV8maVxut8TasWDVFtAngzo6igizH3KCfEw=
 20260724130000_split_media_classification.sql h1:cl/TOWC3ugxhdBoEF5SvfhELbjWzAEJpxhJHhdFAy2Y=
@@ -21,3 +21,5 @@ h1:w61asnJ+k7UTsIkFa3bDQgFsoya+OWewpMdhHdJwJu8=
 20260731120447_add_user_media_badge.sql h1:QF6uYGn7XD8agOYYBFVEukywZEF7/wltGOKPVwYwDic=
 20260804120000_add_news_preference.sql h1:2QcbeF3EIHjEHUruGAffV13DbWQQGx96aJXkj0fZZ5I=
 20260804130000_add_bot_user_activity.sql h1:nTmLaxzX27cwo55pBi6XFeVivaWNBs49U/mpG0RsJJA=
+20260804140000_add_bot_user_profile.sql h1:eA7U3eEozFDLJeLQKGXQ8maW+Z27A8Sfok52YYhZ3T0=
+20260804150000_add_daily_user_events.sql h1:tdXirwqhRcBKdTaecBx2Ijlxv48C99BRgbq0SD93UMk=

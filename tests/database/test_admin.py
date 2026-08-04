@@ -1,5 +1,9 @@
-from src.database.admin import get_admin_overview
-from src.database.bot_users import mark_bot_user_inactive, register_bot_user
+from src.database.admin import get_admin_overview, get_admin_user, get_admin_users
+from src.database.bot_users import (
+    mark_bot_user_inactive,
+    register_bot_user,
+    touch_bot_user,
+)
 from src.database.connection import connection_scope
 from tests.support.database import DatabaseTestCase
 
@@ -21,6 +25,7 @@ class AdminOverviewDatabaseTests(DatabaseTestCase):
                 "content_format": "series",
                 "title": "Series",
             },
+            status="watching",
             is_tracking=True,
         )
         self.assertGreater(first_media_id, 0)
@@ -62,6 +67,54 @@ class AdminOverviewDatabaseTests(DatabaseTestCase):
         self.assertEqual(overview.rated_items, 1)
         self.assertEqual(overview.tracked_series, 1)
         self.assertEqual(overview.news_users, 2)
+
+        await touch_bot_user(
+            1,
+            username="viewer",
+            display_name="Test Viewer",
+            database_url=self.database_url,
+        )
+        first_page = await get_admin_users(
+            1,
+            page_size=2,
+            database_url=self.database_url,
+        )
+        second_page = await get_admin_users(
+            2,
+            page_size=2,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual(first_page.total_users, 3)
+        self.assertEqual(first_page.total_pages, 2)
+        self.assertEqual([user.user_id for user in first_page.users], [1, 2])
+        self.assertEqual(first_page.users[0].username, "viewer")
+        self.assertEqual(first_page.users[0].display_name, "Test Viewer")
+        self.assertEqual(first_page.users[0].library_items, 2)
+        self.assertEqual([user.user_id for user in second_page.users], [3])
+
+        user = await get_admin_user(1, database_url=self.database_url)
+
+        self.assertIsNotNone(user)
+        self.assertEqual(user.library_items, 2)
+        self.assertEqual(user.planned_items, 1)
+        self.assertEqual(user.watching_items, 1)
+        self.assertEqual(user.rated_items, 1)
+        self.assertEqual(user.average_rating, 8)
+        self.assertEqual(user.tracked_series, 1)
+
+    async def test_missing_user_returns_none(self) -> None:
+        self.assertIsNone(await get_admin_user(999, database_url=self.database_url))
+
+    async def test_user_page_rejects_invalid_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "page must be positive"):
+            await get_admin_users(0, database_url=self.database_url)
+        with self.assertRaisesRegex(ValueError, "page_size must be positive"):
+            await get_admin_users(
+                1,
+                page_size=0,
+                database_url=self.database_url,
+            )
 
     async def test_empty_database_returns_zeroes(self) -> None:
         overview = await get_admin_overview(database_url=self.database_url)

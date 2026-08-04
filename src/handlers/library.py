@@ -78,6 +78,7 @@ from src.models import (
 )
 from src.posters import poster_input, sent_photo_file_id
 from src.tmdb import TmdbError, fetch_title_details
+from src.user_activity import track_user_event
 
 router = Router(name="library")
 LIBRARY_PAGE_SIZE = 10
@@ -86,6 +87,7 @@ LIBRARY_PAGE_SIZE = 10
 @router.callback_query(F.data == "menu:library")
 async def open_library(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
+        await track_user_event(callback.from_user.id, "library_open")
         await state.update_data(library_sort="recent", library_filter_group=None)
         await open_library_page(callback, state, 0)
 

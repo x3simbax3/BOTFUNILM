@@ -33,19 +33,38 @@ async def register_bot_user(
 async def touch_bot_user(
     user_id: int,
     *,
+    username: str | None,
+    display_name: str,
     database_url: str | None = None,
 ) -> None:
     """Register user activity without changing the last /start timestamp."""
     async with connection_scope(database_url) as connection:
         await connection.execute(
             """
-            INSERT INTO bot_users (user_id, last_activity_at)
-            VALUES (?, CURRENT_TIMESTAMP)
+            INSERT INTO bot_users (
+                user_id, username, display_name, last_activity_at
+            ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(user_id) DO UPDATE SET
                 is_active = 1,
-                last_activity_at = CURRENT_TIMESTAMP
+                username = excluded.username,
+                display_name = excluded.display_name,
+                last_activity_at = CASE
+                    WHEN bot_users.last_activity_at < datetime('now', '-1 minute')
+                    THEN CURRENT_TIMESTAMP
+                    ELSE bot_users.last_activity_at
+                END
             WHERE bot_users.is_active = 0
                OR bot_users.last_activity_at < datetime('now', '-1 minute')
+               OR bot_users.username IS NOT excluded.username
+               OR bot_users.display_name IS NOT excluded.display_name
+            """,
+            (user_id, username, display_name),
+        )
+        await connection.execute(
+            """
+            INSERT OR IGNORE INTO bot_user_daily_events (
+                user_id, event_date, event_type, event_count
+            ) VALUES (?, date('now'), 'active', 1)
             """,
             (user_id,),
         )

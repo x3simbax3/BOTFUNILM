@@ -68,14 +68,24 @@ class BotUserDatabaseTests(DatabaseTestCase):
         self.assertFalse(await toggle_news_enabled(456, database_url=self.database_url))
 
     async def test_touch_registers_and_reactivates_user(self) -> None:
-        await touch_bot_user(789, database_url=self.database_url)
+        await touch_bot_user(
+            789,
+            username="first_name",
+            display_name="First Name",
+            database_url=self.database_url,
+        )
         self.assertEqual(
             await get_news_recipients(database_url=self.database_url),
             [789],
         )
 
         await mark_bot_user_inactive(789, database_url=self.database_url)
-        await touch_bot_user(789, database_url=self.database_url)
+        await touch_bot_user(
+            789,
+            username=None,
+            display_name="New Name",
+            database_url=self.database_url,
+        )
 
         self.assertEqual(
             await get_news_recipients(database_url=self.database_url),

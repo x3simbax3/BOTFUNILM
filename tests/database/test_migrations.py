@@ -25,6 +25,8 @@ class MigrationTests(DatabaseTestCase):
         self.assertIn(("media_search_terms", "table"), objects)
         self.assertIn(("ix_bot_users_news_recipients", "index"), objects)
         self.assertIn(("ix_bot_users_last_activity", "index"), objects)
+        self.assertIn(("bot_user_daily_events", "table"), objects)
+        self.assertIn(("ix_bot_user_daily_events_metric", "index"), objects)
         self.assertIn(("ix_media_search_terms_term", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)
         self.assertIn(("ix_user_season_progress_media_id", "index"), objects)
@@ -36,6 +38,13 @@ class MigrationTests(DatabaseTestCase):
             ("update_media_library_users_count_after_delete", "trigger"),
             objects,
         )
+
+        async with connection_scope(self.database_url) as connection:
+            async with connection.execute("PRAGMA table_info(bot_users)") as cursor:
+                bot_user_columns = {row["name"] for row in await cursor.fetchall()}
+
+        self.assertIn("username", bot_user_columns)
+        self.assertIn("display_name", bot_user_columns)
 
     async def test_transaction_rolls_back_on_error(self) -> None:
         with self.assertRaises(RuntimeError):

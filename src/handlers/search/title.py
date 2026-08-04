@@ -30,6 +30,7 @@ from src.tmdb_models import (
     TmdbRateLimitError,
     TmdbUnavailableError,
 )
+from src.user_activity import track_user_event
 
 from .candidates import show_candidates
 from .router import router
@@ -50,6 +51,8 @@ async def search_title(message: Message, state: FSMContext) -> None:
     if not content_format:
         await message.answer(FORMAT_MISSING)
         return
+
+    await track_user_event(message.from_user.id, "search")
 
     status_message = await message.answer(TMDB_SEARCHING, parse_mode="HTML")
     content_type = data.get("content_type", "movie")

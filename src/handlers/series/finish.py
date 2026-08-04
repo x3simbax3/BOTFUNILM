@@ -20,6 +20,7 @@ from src.services.series_tracking import (
     SeriesProgressError,
     save_series_tracking_result,
 )
+from src.user_activity import track_user_event
 
 
 async def finish_series_tracking(
@@ -44,6 +45,11 @@ async def finish_series_tracking(
 
     await state.update_data(watch_date=date.today().isoformat())
     is_new_item = not bool(data.get("library_progress_edit"))
+    await track_user_event(callback.from_user.id, "progress_updated")
+    if is_new_item:
+        await track_user_event(callback.from_user.id, "media_added")
+        if data.get("rating_average") is not None:
+            await track_user_event(callback.from_user.id, "rating_set")
     await callback.message.edit_text(
         tracking_complete_text(
             result.title,
