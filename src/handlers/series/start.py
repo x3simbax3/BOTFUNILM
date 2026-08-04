@@ -5,8 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from src.fsm import MenuState
-from src.handlers.navigation import reset_to_main
-from src.keyboards import main_menu_keyboard
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.lang import DETAILS_LOAD_FAILED, PROGRESS_LOAD_FAILED, SAVED_PROGRESS_INVALID
 from src.services.series_metadata import (
     SeriesMetadataError,
@@ -55,7 +54,10 @@ async def _leave_tracking(
     state: FSMContext,
     text: str,
 ) -> None:
-    await callback.message.answer(text, reply_markup=main_menu_keyboard())
+    await callback.message.answer(
+        text,
+        reply_markup=await user_main_menu_keyboard(callback.from_user.id),
+    )
     await reset_to_main(state)
 
 

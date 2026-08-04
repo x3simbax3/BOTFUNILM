@@ -6,8 +6,8 @@ import aiosqlite
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from src.handlers.navigation import reset_to_main
-from src.keyboards import main_menu_keyboard, post_add_tracking_keyboard
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
+from src.keyboards import post_add_tracking_keyboard
 from src.lang import (
     DONE,
     INVALID_PROGRESS,
@@ -62,7 +62,10 @@ async def finish_series_tracking(
         ),
     )
     if not (is_new_item and result.is_ongoing):
-        await callback.message.answer(DONE, reply_markup=main_menu_keyboard())
+        await callback.message.answer(
+            DONE,
+            reply_markup=await user_main_menu_keyboard(callback.from_user.id),
+        )
     await reset_to_main(state)
     await callback.answer()
 

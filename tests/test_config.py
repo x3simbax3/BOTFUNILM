@@ -1,6 +1,25 @@
 import unittest
 
-from config.config import validate_tmdb_url
+from config.config import parse_admin_user_ids, validate_tmdb_url
+
+
+class AdminUserIdsValidationTests(unittest.TestCase):
+    def test_parses_multiple_unique_user_ids(self) -> None:
+        self.assertEqual(
+            parse_admin_user_ids("18738382, 188299, 18738382"),
+            frozenset({18738382, 188299}),
+        )
+
+    def test_accepts_empty_value(self) -> None:
+        self.assertEqual(parse_admin_user_ids(""), frozenset())
+
+    def test_rejects_non_numeric_user_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "integers"):
+            parse_admin_user_ids("18738382, 18829к9")
+
+    def test_rejects_zero(self) -> None:
+        with self.assertRaisesRegex(ValueError, "positive"):
+            parse_admin_user_ids("0")
 
 
 class TmdbUrlValidationTests(unittest.TestCase):

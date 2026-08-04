@@ -26,6 +26,7 @@ from src.logging_config import configure_logging
 from src.routers import router
 from src.tmdb_limiter import close_tmdb_request_limiter
 from src.update_throttling import UserThrottleMiddleware
+from src.user_activity import UserActivityMiddleware
 
 
 def create_dispatcher() -> Dispatcher:
@@ -61,6 +62,7 @@ def create_dispatcher() -> Dispatcher:
             max_users=USER_THROTTLE_MAX_USERS,
         )
     )
+    dispatcher.update.outer_middleware(UserActivityMiddleware())
     dispatcher.update.outer_middleware(dispatcher.fsm)
     return dispatcher
 

@@ -1,5 +1,6 @@
 """Main menu, content selection and backward navigation handlers."""
 
+import aiosqlite
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
@@ -11,11 +12,11 @@ from src.callback_data import (
     parse_format_callback,
     parse_type_callback,
 )
-from src.database.bot_users import register_bot_user
+from src.database.bot_users import register_bot_user, toggle_news_enabled
 from src.fsm import MenuState
 from src.handlers.common import replace_message
 from src.handlers.library import media_id_from_start, show_library_item
-from src.handlers.navigation import reset_to_main
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.keyboards import (
     content_type_keyboard,
     format_keyboard,
@@ -26,6 +27,9 @@ from src.lang import (
     BACK_FAILED,
     ENTER_TITLE_AGAIN,
     INVALID_SELECTION,
+    NEWS_DISABLED,
+    NEWS_ENABLED,
+    NEWS_SETTING_FAILED,
     SELECTION_SAVED,
     START_TEXT,
     UNKNOWN_STEP,
@@ -69,7 +73,7 @@ MENU_TREE = {
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
-    await register_bot_user(message.from_user.id)
+    news_enabled = await register_bot_user(message.from_user.id)
     previous_data = dict(await state.get_data())
     media_id = media_id_from_start(message.text)
     if media_id is not None:
@@ -90,8 +94,24 @@ async def start(message: Message, state: FSMContext) -> None:
     await message.answer(
         START_TEXT,
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=main_menu_keyboard(news_enabled),
     )
+
+
+@router.callback_query(F.data == "menu:news")
+async def toggle_news(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    try:
+        enabled = await toggle_news_enabled(callback.from_user.id)
+    except aiosqlite.Error:
+        await callback.answer(NEWS_SETTING_FAILED, show_alert=True)
+        return
+
+    await callback.message.edit_reply_markup(
+        reply_markup=main_menu_keyboard(enabled),
+    )
+    await callback.answer(NEWS_ENABLED if enabled else NEWS_DISABLED)
 
 
 @router.callback_query(F.data == "menu:add")
@@ -194,7 +214,11 @@ async def go_back(callback: CallbackQuery, state: FSMContext) -> None:
         callback.message,
         step["text"](data),
         parse_mode="HTML",
-        reply_markup=step["keyboard"](data),
+        reply_markup=(
+            await user_main_menu_keyboard(callback.from_user.id)
+            if target_step == "main"
+            else step["keyboard"](data)
+        ),
     )
     await callback.answer()
 

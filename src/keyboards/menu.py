@@ -5,7 +5,7 @@ from src.lang import get_locale
 text = get_locale().keyboards
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(news_enabled: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -17,6 +17,12 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=text.MAIN_TRACKED, callback_data="menu:tracked"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=(text.MAIN_NEWS_ON if news_enabled else text.MAIN_NEWS_OFF),
+                    callback_data="menu:news",
                 )
             ],
         ],

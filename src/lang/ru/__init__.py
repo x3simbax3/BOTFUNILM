@@ -1,3 +1,5 @@
+from .admin import *
+from .admin import __all__ as _admin_all
 from .common import *
 from .common import __all__ as _common_all
 from .keyboards import *
@@ -16,6 +18,7 @@ from .tracking import *
 from .tracking import __all__ as _tracking_all
 
 __all__ = (
+    *_admin_all,
     *_common_all,
     *_keyboards_all,
     *_library_all,

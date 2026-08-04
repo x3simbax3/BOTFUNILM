@@ -42,6 +42,7 @@ class MessageStub:
         self.answers = []
         self.photo_answers = []
         self.edit_text_calls = []
+        self.edit_reply_markup_calls = []
         self.photo = []
         self.deleted = False
         self.from_user = SimpleNamespace(id=123)
@@ -60,6 +61,9 @@ class MessageStub:
 
     async def edit_text(self, text: str, **kwargs) -> None:
         self.edit_text_calls.append({"text": text, **kwargs})
+
+    async def edit_reply_markup(self, **kwargs) -> None:
+        self.edit_reply_markup_calls.append(kwargs)
 
     async def delete(self) -> None:
         self.deleted = True

@@ -7,19 +7,18 @@ import html
 import logging
 import secrets
 from dataclasses import dataclass, replace
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from aiogram.exceptions import (
     TelegramAPIError,
-    TelegramBadRequest,
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from redis.asyncio import Redis
 
-from src.database.bot_users import get_active_bot_users, mark_bot_user_inactive
+from src.database.bot_users import get_news_recipients, mark_bot_user_inactive
 from src.news_api import (
     NewsApiAuthenticationError,
     NewsApiError,
@@ -33,6 +32,8 @@ logger = logging.getLogger(__name__)
 USER_BATCH_SIZE = 100
 SEND_INTERVAL_SECONDS = 0.06
 MAX_FILTERS_PER_RUN = 4
+NEWS_LOOKBACK_DAYS = 7
+SENT_NEWS_TTL_SECONDS = 8 * 86400
 
 
 @dataclass(frozen=True)
@@ -92,13 +93,13 @@ async def send_news_broadcast(
     database_url: str | None = None,
 ) -> NewsBroadcastStats:
     """Select and broadcast one article, returning without work if no users exist."""
-    first_batch = await get_active_bot_users(
+    first_batch = await get_news_recipients(
         limit=USER_BATCH_SIZE,
         database_url=database_url,
     )
     stats = NewsBroadcastStats()
     if not first_batch:
-        logger.info("News broadcast skipped because there are no active users")
+        logger.info("News broadcast skipped because there are no opted-in users")
         return stats
 
     selected = await select_news_article(redis, now)
@@ -111,6 +112,9 @@ async def send_news_broadcast(
         if expanded_text:
             article = replace(article, description=expanded_text)
     stats.article_uuid = article.uuid
+    if not article.image_url:
+        logger.warning("News broadcast skipped because selected article has no image")
+        return stats
     photo = article.image_url
     after_user_id = 0
     batch = first_batch
@@ -119,16 +123,13 @@ async def send_news_broadcast(
         for user_id in batch:
             stats.selected += 1
             try:
-                message, used_photo = await _deliver_article(
+                message = await _deliver_article(
                     bot,
                     user_id,
                     article,
                     photo,
                 )
-                if used_photo:
-                    photo = _telegram_photo_id(message) or photo
-                else:
-                    photo = None
+                photo = _telegram_photo_id(message) or photo
                 stats.sent += 1
             except TelegramForbiddenError:
                 stats.deactivated += 1
@@ -140,7 +141,7 @@ async def send_news_broadcast(
             await asyncio.sleep(SEND_INTERVAL_SECONDS)
 
         after_user_id = batch[-1]
-        batch = await get_active_bot_users(
+        batch = await get_news_recipients(
             after_user_id=after_user_id,
             limit=USER_BATCH_SIZE,
             database_url=database_url,
@@ -164,16 +165,16 @@ async def select_news_article(
     now: datetime,
 ) -> tuple[NewsFilter, NewsArticle] | None:
     local_now = now
-    sent_key = f"news:sent:{local_now.date().isoformat()}"
+    sent_key = "news:sent"
+    cutoff = (local_now - timedelta(days=NEWS_LOOKBACK_DAYS)).timestamp()
+    await redis.zremrangebyscore(sent_key, "-inf", cutoff)
     last_filter = await redis.get("news:last-filter")
     filters = [item for item in NEWS_FILTERS if item.name != last_filter]
     secrets.SystemRandom().shuffle(filters)
     filters.extend(item for item in NEWS_FILTERS if item.name == last_filter)
-    published_after = datetime.combine(
-        local_now.date(),
-        time.min,
-        tzinfo=local_now.tzinfo,
-    ).astimezone(timezone.utc)
+    published_after = (local_now - timedelta(days=NEWS_LOOKBACK_DAYS)).astimezone(
+        timezone.utc
+    )
 
     for article_filter in filters[:MAX_FILTERS_PER_RUN]:
         try:
@@ -192,16 +193,15 @@ async def select_news_article(
             continue
 
         for article in articles:
-            if not await redis.sadd(sent_key, article.uuid):
+            if not article.image_url:
                 continue
-            expires_at = datetime.combine(
-                local_now.date(),
-                time(hour=22, minute=15),
-                tzinfo=local_now.tzinfo,
-            )
-            if expires_at <= local_now:
-                expires_at += timedelta(days=1)
-            await redis.expireat(sent_key, expires_at)
+            if not await redis.zadd(
+                sent_key,
+                {article.uuid: local_now.timestamp()},
+                nx=True,
+            ):
+                continue
+            await redis.expire(sent_key, SENT_NEWS_TTL_SECONDS)
             await redis.set("news:last-filter", article_filter.name, ex=2 * 86400)
             return article_filter, article
     return None
@@ -211,39 +211,22 @@ async def _deliver_article(
     bot: Bot,
     user_id: int,
     article: NewsArticle,
-    photo: str | None,
-) -> tuple[Message, bool]:
+    photo: str,
+) -> Message:
     text = _article_text(article)
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Читать источник", url=article.url)]
         ]
     )
-    if photo:
-        try:
-            message = await _retry_after(
-                bot.send_photo,
-                chat_id=user_id,
-                photo=photo,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-            return message, True
-        except TelegramBadRequest:
-            logger.info(
-                "News image rejected; falling back to text: uuid=%s",
-                article.uuid,
-            )
-
-    message = await _retry_after(
-        bot.send_message,
+    return await _retry_after(
+        bot.send_photo,
         chat_id=user_id,
-        text=text,
+        photo=photo,
+        caption=text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
-    return message, False
 
 
 async def _retry_after(method, **kwargs) -> Message:

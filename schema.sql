@@ -26,13 +26,18 @@ CREATE INDEX ix_user_media_tracked_by_media
 CREATE TABLE bot_users (
     user_id             INTEGER NOT NULL PRIMARY KEY,
     is_active           INTEGER NOT NULL DEFAULT 1,
+    news_enabled        INTEGER NOT NULL DEFAULT 1,
     started_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     last_started_at     TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-    CHECK (`is_active` IN (0, 1))
+    last_activity_at    TEXT NOT NULL DEFAULT '',
+    CHECK (`is_active` IN (0, 1)),
+    CHECK (`news_enabled` IN (0, 1))
 );
 
-CREATE INDEX ix_bot_users_active
-    ON bot_users (is_active, user_id);
+CREATE INDEX ix_bot_users_news_recipients
+    ON bot_users (is_active, news_enabled, user_id);
+CREATE INDEX ix_bot_users_last_activity
+    ON bot_users (last_activity_at);
 
 CREATE TABLE user_season_progress (
     user_id             INTEGER NOT NULL,

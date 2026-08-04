@@ -42,6 +42,24 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_toggle_news_updates_setting_and_button(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:news", message)
+
+        with patch.object(
+            menu_handlers,
+            "toggle_news_enabled",
+            new=AsyncMock(return_value=False),
+        ) as toggle:
+            await menu_handlers.toggle_news(callback)
+
+        toggle.assert_awaited_once_with(123)
+        self.assertEqual(
+            message.edit_reply_markup_calls,
+            [{"reply_markup": main_menu_keyboard(False)}],
+        )
+        self.assertEqual(callback.answers, [{"text": "Новости выключены"}])
+
     async def test_choose_action_saves_action_and_moves_to_choosing_format(
         self,
     ) -> None:
@@ -135,7 +153,12 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        await menu_handlers.go_back(callback, state)
+        with patch.object(
+            menu_handlers,
+            "user_main_menu_keyboard",
+            new=AsyncMock(return_value=main_menu_keyboard()),
+        ):
+            await menu_handlers.go_back(callback, state)
 
         self.assertEqual(state.data, {})
         self.assertEqual(state.state, MenuState.choosing_action)

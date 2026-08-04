@@ -16,6 +16,25 @@ DEBUG = os.getenv("DEBUG", "false").lower() in {
     "yes",
     "on",
 }
+
+
+def parse_admin_user_ids(value: str) -> frozenset[int]:
+    """Parse a comma-separated list of positive Telegram user IDs."""
+    user_ids: set[int] = set()
+    for raw_user_id in value.split(","):
+        user_id_text = raw_user_id.strip()
+        if not user_id_text:
+            continue
+        if not user_id_text.isascii() or not user_id_text.isdigit():
+            raise ValueError("ADMIN_USER_IDS must contain integers separated by commas")
+        user_id = int(user_id_text)
+        if user_id <= 0:
+            raise ValueError("ADMIN_USER_IDS must contain positive integers")
+        user_ids.add(user_id)
+    return frozenset(user_ids)
+
+
+ADMIN_USER_IDS = parse_admin_user_ids(os.getenv("ADMIN_USER_IDS", ""))
 TMDB_API = os.getenv("TMDB_API", "")
 TMDB_ALLOWED_HOSTS = frozenset(
     host.strip().lower().rstrip(".")

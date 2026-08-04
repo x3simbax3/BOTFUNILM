@@ -11,9 +11,9 @@ from src.callback_data import parse_badge_callback, parse_rating_callback
 from src.database.user_media import update_user_media_rating
 from src.fsm import MenuState
 from src.handlers.common import delete_message_safely
-from src.handlers.navigation import reset_to_main
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.handlers.series import start_series_tracking
-from src.keyboards import badge_keyboard, main_menu_keyboard, rating_keyboard
+from src.keyboards import badge_keyboard, rating_keyboard
 from src.lang import (
     INVALID_BADGE,
     INVALID_RATING,
@@ -49,7 +49,7 @@ async def back_from_rating(callback: CallbackQuery, state: FSMContext) -> None:
             await reset_to_main(state)
             await callback.message.edit_text(
                 RATING_EDIT_CANCELLED,
-                reply_markup=main_menu_keyboard(),
+                reply_markup=await user_main_menu_keyboard(callback.from_user.id),
             )
             await callback.answer()
             return
@@ -213,7 +213,7 @@ async def finish_library_rating_edit(
     await state.update_data(library_rating_edit=False)
     await callback.message.answer(
         RATING_UPDATED,
-        reply_markup=main_menu_keyboard(),
+        reply_markup=await user_main_menu_keyboard(callback.from_user.id),
     )
     await reset_to_main(state)
 
@@ -245,6 +245,6 @@ async def finish_movie(
     await callback.message.answer(
         movie_watched_text(data.get("tmdb_title", ""), average),
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=await user_main_menu_keyboard(callback.from_user.id),
     )
     await reset_to_main(state)

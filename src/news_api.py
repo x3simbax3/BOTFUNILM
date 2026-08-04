@@ -17,7 +17,7 @@ import aiohttp
 from config.config import THENEWSAPI_KEY
 from src.http_client import get_http_session
 
-NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
+NEWS_API_URL = "https://api.thenewsapi.com/v1/news/top"
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_ARTICLE_RESPONSE_BYTES = 2 * 1024 * 1024
 ARTICLE_TEXT_TARGET = 1400
@@ -66,7 +66,6 @@ async def fetch_news(
         "categories": "entertainment",
         "language": "ru",
         "published_after": published_after.strftime("%Y-%m-%dT%H:%M:%S"),
-        "sort": "published_at",
         "limit": "3",
     }
     try:
@@ -84,7 +83,7 @@ async def fetch_news(
 
     if status in {401, 403}:
         raise NewsApiAuthenticationError(_error_message(payload))
-    if status == 429:
+    if status in {402, 429}:
         raise NewsApiRateLimitError(_error_message(payload))
     if status >= 500:
         raise NewsApiUnavailableError(_error_message(payload))
@@ -94,7 +93,11 @@ async def fetch_news(
     data = payload.get("data")
     if not isinstance(data, list):
         raise NewsApiError("TheNewsAPI response has no data list")
-    return [article for item in data if (article := _parse_article(item))]
+    return [
+        article
+        for item in data
+        if (article := _parse_article(item)) and article.image_url
+    ]
 
 
 async def fetch_article_text(url: str) -> str | None:

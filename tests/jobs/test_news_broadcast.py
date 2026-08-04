@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
+from aiogram.exceptions import TelegramBadRequest
+
 from src.database.connection import connection_scope
 from src.jobs.news_broadcast import (
     NEWS_FILTERS,
@@ -31,7 +33,7 @@ class NewsBroadcastTests(DatabaseTestCase):
     async def test_skips_sent_uuid_and_claims_next_article(self) -> None:
         redis = AsyncMock()
         redis.get.return_value = None
-        redis.sadd.side_effect = [0, 1]
+        redis.zadd.side_effect = [0, 1]
         articles = [self.article("sent"), self.article("fresh")]
 
         with patch(
@@ -45,15 +47,41 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         self.assertIsNotNone(selected)
         self.assertEqual(selected[1].uuid, "fresh")
-        self.assertEqual(redis.sadd.await_count, 2)
-        redis.expireat.assert_awaited_once()
+        self.assertEqual(redis.zadd.await_count, 2)
+        redis.zremrangebyscore.assert_awaited_once()
+        redis.expire.assert_awaited_once()
         redis.set.assert_awaited_once()
+
+    async def test_skips_article_without_image(self) -> None:
+        redis = AsyncMock()
+        redis.get.return_value = None
+        redis.zadd.return_value = 1
+        articles = [
+            NewsArticle(**{**self.article("no-image").__dict__, "image_url": None}),
+            self.article("with-image"),
+        ]
+
+        with patch(
+            "src.jobs.news_broadcast.fetch_news",
+            new=AsyncMock(return_value=articles),
+        ):
+            selected = await select_news_article(
+                redis,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1].uuid, "with-image")
+        redis.zadd.assert_awaited_once()
 
     async def test_broadcasts_in_batches_and_reuses_telegram_photo(self) -> None:
         async with connection_scope(self.database_url) as connection:
             await connection.executemany(
                 "INSERT INTO bot_users (user_id) VALUES (?)",
                 ((user_id,) for user_id in range(1, 102)),
+            )
+            await connection.execute(
+                "UPDATE bot_users SET news_enabled = 0 WHERE user_id = 101"
             )
         article_filter = NEWS_FILTERS[0]
         article = self.article()
@@ -77,9 +105,9 @@ class NewsBroadcastTests(DatabaseTestCase):
                 database_url=self.database_url,
             )
 
-        self.assertEqual(stats.selected, 101)
-        self.assertEqual(stats.sent, 101)
-        self.assertEqual(bot.send_photo.await_count, 101)
+        self.assertEqual(stats.selected, 100)
+        self.assertEqual(stats.sent, 100)
+        self.assertEqual(bot.send_photo.await_count, 100)
         self.assertEqual(
             bot.send_photo.await_args_list[0].kwargs["photo"],
             article.image_url,
@@ -88,6 +116,7 @@ class NewsBroadcastTests(DatabaseTestCase):
             bot.send_photo.await_args_list[1].kwargs["photo"],
             "telegram-file-id",
         )
+        bot.send_message.assert_not_awaited()
         self.assertIn("&lt;фильм&gt;", bot.send_photo.await_args.kwargs["caption"])
         self.assertNotIn("Новости ·", bot.send_photo.await_args.kwargs["caption"])
 
@@ -129,3 +158,30 @@ class NewsBroadcastTests(DatabaseTestCase):
         self.assertNotIn("Новости ·", caption)
         visible_caption = html.unescape(caption.replace("<b>", "").replace("</b>", ""))
         self.assertLessEqual(len(visible_caption), 1024)
+
+    async def test_does_not_fall_back_to_text_when_image_is_rejected(self) -> None:
+        async with connection_scope(self.database_url) as connection:
+            await connection.execute("INSERT INTO bot_users (user_id) VALUES (1)")
+        bot = AsyncMock()
+        bot.send_photo.side_effect = TelegramBadRequest(
+            method=AsyncMock(),
+            message="failed to get HTTP URL content",
+        )
+
+        with (
+            patch(
+                "src.jobs.news_broadcast.select_news_article",
+                new=AsyncMock(return_value=(NEWS_FILTERS[0], self.article())),
+            ),
+            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+        ):
+            stats = await send_news_broadcast(
+                AsyncMock(),
+                bot,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+
+        self.assertEqual(stats.failed, 1)
+        self.assertEqual(stats.sent, 0)
+        bot.send_message.assert_not_awaited()

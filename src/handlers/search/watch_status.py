@@ -6,9 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from src.fsm import MenuState
-from src.handlers.navigation import reset_to_main
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.keyboards import (
-    main_menu_keyboard,
     post_add_tracking_keyboard,
     rating_keyboard,
 )
@@ -72,7 +71,7 @@ async def choose_watch_status(callback: CallbackQuery, state: FSMContext) -> Non
         if not is_ongoing:
             await callback.message.answer(
                 "Готово — тайтл сохранён на потом.",
-                reply_markup=main_menu_keyboard(),
+                reply_markup=await user_main_menu_keyboard(callback.from_user.id),
             )
         await reset_to_main(state)
         await callback.answer()

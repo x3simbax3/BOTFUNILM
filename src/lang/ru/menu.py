@@ -43,6 +43,9 @@ SELECTION_SAVED = "Выбор сохранен"
 ENTER_TITLE_AGAIN = "Введи название ещё раз."
 UNKNOWN_STEP = "Неизвестный шаг"
 BACK_FAILED = "Не удалось вернуться назад"
+NEWS_ENABLED = "Новости включены"
+NEWS_DISABLED = "Новости выключены"
+NEWS_SETTING_FAILED = "Не удалось изменить настройку новостей"
 
 
 def action_text(action: str) -> str:
@@ -81,6 +84,9 @@ __all__ = (
     "FORMAT_TITLES",
     "INVALID_SELECTION",
     "MEDIA_KIND_TITLES",
+    "NEWS_DISABLED",
+    "NEWS_ENABLED",
+    "NEWS_SETTING_FAILED",
     "SELECTION_SAVED",
     "START_TEXT",
     "UNKNOWN_STEP",

@@ -37,7 +37,7 @@ from src.handlers.common import (
     edit_message,
     replace_message,
 )
-from src.handlers.navigation import reset_to_main
+from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.handlers.series import start_series_tracking
 from src.keyboards import (
     badge_keyboard,
@@ -45,7 +45,6 @@ from src.keyboards import (
     library_edit_keyboard,
     library_item_keyboard,
     library_keyboard,
-    main_menu_keyboard,
     rating_keyboard,
 )
 from src.lang import (
@@ -570,7 +569,7 @@ async def delete_library_item(callback: CallbackQuery, state: FSMContext) -> Non
     await replace_message(
         callback.message,
         ITEM_DELETED,
-        reply_markup=main_menu_keyboard(),
+        reply_markup=await user_main_menu_keyboard(callback.from_user.id),
     )
     await reset_to_main(state)
     await callback.answer()
@@ -655,7 +654,10 @@ async def _show_library_error(
     state: FSMContext,
     text: str,
 ) -> None:
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(
+        text,
+        reply_markup=await user_main_menu_keyboard(message.from_user.id),
+    )
     await reset_to_main(state)
 
 

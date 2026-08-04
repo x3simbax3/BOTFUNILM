@@ -109,11 +109,18 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             {"media_id": 7, "library_rating_edit": True, "ratings": ratings}
         )
 
-        with patch.object(
-            rating_handlers,
-            "update_user_media_rating",
-            AsyncMock(return_value=True),
-        ) as update_rating:
+        with (
+            patch.object(
+                rating_handlers,
+                "update_user_media_rating",
+                AsyncMock(return_value=True),
+            ) as update_rating,
+            patch.object(
+                rating_handlers,
+                "user_main_menu_keyboard",
+                AsyncMock(),
+            ),
+        ):
             await rating_handlers.finish_library_rating_edit(callback, state, 8.6)
 
         update_rating.assert_awaited_once_with(
@@ -145,11 +152,18 @@ class MovieSavingHandlerTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        with patch.object(
-            rating_handlers,
-            "save_completed_movie",
-            AsyncMock(return_value=7),
-        ) as save:
+        with (
+            patch.object(
+                rating_handlers,
+                "save_completed_movie",
+                AsyncMock(return_value=7),
+            ) as save,
+            patch.object(
+                rating_handlers,
+                "user_main_menu_keyboard",
+                AsyncMock(),
+            ),
+        ):
             await rating_handlers.finish_movie(callback, state, 8.6)
 
         save.assert_awaited_once_with(

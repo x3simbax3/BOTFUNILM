@@ -6,6 +6,7 @@ from aiogram.fsm.storage.redis import RedisEventIsolation, RedisStorage
 
 from src import bot
 from src.update_throttling import UserThrottleMiddleware
+from src.user_activity import UserActivityMiddleware
 
 
 class DispatcherStorageTests(unittest.IsolatedAsyncioTestCase):
@@ -30,7 +31,11 @@ class DispatcherStorageTests(unittest.IsolatedAsyncioTestCase):
             for index, middleware in enumerate(middlewares)
             if isinstance(middleware, UserThrottleMiddleware)
         )
-        self.assertEqual(middlewares[throttle_index + 1], dispatcher.fsm)
+        self.assertIsInstance(
+            middlewares[throttle_index + 1],
+            UserActivityMiddleware,
+        )
+        self.assertEqual(middlewares[throttle_index + 2], dispatcher.fsm)
         await dispatcher.fsm.close()
 
     async def test_uses_redis_storage_with_ttl_and_event_isolation(self) -> None:

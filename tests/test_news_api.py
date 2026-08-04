@@ -1,6 +1,15 @@
 import unittest
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.news_api import _ArticleBodyParser, _parse_article
+from src import news_api
+from src.news_api import (
+    NewsApiRateLimitError,
+    _ArticleBodyParser,
+    _parse_article,
+    fetch_news,
+)
 
 
 class NewsApiParsingTests(unittest.TestCase):
@@ -51,6 +60,86 @@ class NewsApiParsingTests(unittest.TestCase):
         )
         self.assertIsNotNone(article)
         self.assertIsNone(article.image_url)
+
+
+class NewsApiRequestTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fetches_top_news_and_ignores_articles_without_images(self) -> None:
+        response = SimpleNamespace(status=200)
+        request_context = MagicMock()
+        request_context.__aenter__ = AsyncMock(return_value=response)
+        request_context.__aexit__ = AsyncMock(return_value=None)
+        session = MagicMock()
+        session.get.return_value = request_context
+        payload = {
+            "data": [
+                {
+                    "uuid": "with-image",
+                    "title": "С фото",
+                    "url": "https://example.com/with-image",
+                    "image_url": "https://example.com/image.jpg",
+                },
+                {
+                    "uuid": "without-image",
+                    "title": "Без фото",
+                    "url": "https://example.com/without-image",
+                    "image_url": None,
+                },
+            ]
+        }
+
+        with (
+            patch.object(news_api, "THENEWSAPI_KEY", "token"),
+            patch.object(
+                news_api,
+                "get_http_session",
+                new=AsyncMock(return_value=session),
+            ),
+            patch.object(
+                news_api,
+                "_read_response",
+                new=AsyncMock(return_value=payload),
+            ),
+        ):
+            articles = await fetch_news(
+                "кино",
+                published_after=datetime(2026, 7, 28, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual([article.uuid for article in articles], ["with-image"])
+        url = session.get.call_args.args[0]
+        params = session.get.call_args.kwargs["params"]
+        self.assertEqual(url, "https://api.thenewsapi.com/v1/news/top")
+        self.assertEqual(params["published_after"], "2026-07-28T00:00:00")
+        self.assertNotIn("sort", params)
+
+    async def test_daily_usage_limit_is_reported_as_rate_limit(self) -> None:
+        response = SimpleNamespace(status=402)
+        request_context = MagicMock()
+        request_context.__aenter__ = AsyncMock(return_value=response)
+        request_context.__aexit__ = AsyncMock(return_value=None)
+        session = MagicMock()
+        session.get.return_value = request_context
+
+        with (
+            patch.object(news_api, "THENEWSAPI_KEY", "token"),
+            patch.object(
+                news_api,
+                "get_http_session",
+                new=AsyncMock(return_value=session),
+            ),
+            patch.object(
+                news_api,
+                "_read_response",
+                new=AsyncMock(
+                    return_value={"error": {"message": "Daily limit reached"}}
+                ),
+            ),
+        ):
+            with self.assertRaisesRegex(NewsApiRateLimitError, "Daily limit"):
+                await fetch_news(
+                    "кино",
+                    published_after=datetime(2026, 7, 28, tzinfo=timezone.utc),
+                )
 
 
 if __name__ == "__main__":

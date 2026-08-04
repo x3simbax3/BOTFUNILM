@@ -7,9 +7,15 @@ class MenuKeyboardTests(KeyboardTestCase):
         keyboard = keyboards.main_menu_keyboard()
         self.assert_callback_rows(
             keyboard,
-            [["menu:library"], ["menu:add"], ["menu:tracked"]],
+            [["menu:library"], ["menu:add"], ["menu:tracked"], ["menu:news"]],
         )
         self.assertEqual(keyboard.inline_keyboard[2][0].text, "◉\u00a0Отслеживаемые")
+        self.assertIn("вкл", keyboard.inline_keyboard[3][0].text)
+
+    def test_main_menu_shows_disabled_news(self) -> None:
+        keyboard = keyboards.main_menu_keyboard(news_enabled=False)
+
+        self.assertIn("выкл", keyboard.inline_keyboard[3][0].text)
 
     def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
         self.assert_callback_rows(

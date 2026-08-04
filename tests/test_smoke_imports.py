@@ -30,6 +30,7 @@ class SmokeImportTests(unittest.TestCase):
         import src.handlers  # noqa: F401
 
     def test_router_contains_domain_routers(self) -> None:
+        from src.handlers.admin import router as admin_router
         from src.handlers.errors import router as errors_router
         from src.handlers.library import router as library_router
         from src.handlers.menu import router as menu_router
@@ -43,6 +44,7 @@ class SmokeImportTests(unittest.TestCase):
         self.assertEqual(
             sub_names,
             {
+                admin_router.name,
                 errors_router.name,
                 library_router.name,
                 menu_router.name,
