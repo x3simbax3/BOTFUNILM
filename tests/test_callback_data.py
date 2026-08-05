@@ -35,6 +35,10 @@ class CallbackDataTests(unittest.TestCase):
             BackCallback("content_type", ("add", "series")),
         )
         self.assertEqual(
+            parse_back_callback("back:library_menu"),
+            BackCallback("library_menu", ()),
+        )
+        self.assertEqual(
             parse_library_filter_callback("library:filter:anime"),
             "anime",
         )

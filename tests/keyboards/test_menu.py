@@ -30,6 +30,10 @@ class MenuKeyboardTests(KeyboardTestCase):
             keyboards.library_menu_keyboard().inline_keyboard[0][0].text,
             "♡\u00a0Все сохранённые",
         )
+        self.assertEqual(
+            keyboards.library_menu_keyboard().inline_keyboard[-1][0].text,
+            "⌂\u00a0Главное меню",
+        )
 
     def test_format_buttons_have_expected_callbacks_and_back_to_library_menu(self) -> None:
         self.assert_callback_rows(

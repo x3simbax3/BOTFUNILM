@@ -30,7 +30,7 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 ["library:filters:status", "library:filters:status"],
                 ["library:filters:sort", "library:filters:sort"],
                 ["library:page:0", "library:page:2"],
-                ["back:library_menu", "back:main"],
+                ["back:library_menu"],
             ],
         )
         self.assertEqual(
@@ -211,7 +211,7 @@ class LibraryKeyboardTests(KeyboardTestCase):
             ["×\u00a0Не отслеживать"],
         )
 
-    def test_post_add_tracking_has_action_status_and_main_menu(self) -> None:
+    def test_post_add_tracking_has_action_status_and_back_to_library_menu(self) -> None:
         keyboard = keyboards.post_add_tracking_keyboard(7, False)
 
         self.assertEqual(
@@ -219,11 +219,14 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 [button.callback_data for button in row]
                 for row in keyboard.inline_keyboard
             ],
-            [["series:tracking:add:7", "series:tracking:status"], ["back:main"]],
+            [
+                ["series:tracking:add:7", "series:tracking:status"],
+                ["back:library_menu"],
+            ],
         )
         self.assertEqual(
             [[button.text for button in row] for row in keyboard.inline_keyboard],
-            [["＋\u00a0Отслеживать", "Не активно"], ["⌂\u00a0Главное меню"]],
+            [["＋\u00a0Отслеживать", "Не активно"], ["‹\u00a0Назад"]],
         )
 
     def test_tracked_list_does_not_show_page_number_button(self) -> None:
@@ -235,9 +238,9 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 [button.callback_data for button in row]
                 for row in first_page.inline_keyboard
             ],
-            [["back:library_menu", "back:main"]],
+            [["back:library_menu"]],
         )
         self.assertEqual(
             [[button.text for button in row] for row in middle_page.inline_keyboard],
-            [["《", "》"], ["‹\u00a0Назад", "⌂\u00a0Главное меню"]],
+            [["《", "》"], ["‹\u00a0Назад"]],
         )

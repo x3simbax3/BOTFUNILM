@@ -22,10 +22,7 @@ def tracked_series_keyboard(
     if pagination:
         rows.append(pagination)
     rows.append(
-        [
-            InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu"),
-            InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main"),
-        ]
+        [InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -46,7 +43,7 @@ def post_add_tracking_keyboard(
                     callback_data="series:tracking:status",
                 ),
             ],
-            [InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")],
+            [InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu")],
         ]
     )
 

@@ -100,10 +100,7 @@ def library_keyboard(
         rows.append(pagination)
 
     rows.append(
-        [
-            InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu"),
-            InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main"),
-        ]
+        [InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

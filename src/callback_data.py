@@ -119,6 +119,7 @@ def parse_back_callback(data: str) -> BackCallback | None:
     params = tuple(value for value in (first, second) if value is not None)
     valid_params = {
         "main": {()},
+        "library_menu": {()},
         "format": {(action,) for action in VALID_ACTIONS},
         "content_type": {()}
         | {

@@ -38,7 +38,7 @@ def library_menu_keyboard() -> InlineKeyboardMarkup:
                     text=text.MAIN_ADD, callback_data="menu:add"
                 )
             ],
-            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
+            [InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")],
         ],
     )
 
@@ -52,7 +52,7 @@ def settings_keyboard(news_enabled: bool) -> InlineKeyboardMarkup:
                     callback_data="menu:news",
                 )
             ],
-            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
+            [InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")],
         ]
     )
 
