@@ -1,11 +1,13 @@
 import unittest
 from datetime import date, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 from src.jobs.media_worker import (
     _news_result_text,
+    _notify_admins_about_news_failure,
     _send_admin_job_result,
+    _short_traceback,
     daily_news_targets,
     next_scheduled_run,
 )
@@ -47,20 +49,21 @@ class MediaWorkerScheduleTests(unittest.TestCase):
         self.assertEqual(target, datetime(2026, 7, 29, 2, 0, tzinfo=self.timezone))
         self.assertEqual(mode, "daily")
 
-    def test_news_targets_have_two_hour_slots_and_bounded_jitter(self) -> None:
+    def test_news_targets_run_every_two_hours_with_bounded_jitter(self) -> None:
         targets = daily_news_targets(
             date(2026, 7, 30),
             self.timezone,
-            offsets=(-300, -1, 0, 60, 300, -300, 300),
+            offsets=(-300, -1, 0, 0, 0, 1, 300),
         )
 
-        self.assertEqual(targets[0].hour, 9)
+        self.assertEqual(len(targets), 7)
+        self.assertEqual(targets[0].hour, 10)
         self.assertEqual(targets[0].minute, 0)
-        self.assertEqual(targets[1].hour, 10)
+        self.assertEqual(targets[1].hour, 11)
         self.assertEqual(targets[1].minute, 59)
-        self.assertEqual(targets[-1].hour, 21)
+        self.assertEqual(targets[-1].hour, 22)
         self.assertEqual(targets[-1].minute, 5)
-        self.assertLess(targets[-1], datetime(2026, 7, 30, 22, tzinfo=self.timezone))
+        self.assertLess(targets[-1], datetime(2026, 7, 30, 23, tzinfo=self.timezone))
 
     def test_admin_news_result_explains_empty_and_successful_runs(self) -> None:
         self.assertIn("не найдена", _news_result_text(NewsBroadcastStats()))
@@ -85,6 +88,33 @@ class MediaWorkerAdminResultTests(unittest.IsolatedAsyncioTestCase):
         await _send_admin_job_result(bot, "123", "Не отправлять")
 
         bot.send_message.assert_awaited_once_with(123, "Готово")
+
+    async def test_notifies_all_admins_with_short_safe_news_traceback(self) -> None:
+        bot = AsyncMock()
+        try:
+            raise ValueError("secret details")
+        except ValueError as exception:
+            traceback_text = _short_traceback(exception)
+            with patch(
+                "src.jobs.media_worker.ADMIN_USER_IDS",
+                frozenset({42, 7}),
+            ):
+                await _notify_admins_about_news_failure(bot, exception)
+
+        self.assertIn("Traceback", traceback_text)
+        self.assertIn("ValueError", traceback_text)
+        self.assertIn("details redacted", traceback_text)
+        self.assertNotIn("secret details", traceback_text)
+        self.assertEqual(
+            [call.args[0] for call in bot.send_message.await_args_list],
+            [7, 42],
+        )
+        self.assertTrue(
+            all(
+                call.args[1].startswith("Новости не отправлены.")
+                for call in bot.send_message.await_args_list
+            )
+        )
 
 
 if __name__ == "__main__":

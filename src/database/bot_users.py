@@ -72,6 +72,7 @@ async def touch_bot_user(
 
 async def get_news_recipients(
     *,
+    article_uuid: str | None = None,
     after_user_id: int = 0,
     limit: int = 100,
     database_url: str | None = None,
@@ -79,16 +80,33 @@ async def get_news_recipients(
     if limit <= 0:
         raise ValueError("limit must be positive")
     async with connection_scope(database_url) as connection:
-        async with connection.execute(
+        if article_uuid is None:
+            query = """
+                SELECT user_id
+                FROM bot_users
+                WHERE is_active = 1 AND news_enabled = 1 AND user_id > ?
+                ORDER BY user_id
+                LIMIT ?
             """
-            SELECT user_id
-            FROM bot_users
-            WHERE is_active = 1 AND news_enabled = 1 AND user_id > ?
-            ORDER BY user_id
-            LIMIT ?
-            """,
-            (after_user_id, limit),
-        ) as cursor:
+            parameters = (after_user_id, limit)
+        else:
+            query = """
+                SELECT users.user_id
+                FROM bot_users AS users
+                WHERE users.is_active = 1
+                  AND users.news_enabled = 1
+                  AND users.user_id > ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM news_article_deliveries AS deliveries
+                      WHERE deliveries.article_uuid = ?
+                        AND deliveries.user_id = users.user_id
+                  )
+                ORDER BY users.user_id
+                LIMIT ?
+            """
+            parameters = (after_user_id, article_uuid, limit)
+        async with connection.execute(query, parameters) as cursor:
             return [int(row["user_id"]) for row in await cursor.fetchall()]
 
 

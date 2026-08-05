@@ -96,9 +96,31 @@ USER_THROTTLE_MAX_USERS = int(os.getenv("USER_THROTTLE_MAX_USERS", "10000"))
 TEST_PROCESSES = int(os.getenv("TEST_PROCESSES", "2"))
 THENEWSAPI_KEY = os.getenv("THENEWSAPI_KEY", "")
 NEWS_API_DAILY_LIMIT = int(os.getenv("NEWS_API_DAILY_LIMIT", "100"))
-NEWS_API_DAILY_BUDGET = int(os.getenv("NEWS_API_DAILY_BUDGET", "20"))
+NEWS_API_DAILY_BUDGET = int(os.getenv("NEWS_API_DAILY_BUDGET", "30"))
 if not 1 <= NEWS_API_DAILY_BUDGET <= NEWS_API_DAILY_LIMIT:
     raise ValueError("NEWS_API_DAILY_BUDGET must be between 1 and NEWS_API_DAILY_LIMIT")
+NEWS_MAX_AGE_HOURS = int(os.getenv("NEWS_MAX_AGE_HOURS", "36"))
+if not 1 <= NEWS_MAX_AGE_HOURS <= 168:
+    raise ValueError("NEWS_MAX_AGE_HOURS must be between 1 and 168")
+NEWS_RETENTION_DAYS = int(os.getenv("NEWS_RETENTION_DAYS", "90"))
+if not 1 <= NEWS_RETENTION_DAYS <= 3650:
+    raise ValueError("NEWS_RETENTION_DAYS must be between 1 and 3650")
+NEWS_API_RETRIES = int(os.getenv("NEWS_API_RETRIES", "3"))
+if not 1 <= NEWS_API_RETRIES <= 5:
+    raise ValueError("NEWS_API_RETRIES must be between 1 and 5")
+NEWS_ALLOWED_DOMAINS = frozenset(
+    domain.strip().lower().rstrip(".")
+    for domain in os.getenv(
+        "NEWS_ALLOWED_DOMAINS",
+        (
+            "daily.afisha.ru,film.ru,intermedia.ru,kinobusiness.com,"
+            "kino-teatr.ru,kinopoisk.ru,kinoafisha.info,kg-portal.ru"
+        ),
+    ).split(",")
+    if domain.strip()
+)
+if not NEWS_ALLOWED_DOMAINS:
+    raise ValueError("NEWS_ALLOWED_DOMAINS must contain at least one domain")
 MEDIA_WORKER_TIMEZONE = os.getenv("MEDIA_WORKER_TIMEZONE", "Europe/Moscow")
 MEDIA_REFRESH_BATCH_SIZE = int(os.getenv("MEDIA_REFRESH_BATCH_SIZE", "50"))
 MEDIA_REFRESH_CONCURRENCY = int(os.getenv("MEDIA_REFRESH_CONCURRENCY", "3"))

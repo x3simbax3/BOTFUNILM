@@ -1,26 +1,30 @@
-"""Small asynchronous client for TheNewsAPI."""
+"""Asynchronous client for fresh, trusted TheNewsAPI articles."""
 
 from __future__ import annotations
 
 import asyncio
-import codecs
 import ipaddress
 import json
 import socket
-from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
 from urllib.parse import unquote, urljoin, urlsplit
 
 import aiohttp
 
-from config.config import THENEWSAPI_KEY
+from config.config import NEWS_ALLOWED_DOMAINS, NEWS_API_RETRIES, THENEWSAPI_KEY
 from src.http_client import get_http_session
+from src.news_models import NewsArticle, NewsFetchResult, NewsImage
+from src.news_provider import BeforeNewsRequest
 
-NEWS_API_URL = "https://api.thenewsapi.com/v1/news/top"
+NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
 MAX_RESPONSE_BYTES = 1024 * 1024
-MAX_ARTICLE_RESPONSE_BYTES = 2 * 1024 * 1024
-ARTICLE_TEXT_TARGET = 1400
+MAX_ARTICLE_METADATA_BYTES = 512 * 1024
+MAX_IMAGE_RESPONSE_BYTES = 8 * 1024 * 1024
+NEWS_SEARCH = (
+    "(фильм* | кино | сериал* | сезон* | мультфильм* | мультсериал* | "
+    "аниме | трейлер* | экранизац* | кинопреми*)"
+)
 
 
 class NewsApiError(RuntimeError):
@@ -32,35 +36,19 @@ class NewsApiAuthenticationError(NewsApiError):
 
 
 class NewsApiRateLimitError(NewsApiError):
-    pass
+    def __init__(self, message: str, *, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class NewsApiUnavailableError(NewsApiError):
     pass
 
 
-@dataclass(frozen=True)
-class NewsArticle:
-    uuid: str
-    title: str
-    description: str
-    url: str
-    image_url: str | None
-    source: str
-    published_at: str
-
-
-@dataclass(frozen=True)
-class NewsFetchResult:
-    articles: tuple[NewsArticle, ...]
-    api_limit: int | None
-    api_remaining: int | None
-
-
 async def fetch_news(
-    search: str,
     *,
     published_after: datetime,
+    before_request: BeforeNewsRequest | None = None,
 ) -> NewsFetchResult:
     if not THENEWSAPI_KEY:
         raise NewsApiAuthenticationError("THENEWSAPI_KEY is not configured")
@@ -68,41 +56,62 @@ async def fetch_news(
     session = await get_http_session()
     params = {
         "api_token": THENEWSAPI_KEY,
-        "search": search,
-        "search_fields": "title,description",
+        "search": NEWS_SEARCH,
+        "search_fields": "title",
         "categories": "entertainment",
+        "domains": ",".join(sorted(NEWS_ALLOWED_DOMAINS)),
         "language": "ru",
         "published_after": published_after.strftime("%Y-%m-%dT%H:%M:%S"),
+        "sort": "published_at",
         "limit": "3",
     }
-    try:
-        async with session.get(
-            NEWS_API_URL,
-            params=params,
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as response:
-            status = response.status
-            headers = getattr(response, "headers", {})
-            api_limit = _header_int(
-                headers,
-                "X-UsageLimit-Limit",
-                "X-Usage-Limit",
-            )
-            api_remaining = _header_int(
-                headers,
-                "X-UsageLimit-Remaining",
-                "X-Usage-Remaining",
-            )
-            payload = await _read_response(response)
-    except TimeoutError as exc:
-        raise NewsApiUnavailableError("TheNewsAPI request timed out") from exc
-    except aiohttp.ClientError as exc:
-        raise NewsApiUnavailableError("TheNewsAPI request failed") from exc
+    for attempt in range(NEWS_API_RETRIES):
+        if before_request is not None:
+            await before_request()
+        try:
+            async with session.get(
+                NEWS_API_URL,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as response:
+                return await _parse_news_response(response)
+        except NewsApiRateLimitError as exc:
+            if exc.retry_after is None or attempt + 1 == NEWS_API_RETRIES:
+                raise
+            await asyncio.sleep(min(exc.retry_after, 30))
+        except NewsApiUnavailableError:
+            if attempt + 1 == NEWS_API_RETRIES:
+                raise
+            await asyncio.sleep(2**attempt)
+        except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError) as exc:
+            if attempt + 1 == NEWS_API_RETRIES:
+                raise NewsApiUnavailableError("TheNewsAPI request failed") from exc
+            await asyncio.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
+
+async def _parse_news_response(response: aiohttp.ClientResponse) -> NewsFetchResult:
+    status = response.status
+    headers = getattr(response, "headers", {})
+    api_limit = _header_int(headers, "X-UsageLimit-Limit", "X-Usage-Limit")
+    api_remaining = _header_int(
+        headers,
+        "X-UsageLimit-Remaining",
+        "X-Usage-Remaining",
+    )
+    if status >= 400:
+        payload = await _read_error_response(response)
+    else:
+        payload = await _read_response(response)
     if status in {401, 403}:
         raise NewsApiAuthenticationError(_error_message(payload))
-    if status in {402, 429}:
+    if status == 402:
         raise NewsApiRateLimitError(_error_message(payload))
+    if status == 429:
+        raise NewsApiRateLimitError(
+            _error_message(payload),
+            retry_after=_retry_after_seconds(headers) or 1.0,
+        )
     if status >= 500:
         raise NewsApiUnavailableError(_error_message(payload))
     if status >= 400:
@@ -118,13 +127,34 @@ async def fetch_news(
     )
 
 
-async def fetch_article_text(url: str) -> str | None:
-    """Extract article body from a public source page when the API truncates it."""
+class TheNewsApiProvider:
+    """NewsProvider adapter for TheNewsAPI and source-hosted media."""
+
+    async def fetch_news(
+        self,
+        *,
+        published_after: datetime,
+        before_request: BeforeNewsRequest | None = None,
+    ) -> NewsFetchResult:
+        return await fetch_news(
+            published_after=published_after,
+            before_request=before_request,
+        )
+
+    async def fetch_image(self, url: str) -> NewsImage | None:
+        return await fetch_news_image(url)
+
+    async def fetch_description(self, url: str) -> str | None:
+        return await fetch_article_description(url)
+
+
+async def fetch_news_image(url: str) -> NewsImage | None:
+    """Download and validate an article image before broadcasting it."""
     session = await get_http_session()
     current_url = url
     for _ in range(3):
-        await _validate_public_url(current_url)
         try:
+            await _validate_public_url(current_url)
             async with session.get(
                 current_url,
                 timeout=aiohttp.ClientTimeout(total=15),
@@ -139,11 +169,38 @@ async def fetch_article_text(url: str) -> str | None:
                     continue
                 if response.status != 200:
                     return None
-                content_type = response.headers.get("Content-Type", "")
-                if "text/html" not in content_type.lower():
+                return await _read_image_response(response)
+        except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
+            return None
+    return None
+
+
+async def fetch_article_description(url: str) -> str | None:
+    """Read a source page's complete meta description without scraping its body."""
+    session = await get_http_session()
+    current_url = url
+    for _ in range(3):
+        try:
+            await _validate_public_url(current_url)
+            async with session.get(
+                current_url,
+                timeout=aiohttp.ClientTimeout(total=15),
+                allow_redirects=False,
+                headers={"User-Agent": "BotFunilm/1.0"},
+            ) as response:
+                if response.status in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("Location")
+                    if not location:
+                        return None
+                    current_url = urljoin(current_url, location)
+                    continue
+                if response.status != 200:
                     return None
-                return await _extract_article_body(response)
-        except (TimeoutError, aiohttp.ClientError, ValueError):
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "text/html" not in content_type:
+                    return None
+                return await _read_meta_description(response)
+        except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
             return None
     return None
 
@@ -169,60 +226,64 @@ async def _validate_public_url(url: str) -> None:
         raise ValueError("article URL resolves to a non-public address")
 
 
-async def _extract_article_body(response: aiohttp.ClientResponse) -> str | None:
-    parser = _ArticleBodyParser()
-    decoder = codecs.getincrementaldecoder(response.charset or "utf-8")(errors="ignore")
-    size = 0
+async def _read_image_response(response: aiohttp.ClientResponse) -> NewsImage | None:
+    content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+    extensions = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }
+    extension = extensions.get(content_type)
+    if extension is None:
+        return None
+    if response.content_length and response.content_length > MAX_IMAGE_RESPONSE_BYTES:
+        return None
+    body = bytearray()
     async for chunk in response.content.iter_chunked(64 * 1024):
-        size += len(chunk)
-        if size > MAX_ARTICLE_RESPONSE_BYTES:
+        body.extend(chunk)
+        if len(body) > MAX_IMAGE_RESPONSE_BYTES:
             return None
-        parser.feed(decoder.decode(chunk))
-        if parser.text_length >= ARTICLE_TEXT_TARGET:
+    data = bytes(body)
+    if not _matches_image_signature(data, extension):
+        return None
+    return NewsImage(data=data, filename=f"news.{extension}")
+
+
+async def _read_meta_description(response: aiohttp.ClientResponse) -> str | None:
+    body = bytearray()
+    async for chunk in response.content.iter_chunked(32 * 1024):
+        body.extend(chunk)
+        if len(body) > MAX_ARTICLE_METADATA_BYTES:
+            return None
+        if b"</head" in body.lower():
             break
-    parser.feed(decoder.decode(b"", final=True))
-    text = parser.text
-    return text or None
+    parser = _MetaDescriptionParser()
+    parser.feed(body.decode(response.charset or "utf-8", errors="ignore"))
+    return _text(parser.description) or None
 
 
-class _ArticleBodyParser(HTMLParser):
+class _MetaDescriptionParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._body_depth = 0
-        self._ignored_depth = 0
-        self._parts: list[str] = []
-
-    @property
-    def text(self) -> str:
-        return " ".join("".join(self._parts).split())
-
-    @property
-    def text_length(self) -> int:
-        return sum(len(part) for part in self._parts)
+        self.description = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attributes = dict(attrs)
-        if self._body_depth:
-            self._body_depth += 1
-        elif (attributes.get("itemprop") or "").lower() == "articlebody":
-            self._body_depth = 1
-        if self._body_depth and tag in {"script", "style", "noscript"}:
-            self._ignored_depth += 1
-        if self._body_depth and not self._ignored_depth and tag == "br":
-            self._parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if not self._body_depth:
+        if tag.lower() != "meta":
             return
-        if self._ignored_depth and tag in {"script", "style", "noscript"}:
-            self._ignored_depth -= 1
-        if not self._ignored_depth and tag in {"p", "li"}:
-            self._parts.append("\n")
-        self._body_depth -= 1
+        attributes = {key.lower(): value or "" for key, value in attrs}
+        kind = (attributes.get("property") or attributes.get("name", "")).lower()
+        if kind in {"og:description", "description", "twitter:description"}:
+            content = attributes.get("content", "").strip()
+            if content and (kind == "og:description" or not self.description):
+                self.description = content
 
-    def handle_data(self, data: str) -> None:
-        if self._body_depth and not self._ignored_depth:
-            self._parts.append(data)
+
+def _matches_image_signature(data: bytes, extension: str) -> bool:
+    if extension == "jpg":
+        return data.startswith(b"\xff\xd8\xff")
+    if extension == "png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    return len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP"
 
 
 async def _read_response(response: aiohttp.ClientResponse) -> dict:
@@ -242,6 +303,13 @@ async def _read_response(response: aiohttp.ClientResponse) -> dict:
     return payload
 
 
+async def _read_error_response(response: aiohttp.ClientResponse) -> dict:
+    try:
+        return await _read_response(response)
+    except NewsApiError:
+        return {}
+
+
 def _parse_article(value: object) -> NewsArticle | None:
     if not isinstance(value, dict):
         return None
@@ -253,10 +321,10 @@ def _parse_article(value: object) -> NewsArticle | None:
     return NewsArticle(
         uuid=uuid,
         title=title,
-        description=_text(value.get("description")) or _text(value.get("snippet")),
+        description=_text(value.get("description")),
         url=url,
         image_url=_safe_http_url(value.get("image_url")),
-        source=unquote(_text(value.get("source"))).strip(),
+        source=unquote(_text(value.get("source"))).strip().lower().rstrip("."),
         published_at=_text(value.get("published_at")),
     )
 
@@ -278,7 +346,7 @@ def _safe_http_url(value: object) -> str | None:
 
 
 def _text(value: object) -> str:
-    return value.strip() if isinstance(value, str) else ""
+    return " ".join(value.split()) if isinstance(value, str) else ""
 
 
 def _error_message(payload: dict) -> str:
@@ -296,6 +364,17 @@ def _header_int(headers, *names: str) -> int | None:
     return None
 
 
+def _retry_after_seconds(headers) -> float | None:
+    value = headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        return None
+    return max(0.0, seconds)
+
+
 __all__ = (
     "NewsApiAuthenticationError",
     "NewsApiError",
@@ -303,6 +382,9 @@ __all__ = (
     "NewsApiUnavailableError",
     "NewsArticle",
     "NewsFetchResult",
-    "fetch_article_text",
+    "NewsImage",
+    "TheNewsApiProvider",
+    "fetch_article_description",
     "fetch_news",
+    "fetch_news_image",
 )

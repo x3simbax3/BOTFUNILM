@@ -127,7 +127,9 @@ class AdminHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Всего · <b>4</b>", text)
         self.assertIn("Отложено · 1", text)
         self.assertNotIn("брошено", text.lower())
-        self.assertIn("Осталось по тарифу · <b>93 из 100</b>", text)
+        self.assertIn("Фактически запросов · <b>7</b>", text)
+        self.assertIn("Осталось локально · <b>23 из 30</b>", text)
+        self.assertIn("Осталось у провайдера · <b>93 из 100</b>", text)
         self.assertEqual(
             message.edit_text_calls[0]["reply_markup"],
             admin_statistics_keyboard(),
@@ -167,7 +169,7 @@ class AdminHandlerTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 admin_handlers,
                 "get_news_api_usage",
-                AsyncMock(return_value=NewsApiUsage("2026-08-04", 20, 100, 80)),
+                AsyncMock(return_value=NewsApiUsage("2026-08-04", 30, 100, 70)),
             ),
             patch.object(
                 admin_handlers,

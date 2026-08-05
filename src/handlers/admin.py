@@ -83,11 +83,12 @@ def _statistics_text(
     rating = (
         "—" if libraries.average_rating is None else f"{libraries.average_rating:.1f}"
     )
-    api_limit = usage.api_limit or NEWS_API_DAILY_LIMIT
-    api_remaining = (
-        usage.api_remaining
-        if usage.api_remaining is not None
-        else max(0, api_limit - usage.requests)
+    local_remaining = max(0, NEWS_API_DAILY_BUDGET - usage.requests)
+    provider_limit = usage.api_limit or NEWS_API_DAILY_LIMIT
+    provider_remaining = (
+        "—"
+        if usage.api_remaining is None
+        else f"{usage.api_remaining} из {provider_limit}"
     )
     popular_movies = (
         ", ".join(html.escape(item.title) for item in libraries.popular_movies[:3])
@@ -130,8 +131,9 @@ DAU / WAU / MAU · <b>{activity.dau} / {activity.wau} / {activity.mau}</b>
 Ошибки / отключены · {notifications.failed_30d} / {notifications.deactivated_30d}
 
 <b>📰 TheNewsAPI сегодня</b>
-Бюджет бота · {usage.requests} из {NEWS_API_DAILY_BUDGET}
-Осталось по тарифу · <b>{api_remaining} из {api_limit}</b>"""
+Фактически запросов · <b>{usage.requests}</b>
+Осталось локально · <b>{local_remaining} из {NEWS_API_DAILY_BUDGET}</b>
+Осталось у провайдера · <b>{provider_remaining}</b> <i>(последние данные)</i>"""
 
 
 async def _load_statistics():

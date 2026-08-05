@@ -1,4 +1,4 @@
-h1:r5OgUEdBRWm541Fabay0QJFmsFJLlmvohBU4VvWuvlg=
+h1:fuvEt2WmoWuQ9UWjoW/x597b0J7zGzAqdxU/0tW56q8=
 20260723193218_initial.sql h1:SZU4jnB0oVHMGUfJXn0mXO4JxP/xppIEOzs5VxJ+xGY=
 20260724120000_add_user_season_progress.sql h1:e0jJrJZ0RV8maVxut8TasWDVFtAngzo6igizH3KCfEw=
 20260724130000_split_media_classification.sql h1:cl/TOWC3ugxhdBoEF5SvfhELbjWzAEJpxhJHhdFAy2Y=
@@ -27,3 +27,4 @@ h1:r5OgUEdBRWm541Fabay0QJFmsFJLlmvohBU4VvWuvlg=
 20260804170000_add_admin_features.sql h1:Uf7/sjx5SIbBdzfLT/AgnNRv6CdQSp1LRP5B4xFO5QE=
 20260804180000_add_news_api_usage.sql h1:/bWve6QN8dcqYyR4KO+/w4+FIdR7cTeC43L5mBpyupQ=
 20260804184158_remove_dropped_status.sql h1:tbjSrZ85bZ7w5+jFVNxISFcxzm2oBiEwYg4T1BgCmGA=
+20260805120000_add_news_articles.sql h1:K++6hlBoHIKnZiL+kSWznqaRYkqWurIujHHMxDtXIKo=

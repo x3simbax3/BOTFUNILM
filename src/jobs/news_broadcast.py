@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import aiosqlite
 from aiogram import Bot
@@ -17,31 +17,47 @@ from aiogram.exceptions import (
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from redis.asyncio import Redis
 
-from config.config import NEWS_API_DAILY_BUDGET
+from config.config import (
+    NEWS_ALLOWED_DOMAINS,
+    NEWS_API_DAILY_BUDGET,
+    NEWS_MAX_AGE_HOURS,
+    NEWS_RETENTION_DAYS,
+)
 from src.database.bot_users import get_news_recipients, mark_bot_user_inactive
 from src.database.news_api_usage import (
+    NewsApiDailyBudgetError,
     reserve_news_api_request,
     update_news_api_quota,
+)
+from src.database.news_articles import (
+    claim_news_candidate,
+    delete_old_news_articles,
+    finish_news_candidate,
+    record_news_delivery,
+    save_news_candidate,
 )
 from src.database.notification_delivery import record_notification_delivery
 from src.news_api import (
     NewsApiAuthenticationError,
     NewsApiError,
     NewsApiRateLimitError,
-    NewsArticle,
-    fetch_article_text,
-    fetch_news,
+    TheNewsApiProvider,
 )
+from src.news_models import NewsArticle, NewsImage
+from src.news_provider import NewsProvider
 
 logger = logging.getLogger(__name__)
 USER_BATCH_SIZE = 100
 SEND_INTERVAL_SECONDS = 0.06
-MAX_FILTERS_PER_RUN = 4
-NEWS_LOOKBACK_DAYS = 7
-SENT_NEWS_TTL_SECONDS = 8 * 86400
+TELEGRAM_CAPTION_LIMIT = 1024
 
 
 @dataclass(frozen=True)
@@ -60,36 +76,11 @@ class NewsBroadcastStats:
     article_uuid: str | None = None
 
 
-# Every filter has the same chance. In particular, anime has the same priority
-# as films and series, rather than being an occasional fallback.
 NEWS_FILTERS = (
     NewsFilter(
-        "films-series",
-        "Кино и сериалы",
-        "((фильм* | кино | сериал* | сезон*) + "
-        "(премьер* | трейлер* | вышел | выйдет | съемк* | съёмк* | "
-        "экранизац* | продлили))",
-    ),
-    NewsFilter(
-        "anime",
-        "Аниме",
-        "(аниме | манг* | Crunchyroll | Ghibli)",
-    ),
-    NewsFilter(
-        "animation",
-        "Мультфильмы и анимация",
-        "(мультфильм* | мультсериал* | анимац*)",
-    ),
-    NewsFilter(
-        "cinema-people",
-        "Люди кино",
-        "((актер* | актрис* | режиссер* | сценарист*) + "
-        "(фильм* | кино | сериал* | рол* | съемк* | съёмк*))",
-    ),
-    NewsFilter(
-        "industry",
-        "Киноиндустрия",
-        "(кинопрокат* | кинофестивал* | кинопреми* | (кассов* + сбор*))",
+        "trusted-cinema",
+        "Проверенные новости кино",
+        "единый запрос TheNewsAPI",
     ),
 )
 
@@ -100,6 +91,7 @@ async def send_news_broadcast(
     now: datetime,
     *,
     database_url: str | None = None,
+    provider: NewsProvider | None = None,
 ) -> NewsBroadcastStats:
     """Select and broadcast one article, returning without work if no users exist."""
     first_batch = await get_news_recipients(
@@ -111,21 +103,30 @@ async def send_news_broadcast(
         logger.info("News broadcast skipped because there are no opted-in users")
         return stats
 
-    selected = await select_news_article(redis, now, database_url=database_url)
+    selected = await select_news_article(
+        redis,
+        now,
+        database_url=database_url,
+        provider=provider,
+    )
     if selected is None:
         logger.warning("News broadcast skipped because no fresh article was found")
         return stats
-    article_filter, article = selected
-    if article.description.endswith(("...", "…")):
-        expanded_text = await fetch_article_text(article.url)
-        if expanded_text:
-            article = replace(article, description=expanded_text)
+    article_filter, article, image = selected
     stats.article_uuid = article.uuid
-    photo = article.image_url
+    photo: str | BufferedInputFile = BufferedInputFile(
+        image.data,
+        filename=image.filename,
+    )
     after_user_id = 0
-    batch = first_batch
+    batch = await get_news_recipients(
+        article_uuid=article.uuid,
+        limit=USER_BATCH_SIZE,
+        database_url=database_url,
+    )
+    photo_rejected = False
 
-    while batch:
+    while batch and not photo_rejected:
         for user_id in batch:
             stats.selected += 1
             try:
@@ -137,10 +138,32 @@ async def send_news_broadcast(
                 )
                 photo = _telegram_photo_id(message) or photo
                 stats.sent += 1
+                await record_news_delivery(
+                    article.uuid,
+                    user_id,
+                    "sent",
+                    database_url=database_url,
+                )
             except TelegramForbiddenError:
                 stats.deactivated += 1
                 await mark_bot_user_inactive(user_id, database_url=database_url)
+                await record_news_delivery(
+                    article.uuid,
+                    user_id,
+                    "deactivated",
+                    database_url=database_url,
+                )
                 logger.info("News recipient deactivated: user_id=%s", user_id)
+            except TelegramBadRequest:
+                stats.failed += 1
+                if isinstance(photo, BufferedInputFile):
+                    photo_rejected = True
+                    logger.exception(
+                        "Validated news image was rejected by Telegram: uuid=%s",
+                        article.uuid,
+                    )
+                    break
+                logger.exception("News delivery failed: user_id=%s", user_id)
             except TelegramAPIError:
                 stats.failed += 1
                 logger.exception("News delivery failed: user_id=%s", user_id)
@@ -148,8 +171,29 @@ async def send_news_broadcast(
 
         after_user_id = batch[-1]
         batch = await get_news_recipients(
+            article_uuid=article.uuid,
             after_user_id=after_user_id,
             limit=USER_BATCH_SIZE,
+            database_url=database_url,
+        )
+
+    if photo_rejected:
+        await finish_news_candidate(
+            article.uuid,
+            "rejected",
+            rejection_reason="telegram-image-rejected",
+            database_url=database_url,
+        )
+    elif stats.failed:
+        await finish_news_candidate(
+            article.uuid,
+            "candidate",
+            database_url=database_url,
+        )
+    else:
+        await finish_news_candidate(
+            article.uuid,
+            "sent",
             database_url=database_url,
         )
 
@@ -182,90 +226,140 @@ async def select_news_article(
     now: datetime,
     *,
     database_url: str | None = None,
-) -> tuple[NewsFilter, NewsArticle] | None:
-    local_now = now
-    sent_key = "news:sent"
-    cutoff = (local_now - timedelta(days=NEWS_LOOKBACK_DAYS)).timestamp()
-    await redis.zremrangebyscore(sent_key, "-inf", cutoff)
-    last_filter = await redis.get("news:last-filter")
-    filters = [item for item in NEWS_FILTERS if item.name != last_filter]
-    secrets.SystemRandom().shuffle(filters)
-    filters.extend(item for item in NEWS_FILTERS if item.name == last_filter)
-    published_after = (local_now - timedelta(days=NEWS_LOOKBACK_DAYS)).astimezone(
+    provider: NewsProvider | None = None,
+) -> tuple[NewsFilter, NewsArticle, NewsImage] | None:
+    _ = redis  # The outer Redis lock serializes manual and scheduled broadcasts.
+    provider = provider or TheNewsApiProvider()
+    await delete_old_news_articles(
+        now - timedelta(days=NEWS_RETENTION_DAYS),
+        database_url=database_url,
+    )
+    published_after = (now - timedelta(hours=NEWS_MAX_AGE_HOURS)).astimezone(
         timezone.utc
     )
+    fetch_error: NewsApiError | NewsApiDailyBudgetError | None = None
+    try:
+        await _refresh_news_candidates(
+            now,
+            published_after=published_after,
+            database_url=database_url,
+            provider=provider,
+        )
+    except (NewsApiAuthenticationError, NewsApiRateLimitError):
+        raise
+    except (NewsApiError, NewsApiDailyBudgetError) as exc:
+        fetch_error = exc
+        logger.warning(
+            "News fetch failed; trying cached candidates: error=%s",
+            exc,
+        )
 
-    for article_filter in filters[:MAX_FILTERS_PER_RUN]:
+    for _ in range(20):
+        article = await claim_news_candidate(
+            published_after,
+            database_url=database_url,
+        )
+        if article is None:
+            if fetch_error is not None:
+                raise fetch_error
+            return None
+        rejection = _article_rejection_reason(article, now)
+        if rejection:
+            await finish_news_candidate(
+                article.uuid,
+                "rejected",
+                rejection_reason=rejection,
+                database_url=database_url,
+            )
+            continue
+        image = await provider.fetch_image(article.image_url or "")
+        if image is None:
+            await finish_news_candidate(
+                article.uuid,
+                "rejected",
+                rejection_reason="invalid-image",
+                database_url=database_url,
+            )
+            logger.info(
+                "News candidate rejected: uuid=%s source=%s reason=invalid-image",
+                article.uuid,
+                article.source,
+            )
+            continue
+        return NEWS_FILTERS[0], article, image
+    if fetch_error is not None:
+        raise fetch_error
+    return None
+
+
+async def _refresh_news_candidates(
+    now: datetime,
+    *,
+    published_after: datetime,
+    database_url: str | None,
+    provider: NewsProvider,
+) -> None:
+    async def reserve_request() -> None:
         await reserve_news_api_request(
-            local_now.date(),
+            now.date(),
             NEWS_API_DAILY_BUDGET,
             database_url=database_url,
         )
-        try:
-            result = await fetch_news(
-                article_filter.search,
-                published_after=published_after,
-            )
-        except (NewsApiAuthenticationError, NewsApiRateLimitError):
-            raise
-        except NewsApiError as exc:
-            logger.warning(
-                "News filter request failed: filter=%s error=%s",
-                article_filter.name,
-                exc,
+
+    result = await provider.fetch_news(
+        published_after=published_after,
+        before_request=reserve_request,
+    )
+    await update_news_api_quota(
+        now.date(),
+        api_limit=result.api_limit,
+        api_remaining=result.api_remaining,
+        database_url=database_url,
+    )
+
+    articles = sorted(
+        result.articles,
+        key=lambda article: (
+            _published_at(article) or datetime.min.replace(tzinfo=timezone.utc)
+        ),
+        reverse=True,
+    )
+    for article in articles:
+        rejection = _article_rejection_reason(article, now)
+        if rejection == "truncated-description":
+            complete_description = await provider.fetch_description(article.url)
+            if complete_description:
+                article = replace(article, description=complete_description)
+                rejection = _article_rejection_reason(article, now)
+        if rejection:
+            logger.info(
+                "News candidate rejected: uuid=%s source=%s reason=%s",
+                article.uuid,
+                article.source,
+                rejection,
             )
             continue
-
-        await update_news_api_quota(
-            local_now.date(),
-            api_limit=result.api_limit,
-            api_remaining=result.api_remaining,
-            database_url=database_url,
-        )
-
-        for article in result.articles:
-            if not await redis.zadd(
-                sent_key,
-                {article.uuid: local_now.timestamp()},
-                nx=True,
-            ):
-                continue
-            await redis.expire(sent_key, SENT_NEWS_TTL_SECONDS)
-            await redis.set("news:last-filter", article_filter.name, ex=2 * 86400)
-            return article_filter, article
-    return None
+        await save_news_candidate(article, database_url=database_url)
 
 
 async def _deliver_article(
     bot: Bot,
     user_id: int,
     article: NewsArticle,
-    photo: str | None,
+    photo: str | BufferedInputFile,
 ) -> Message:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Читать источник", url=article.url)]
         ]
     )
-    if photo:
-        try:
-            return await _retry_after(
-                bot.send_photo,
-                chat_id=user_id,
-                photo=photo,
-                caption=_article_text(article, limit=1024),
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-        except TelegramBadRequest:
-            logger.info("News photo rejected, using text: user_id=%s", user_id)
     return await _retry_after(
-        bot.send_message,
+        bot.send_photo,
         chat_id=user_id,
-        text=_article_text(article, limit=4096),
+        photo=photo,
+        caption=_article_text(article),
         parse_mode="HTML",
         reply_markup=keyboard,
-        link_preview_options=None,
     )
 
 
@@ -280,30 +374,65 @@ async def _retry_after(method, **kwargs) -> Message:
     raise AssertionError("unreachable")
 
 
-def _article_text(article: NewsArticle, *, limit: int = 1024) -> str:
+def _article_text(article: NewsArticle) -> str:
     source_text = article.source or "Источник"
-    description_limit = max(
-        0,
-        limit - len(article.title) - len(source_text) - len("\n\n\n\n"),
+    source_text = _truncate_caption_part(source_text, TELEGRAM_CAPTION_LIMIT - 4)
+    title_limit = TELEGRAM_CAPTION_LIMIT - len(source_text) - 4
+    title_text = _truncate_caption_part(article.title, title_limit)
+    description_limit = TELEGRAM_CAPTION_LIMIT - len(title_text) - len(source_text) - 4
+    description_text = _truncate_caption_part(
+        article.description,
+        description_limit,
     )
-    title = html.escape(article.title)
-    description = html.escape(_truncate(article.description, description_limit))
+    title = html.escape(title_text)
+    description = html.escape(description_text)
     source = html.escape(source_text)
-    parts = [f"<b>{title}</b>"]
-    if description:
-        parts.append(description)
-    parts.append(source)
-    return "\n\n".join(parts)
+    return "\n\n".join((f"<b>{title}</b>", description, source))
 
 
-def _truncate(value: str, limit: int) -> str:
-    if limit <= 0:
-        return ""
+def _truncate_caption_part(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
+    if limit <= 0:
+        return ""
     if limit == 1:
         return "…"
-    return value[: limit - 1].rstrip() + "…"
+    return f"{value[: limit - 1].rstrip()}…"
+
+
+def _article_rejection_reason(article: NewsArticle, now: datetime) -> str | None:
+    published_at = _published_at(article)
+    utc_now = now.astimezone(timezone.utc)
+    if published_at is None:
+        return "invalid-published-at"
+    if published_at > utc_now + timedelta(minutes=10):
+        return "future-published-at"
+    if published_at < utc_now - timedelta(hours=NEWS_MAX_AGE_HOURS):
+        return "stale"
+    if not any(
+        article.source == domain or article.source.endswith(f".{domain}")
+        for domain in NEWS_ALLOWED_DOMAINS
+    ):
+        return "untrusted-source"
+    if not article.description:
+        return "missing-description"
+    if article.description.endswith(("...", "…")):
+        return "truncated-description"
+    if not article.image_url:
+        return "missing-image"
+    if "favicon" in urlsplit(article.image_url).path.lower():
+        return "favicon-image"
+    return None
+
+
+def _published_at(article: NewsArticle) -> datetime | None:
+    try:
+        value = datetime.fromisoformat(article.published_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if value.tzinfo is None:
+        return None
+    return value.astimezone(timezone.utc)
 
 
 def _telegram_photo_id(message: Message) -> str | None:

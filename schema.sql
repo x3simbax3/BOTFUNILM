@@ -279,6 +279,40 @@ CREATE TABLE news_api_daily_usage (
     CHECK (`api_remaining` IS NULL OR `api_remaining` >= 0)
 );
 
+CREATE TABLE news_articles (
+    uuid                TEXT NOT NULL PRIMARY KEY,
+    title               TEXT NOT NULL,
+    description         TEXT NOT NULL,
+    url                 TEXT NOT NULL,
+    image_url           TEXT NOT NULL,
+    source              TEXT NOT NULL,
+    published_at        TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'candidate',
+    rejection_reason    TEXT,
+    discovered_at       TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    selected_at         TEXT,
+    sent_at             TEXT,
+    CHECK (`status` IN ('candidate', 'selected', 'sent', 'rejected'))
+);
+
+CREATE INDEX ix_news_articles_selection
+    ON news_articles (status, published_at DESC);
+
+CREATE UNIQUE INDEX news_articles_url
+    ON news_articles (url);
+
+CREATE TABLE news_article_deliveries (
+    article_uuid        TEXT NOT NULL,
+    user_id             INTEGER NOT NULL,
+    status              TEXT NOT NULL,
+    delivered_at        TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    PRIMARY KEY (article_uuid, user_id),
+    CONSTRAINT news_article_deliveries_article
+        FOREIGN KEY (article_uuid) REFERENCES news_articles (uuid)
+        ON DELETE CASCADE,
+    CHECK (`status` IN ('sent', 'deactivated'))
+);
+
 CREATE TABLE bot_features (
     feature      TEXT NOT NULL PRIMARY KEY,
     enabled      INTEGER NOT NULL DEFAULT 1,

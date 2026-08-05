@@ -7,8 +7,14 @@ from tests.support.database import MIGRATIONS, DatabaseTestCase
 
 class MigrationTests(DatabaseTestCase):
     async def test_dropped_entries_are_migrated_to_on_hold(self) -> None:
+        dropped_migration = next(
+            migration
+            for migration in MIGRATIONS
+            if migration.name == "20260804184158_remove_dropped_status.sql"
+        )
+        dropped_index = MIGRATIONS.index(dropped_migration)
         with sqlite3.connect(":memory:") as connection:
-            for migration in MIGRATIONS[:-1]:
+            for migration in MIGRATIONS[:dropped_index]:
                 connection.executescript(migration.read_text(encoding="utf-8"))
             connection.execute(
                 """
@@ -23,7 +29,7 @@ class MigrationTests(DatabaseTestCase):
                 """
             )
 
-            connection.executescript(MIGRATIONS[-1].read_text(encoding="utf-8"))
+            connection.executescript(dropped_migration.read_text(encoding="utf-8"))
 
             status = connection.execute(
                 "SELECT status FROM user_media WHERE user_id = 123"
@@ -53,6 +59,9 @@ class MigrationTests(DatabaseTestCase):
         self.assertIn(("ix_bot_user_daily_events_metric", "index"), objects)
         self.assertIn(("notification_delivery_runs", "table"), objects)
         self.assertIn(("news_api_daily_usage", "table"), objects)
+        self.assertIn(("news_articles", "table"), objects)
+        self.assertIn(("news_article_deliveries", "table"), objects)
+        self.assertIn(("ix_news_articles_selection", "index"), objects)
         self.assertIn(("ix_notification_delivery_runs_created", "index"), objects)
         self.assertIn(("ix_media_search_terms_term", "index"), objects)
         self.assertIn(("ix_user_media_media_id", "index"), objects)

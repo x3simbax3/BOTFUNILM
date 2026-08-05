@@ -9,6 +9,7 @@ import logging
 import os
 import secrets
 import time
+import traceback
 from collections.abc import Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from aiogram.exceptions import TelegramAPIError
 from redis.asyncio import Redis
 
 from config.config import (
+    ADMIN_USER_IDS,
     BOT_TOKEN,
     DATABASE_URL,
     DEBUG,
@@ -59,8 +61,13 @@ from src.jobs.media_refresh import (
 )
 from src.jobs.news_broadcast import NewsBroadcastStats, send_news_broadcast
 from src.jobs.series_notifications import send_release_notifications
-from src.logging_config import configure_logging
-from src.news_api import NewsApiAuthenticationError, NewsApiRateLimitError
+from src.logging_config import configure_logging, safe_exception_info
+from src.news_api import (
+    NewsApiAuthenticationError,
+    NewsApiError,
+    NewsApiRateLimitError,
+    NewsApiUnavailableError,
+)
 from src.tmdb_client import get_tmdb_request_count, reset_tmdb_request_count
 from src.tmdb_limiter import close_tmdb_request_limiter
 from src.tmdb_models import (
@@ -77,7 +84,7 @@ logger = logging.getLogger(__name__)
 LOCK_PREFIX = "media-refresh"
 REFRESH_HOUR = 2
 NOTIFICATION_HOUR = 12
-NEWS_HOURS = (9, 11, 13, 15, 17, 19, 21)
+NEWS_HOURS = tuple(range(10, 23, 2))
 NEWS_JITTER_SECONDS = 5 * 60
 ScheduledJob = Literal["daily", "weekly", "notifications"]
 
@@ -637,13 +644,49 @@ async def _run_news_locked_or_log(
             )
     except JobAlreadyRunningError:
         logger.warning("News broadcast skipped because lock is held")
-    except NewsApiAuthenticationError:
+    except NewsApiAuthenticationError as exc:
         logger.error("News broadcast stopped because TheNewsAPI key is invalid")
-    except NewsApiRateLimitError:
+        await _notify_admins_about_news_failure(bot, exc)
+    except NewsApiRateLimitError as exc:
         logger.error("News broadcast stopped because TheNewsAPI limit was reached")
-    except NewsApiDailyBudgetError:
+        await _notify_admins_about_news_failure(bot, exc)
+    except NewsApiUnavailableError as exc:
+        logger.error("News broadcast skipped because TheNewsAPI is unavailable")
+        await _notify_admins_about_news_failure(bot, exc)
+    except NewsApiError as exc:
+        logger.exception(
+            "News broadcast skipped because TheNewsAPI response is invalid"
+        )
+        await _notify_admins_about_news_failure(bot, exc)
+    except NewsApiDailyBudgetError as exc:
         logger.info("News broadcast skipped because the daily API budget is exhausted")
+        await _notify_admins_about_news_failure(bot, exc)
+    except Exception as exc:
+        logger.exception("News broadcast failed without stopping the media worker")
+        await _notify_admins_about_news_failure(bot, exc)
     return None
+
+
+async def _notify_admins_about_news_failure(bot: Bot, exception: Exception) -> None:
+    text = "Новости не отправлены.\n\n" + _short_traceback(exception)
+    for admin_id in sorted(ADMIN_USER_IDS):
+        try:
+            await bot.send_message(admin_id, text)
+        except TelegramAPIError:
+            logger.exception(
+                "Failed to notify admin about news failure: user_id=%s",
+                admin_id,
+            )
+
+
+def _short_traceback(exception: Exception) -> str:
+    _, sanitized, traceback_value = safe_exception_info(exception)
+    frames = traceback.extract_tb(traceback_value, limit=2)
+    locations = "\n".join(
+        f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}'
+        for frame in frames
+    )
+    return (f"Traceback (most recent call last):\n{locations}\n{sanitized}")[:1500]
 
 
 async def _send_admin_job_result(
