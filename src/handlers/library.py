@@ -84,7 +84,7 @@ router = Router(name="library")
 LIBRARY_PAGE_SIZE = 10
 
 
-@router.callback_query(F.data == "menu:library")
+@router.callback_query(MenuState.choosing_library_action, F.data == "menu:library:all")
 async def open_library(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
         await track_user_event(callback.from_user.id, "library_open")

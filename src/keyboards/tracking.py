@@ -21,7 +21,12 @@ def tracked_series_keyboard(
         )
     if pagination:
         rows.append(pagination)
-    rows.append([InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")])
+    rows.append(
+        [
+            InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu"),
+            InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main"),
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

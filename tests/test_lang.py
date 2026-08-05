@@ -248,12 +248,37 @@ class LocalizationTests(unittest.TestCase):
         self.assertIn("<i>Мультсериал</i>", result)
         self.assertNotIn("Сериалы · Мультфильм", result)
         self.assertIn("Статус · <b>◉ Смотрю</b>", result)
+        self.assertIn("Статус сериала · <b>Продолжается</b>", result)
         self.assertIn("Добавили · <b>12</b>", result)
         self.assertIn(
             "Следующая серия · <b>2 сезон, 6 серия · 17.08.2026</b>",
             result,
         )
         self.assertIn("🔴 <b>Сейчас выходит</b>", result)
+
+    def test_library_item_shows_ended_series_status(self) -> None:
+        result = lang.library_item_text(
+            {
+                "title": "Завершённый сериал",
+                "original_title": None,
+                "description": None,
+                "content_format": "series",
+                "content_type": "movie",
+                "user_status": "completed",
+                "user_rating": None,
+                "rating": None,
+                "release_date": None,
+                "first_air_date": None,
+                "number_of_seasons": 1,
+                "number_of_episodes": 6,
+                "episodes_watched": 6,
+                "library_users_count": 1,
+                "tmdb_status": "Ended",
+                "tmdb_in_production": 0,
+            }
+        )
+
+        self.assertIn("Статус сериала · <b>Завершён</b>", result)
 
     def test_active_series_tracking_shows_aired_and_announced_totals(self) -> None:
         result = lang.series_tracking_text(

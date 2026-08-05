@@ -3,6 +3,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 class MenuState(StatesGroup):
     choosing_action = State()
+    choosing_library_action = State()
+    choosing_settings = State()
     viewing_library = State()
     viewing_tracked = State()
     viewing_media = State()

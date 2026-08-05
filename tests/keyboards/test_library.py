@@ -30,7 +30,7 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 ["library:filters:status", "library:filters:status"],
                 ["library:filters:sort", "library:filters:sort"],
                 ["library:page:0", "library:page:2"],
-                ["back:main"],
+                ["back:library_menu", "back:main"],
             ],
         )
         self.assertEqual(
@@ -235,9 +235,9 @@ class LibraryKeyboardTests(KeyboardTestCase):
                 [button.callback_data for button in row]
                 for row in first_page.inline_keyboard
             ],
-            [["back:main"]],
+            [["back:library_menu", "back:main"]],
         )
         self.assertEqual(
             [[button.text for button in row] for row in middle_page.inline_keyboard],
-            [["《", "》"], ["⌂\u00a0Главное меню"]],
+            [["《", "》"], ["‹\u00a0Назад", "⌂\u00a0Главное меню"]],
         )

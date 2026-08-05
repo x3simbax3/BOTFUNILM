@@ -329,7 +329,7 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_open_library_shows_only_first_ten_and_more_button(self) -> None:
         message = MessageStub()
-        callback = CallbackStub("menu:library", message)
+        callback = CallbackStub("menu:library:all", message)
         state = StateStub()
         filters = {
             "full_length": True,
@@ -380,7 +380,7 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_empty_library_prompts_user_to_add_first_item(self) -> None:
         message = MessageStub()
-        callback = CallbackStub("menu:library", message)
+        callback = CallbackStub("menu:library:all", message)
         state = StateStub()
 
         with (

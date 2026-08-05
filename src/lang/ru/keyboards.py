@@ -1,8 +1,10 @@
 MAIN_LIBRARY = "♡\u00a0Моя библиотека"
+MAIN_SETTINGS = "⚙\u00a0Настройки"
 MAIN_TRACKED = "◉\u00a0Отслеживаемые"
 MAIN_ADD = "＋\u00a0Добавить"
-MAIN_NEWS_ON = "🔔\u00a0Новости · вкл"
-MAIN_NEWS_OFF = "🔕\u00a0Новости · выкл"
+MAIN_NEWS_ON = "★\u00a0Новости · вкл"
+MAIN_NEWS_OFF = "★\u00a0Новости · выкл"
+LIBRARY_ALL = "♡\u00a0Все сохранённые"
 
 FILTER_SERIES = "Сериалы"
 FILTER_FULL_LENGTH = "Полный метр"

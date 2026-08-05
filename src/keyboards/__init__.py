@@ -14,8 +14,10 @@ from .library import (
 from .menu import (
     content_type_keyboard,
     format_keyboard,
+    library_menu_keyboard,
     main_menu_keyboard,
     selected_type_keyboard,
+    settings_keyboard,
 )
 from .rating import badge_keyboard, rating_keyboard
 from .search import tmdb_guess_keyboard, tmdb_retry_keyboard, watch_status_keyboard
@@ -37,6 +39,7 @@ __all__ = (
     "content_type_keyboard",
     "episodes_keyboard",
     "format_keyboard",
+    "library_menu_keyboard",
     "library_delete_keyboard",
     "library_edit_keyboard",
     "library_item_keyboard",
@@ -48,6 +51,7 @@ __all__ = (
     "rating_keyboard",
     "season_list_keyboard",
     "selected_type_keyboard",
+    "settings_keyboard",
     "tmdb_guess_keyboard",
     "tmdb_retry_keyboard",
     "watch_status_keyboard",

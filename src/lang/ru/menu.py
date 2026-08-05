@@ -46,6 +46,14 @@ BACK_FAILED = "Не удалось вернуться назад"
 NEWS_ENABLED = "Новости включены"
 NEWS_DISABLED = "Новости выключены"
 NEWS_SETTING_FAILED = "Не удалось изменить настройку новостей"
+LIBRARY_MENU_TEXT = """━━━  <b>Моя библиотека</b>  ━━━
+<i>Все сохранённые тайтлы — в одном месте</i>
+
+Выбери, что хочешь открыть."""
+SETTINGS_TEXT = """━━━  <b>Настройки</b>  ━━━
+<i>Управляй уведомлениями бота</i>
+
+Выбери настройку ниже."""
 
 
 def action_text(action: str) -> str:
@@ -83,11 +91,13 @@ __all__ = (
     "FORMAT_RESULT_TITLES",
     "FORMAT_TITLES",
     "INVALID_SELECTION",
+    "LIBRARY_MENU_TEXT",
     "MEDIA_KIND_TITLES",
     "NEWS_DISABLED",
     "NEWS_ENABLED",
     "NEWS_SETTING_FAILED",
     "SELECTION_SAVED",
+    "SETTINGS_TEXT",
     "START_TEXT",
     "UNKNOWN_STEP",
     "action_text",

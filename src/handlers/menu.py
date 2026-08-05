@@ -12,7 +12,11 @@ from src.callback_data import (
     parse_format_callback,
     parse_type_callback,
 )
-from src.database.bot_users import register_bot_user, toggle_news_enabled
+from src.database.bot_users import (
+    get_news_enabled,
+    register_bot_user,
+    toggle_news_enabled,
+)
 from src.fsm import MenuState
 from src.handlers.common import replace_message
 from src.handlers.library import media_id_from_start, show_library_item
@@ -20,17 +24,21 @@ from src.handlers.navigation import reset_to_main, user_main_menu_keyboard
 from src.keyboards import (
     content_type_keyboard,
     format_keyboard,
+    library_menu_keyboard,
     main_menu_keyboard,
     selected_type_keyboard,
+    settings_keyboard,
 )
 from src.lang import (
     BACK_FAILED,
     ENTER_TITLE_AGAIN,
     INVALID_SELECTION,
+    LIBRARY_MENU_TEXT,
     NEWS_DISABLED,
     NEWS_ENABLED,
     NEWS_SETTING_FAILED,
     SELECTION_SAVED,
+    SETTINGS_TEXT,
     START_TEXT,
     UNKNOWN_STEP,
     action_text,
@@ -56,6 +64,14 @@ MENU_TREE = {
         "param_fields": ("action",),
         "text": lambda data: action_text(data["action"]),
         "keyboard": lambda data: format_keyboard(data["action"]),
+    },
+    "library_menu": {
+        "state": MenuState.choosing_library_action,
+        "clear_fields": ("action", "content_format", "content_type"),
+        "required_fields": (),
+        "param_fields": (),
+        "text": lambda data: LIBRARY_MENU_TEXT,
+        "keyboard": lambda data: library_menu_keyboard(),
     },
     "content_type": {
         "state": MenuState.choosing_content_type,
@@ -98,7 +114,38 @@ async def start(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.callback_query(F.data == "menu:news")
+@router.callback_query(MenuState.choosing_action, F.data == "menu:library")
+async def open_library_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.set_state(MenuState.choosing_library_action)
+    await callback.message.edit_text(
+        LIBRARY_MENU_TEXT,
+        parse_mode="HTML",
+        reply_markup=library_menu_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(MenuState.choosing_action, F.data == "menu:settings")
+async def open_settings(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    try:
+        news_enabled = await get_news_enabled(callback.from_user.id)
+    except aiosqlite.Error:
+        await callback.answer(NEWS_SETTING_FAILED, show_alert=True)
+        return
+    await state.set_state(MenuState.choosing_settings)
+    await callback.message.edit_text(
+        SETTINGS_TEXT,
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(news_enabled),
+    )
+    await callback.answer()
+
+
+@router.callback_query(MenuState.choosing_settings, F.data == "menu:news")
 async def toggle_news(callback: CallbackQuery) -> None:
     if not callback.message:
         return
@@ -109,12 +156,12 @@ async def toggle_news(callback: CallbackQuery) -> None:
         return
 
     await callback.message.edit_reply_markup(
-        reply_markup=main_menu_keyboard(enabled),
+        reply_markup=settings_keyboard(enabled),
     )
     await callback.answer(NEWS_ENABLED if enabled else NEWS_DISABLED)
 
 
-@router.callback_query(F.data == "menu:add")
+@router.callback_query(MenuState.choosing_library_action, F.data == "menu:add")
 async def choose_action(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data or not callback.message:
         return

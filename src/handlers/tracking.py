@@ -46,7 +46,7 @@ NOTIFICATION_PAGE_SIZE = 10
 MAX_PAGE = 100_000
 
 
-@router.callback_query(F.data == "menu:tracked")
+@router.callback_query(MenuState.choosing_library_action, F.data == "menu:tracked")
 async def open_tracked_series(callback: CallbackQuery, state: FSMContext) -> None:
     await _open_tracked_page(callback, state, 0)
 

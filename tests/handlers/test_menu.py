@@ -6,10 +6,19 @@ from src.handlers import menu as menu_handlers
 from src.keyboards import (
     content_type_keyboard,
     format_keyboard,
+    library_menu_keyboard,
     main_menu_keyboard,
     selected_type_keyboard,
+    settings_keyboard,
 )
-from src.lang import START_TEXT, action_text, content_type_text, selected_type_text
+from src.lang import (
+    LIBRARY_MENU_TEXT,
+    SETTINGS_TEXT,
+    START_TEXT,
+    action_text,
+    content_type_text,
+    selected_type_text,
+)
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
 
@@ -56,9 +65,52 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
         toggle.assert_awaited_once_with(123)
         self.assertEqual(
             message.edit_reply_markup_calls,
-            [{"reply_markup": main_menu_keyboard(False)}],
+            [{"reply_markup": settings_keyboard(False)}],
         )
         self.assertEqual(callback.answers, [{"text": "Новости выключены"}])
+
+    async def test_open_library_menu_shows_library_sections(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:library", message)
+        state = StateStub()
+
+        await menu_handlers.open_library_menu(callback, state)
+
+        self.assertEqual(state.state, MenuState.choosing_library_action)
+        self.assertEqual(
+            message.edit_text_calls,
+            [
+                {
+                    "text": LIBRARY_MENU_TEXT,
+                    "parse_mode": "HTML",
+                    "reply_markup": library_menu_keyboard(),
+                }
+            ],
+        )
+
+    async def test_open_settings_shows_news_setting(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("menu:settings", message)
+        state = StateStub()
+
+        with patch.object(
+            menu_handlers,
+            "get_news_enabled",
+            new=AsyncMock(return_value=False),
+        ):
+            await menu_handlers.open_settings(callback, state)
+
+        self.assertEqual(state.state, MenuState.choosing_settings)
+        self.assertEqual(
+            message.edit_text_calls,
+            [
+                {
+                    "text": SETTINGS_TEXT,
+                    "parse_mode": "HTML",
+                    "reply_markup": settings_keyboard(False),
+                }
+            ],
+        )
 
     async def test_choose_action_saves_action_and_moves_to_choosing_format(
         self,
@@ -168,6 +220,27 @@ class MenuHandlerTests(unittest.IsolatedAsyncioTestCase):
             main_menu_keyboard(),
         )
         self.assertEqual(callback.answers, [{"text": None}])
+
+    async def test_back_to_library_menu_clears_addition_data(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("back:library_menu", message)
+        state = StateStub(
+            {
+                "action": "add",
+                "content_format": "series",
+                "content_type": "anime",
+            }
+        )
+
+        await menu_handlers.go_back(callback, state)
+
+        self.assertEqual(state.data, {})
+        self.assertEqual(state.state, MenuState.choosing_library_action)
+        self.assertEqual(message.edit_text_calls[0]["text"], LIBRARY_MENU_TEXT)
+        self.assertEqual(
+            message.edit_text_calls[0]["reply_markup"],
+            library_menu_keyboard(),
+        )
 
     async def test_retry_title_moves_back_to_waiting_title(self) -> None:
         message = MessageStub()

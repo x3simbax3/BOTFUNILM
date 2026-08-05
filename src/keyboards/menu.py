@@ -12,8 +12,22 @@ def main_menu_keyboard(news_enabled: bool = True) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=text.MAIN_LIBRARY, callback_data="menu:library"
                 ),
+                InlineKeyboardButton(
+                    text=text.MAIN_SETTINGS, callback_data="menu:settings"
+                ),
             ],
-            [InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add")],
+        ],
+    )
+
+
+def library_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=text.LIBRARY_ALL, callback_data="menu:library:all"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text=text.MAIN_TRACKED, callback_data="menu:tracked"
@@ -21,11 +35,25 @@ def main_menu_keyboard(news_enabled: bool = True) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text=text.MAIN_ADD, callback_data="menu:add"
+                )
+            ],
+            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
+        ],
+    )
+
+
+def settings_keyboard(news_enabled: bool) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
                     text=(text.MAIN_NEWS_ON if news_enabled else text.MAIN_NEWS_OFF),
                     callback_data="menu:news",
                 )
             ],
-        ],
+            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
+        ]
     )
 
 
@@ -42,7 +70,7 @@ def format_keyboard(action: str) -> InlineKeyboardMarkup:
                     callback_data=f"format:{action}:series",
                 ),
             ],
-            [InlineKeyboardButton(text=text.BACK, callback_data="back:main")],
+            [InlineKeyboardButton(text=text.BACK, callback_data="back:library_menu")],
         ],
     )
 

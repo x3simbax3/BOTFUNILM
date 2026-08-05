@@ -7,22 +7,36 @@ class MenuKeyboardTests(KeyboardTestCase):
         keyboard = keyboards.main_menu_keyboard()
         self.assert_callback_rows(
             keyboard,
-            [["menu:library"], ["menu:add"], ["menu:tracked"], ["menu:news"]],
+            [["menu:library", "menu:settings"]],
         )
-        self.assertEqual(keyboard.inline_keyboard[2][0].text, "◉\u00a0Отслеживаемые")
-        self.assertIn("вкл", keyboard.inline_keyboard[3][0].text)
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "⚙\u00a0Настройки")
 
     def test_main_menu_shows_disabled_news(self) -> None:
-        keyboard = keyboards.main_menu_keyboard(news_enabled=False)
+        keyboard = keyboards.settings_keyboard(news_enabled=False)
 
-        self.assertIn("выкл", keyboard.inline_keyboard[3][0].text)
+        self.assertIn("выкл", keyboard.inline_keyboard[0][0].text)
 
-    def test_format_buttons_have_expected_callbacks_and_back_to_main(self) -> None:
+    def test_library_menu_has_library_tracked_and_add_sections(self) -> None:
+        self.assert_callback_rows(
+            keyboards.library_menu_keyboard(),
+            [
+                ["menu:library:all"],
+                ["menu:tracked"],
+                ["menu:add"],
+                ["back:main"],
+            ],
+        )
+        self.assertEqual(
+            keyboards.library_menu_keyboard().inline_keyboard[0][0].text,
+            "♡\u00a0Все сохранённые",
+        )
+
+    def test_format_buttons_have_expected_callbacks_and_back_to_library_menu(self) -> None:
         self.assert_callback_rows(
             keyboards.format_keyboard("add"),
             [
                 ["format:add:full_length", "format:add:series"],
-                ["back:main"],
+                ["back:library_menu"],
             ],
         )
 

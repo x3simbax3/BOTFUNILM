@@ -17,6 +17,13 @@ USER_STATUS_ICONS = {
     "completed": "✓",
     "on_hold": "Ⅱ",
 }
+SERIES_STATUS_TITLES = {
+    "Returning Series": "Продолжается",
+    "Planned": "Готовится к выходу",
+    "In Production": "В производстве",
+    "Ended": "Завершён",
+    "Canceled": "Отменён",
+}
 LIBRARY_ITEM_DIVIDER = "•  ◇  •"
 LIBRARY_HEADING = "╭ <b>Моя библиотека</b>"
 
@@ -149,6 +156,9 @@ def library_item_text(item, description: str | None = None) -> str:
 
     details_heading = "О сериале" if item["content_format"] == "series" else "О фильме"
     lines.extend(["", f"<b>{details_heading}</b>"])
+    series_status = _series_status_line(item)
+    if series_status is not None:
+        lines.append(series_status)
     if item["rating"] is not None:
         lines.append(f"TMDB · <b>{item['rating']:.1f}/10</b>")
     lines.append(f"Добавили · <b>{item['library_users_count']}</b>")
@@ -197,6 +207,16 @@ def _series_release_line(item) -> str | None:
             f"<b>{season_number} сезон, {episode_number} серия{date_suffix}</b>"
         )
     return f"🔴 <b>Сейчас выходит</b>\n{detail}"
+
+
+def _series_status_line(item) -> str | None:
+    if _item_value(item, "content_format") != "series":
+        return None
+    status = _item_value(item, "tmdb_status")
+    title = SERIES_STATUS_TITLES.get(status)
+    if title is None and bool(_item_value(item, "tmdb_in_production")):
+        title = "В производстве"
+    return f"Статус сериала · <b>{title}</b>" if title is not None else None
 
 
 def _has_upcoming_episode(item) -> bool:
