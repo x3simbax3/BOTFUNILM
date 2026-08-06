@@ -35,7 +35,7 @@
           uses: ariga/setup-atlas@v0
 
         - name: Run project checks
-          run: make check TEST_PROCESSES=1
+          run: make ci-check TEST_PROCESSES=2
 
     integration:
       name: Integration and load tests
