@@ -119,6 +119,38 @@ class NewsBroadcastTests(DatabaseTestCase):
         self.assertEqual(selected[1].uuid, "with-image")
         fetch_image.assert_awaited_once_with(articles[1].image_url)
 
+    async def test_selects_fourth_article_when_first_three_are_rejected(self) -> None:
+        articles = [
+            NewsArticle(
+                **{
+                    **self.article(f"rejected-{index}").__dict__,
+                    "description": "",
+                }
+            )
+            for index in range(3)
+        ]
+        articles.append(self.article("fourth"))
+
+        with (
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_news",
+                new=AsyncMock(return_value=NewsFetchResult(tuple(articles), 100, 99)),
+            ),
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_image",
+                new=AsyncMock(return_value=self.image()),
+            ) as fetch_image,
+        ):
+            selected = await select_news_article(
+                AsyncMock(),
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1].uuid, "fourth")
+        fetch_image.assert_awaited_once_with(articles[3].image_url)
+
     async def test_broadcasts_in_batches_and_reuses_telegram_photo(self) -> None:
         async with connection_scope(self.database_url) as connection:
             await connection.executemany(
@@ -326,7 +358,7 @@ class NewsBroadcastTests(DatabaseTestCase):
             message="chat not found",
         )
         first_bot = AsyncMock()
-        first_bot.send_photo.side_effect = [telegram_message, chat_error]
+        first_bot.send_photo.side_effect = [chat_error, telegram_message]
         second_bot = AsyncMock()
         second_bot.send_photo.return_value = telegram_message
         selected = (NEWS_FILTERS[0], article, self.image())
@@ -353,4 +385,5 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         self.assertEqual((first_stats.sent, first_stats.failed), (1, 1))
         self.assertEqual((second_stats.selected, second_stats.sent), (1, 1))
-        self.assertEqual(second_bot.send_photo.await_args.kwargs["chat_id"], 2)
+        self.assertEqual(first_bot.send_photo.await_args_list[1].kwargs["chat_id"], 2)
+        self.assertEqual(second_bot.send_photo.await_args.kwargs["chat_id"], 1)

@@ -122,6 +122,7 @@ class NewsApiRequestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(url, "https://api.thenewsapi.com/v1/news/all")
         self.assertEqual(params["published_after"], "2026-07-28T00:00:00")
         self.assertEqual(params["sort"], "published_at")
+        self.assertEqual(params["limit"], "20")
         self.assertIn("daily.afisha.ru", params["domains"])
         self.assertEqual(session.get.call_count, 1)
 

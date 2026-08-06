@@ -21,6 +21,7 @@ from src.news_provider import BeforeNewsRequest
 from src.observability import record_api_error
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
+NEWS_API_BATCH_SIZE = 20
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_ARTICLE_METADATA_BYTES = 512 * 1024
 MAX_IMAGE_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -66,7 +67,7 @@ async def fetch_news(
         "language": "ru",
         "published_after": published_after.strftime("%Y-%m-%dT%H:%M:%S"),
         "sort": "published_at",
-        "limit": "3",
+        "limit": str(NEWS_API_BATCH_SIZE),
     }
     for attempt in range(NEWS_API_RETRIES):
         if before_request is not None:

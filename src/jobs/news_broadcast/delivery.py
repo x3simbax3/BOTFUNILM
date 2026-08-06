@@ -77,9 +77,9 @@ async def deliver_news_article(
                     database_url=database_url,
                 )
                 logger.info("News recipient deactivated: user_id=%s", user_id)
-            except TelegramBadRequest:
+            except TelegramBadRequest as exc:
                 stats.failed += 1
-                if isinstance(photo, BufferedInputFile):
+                if _is_telegram_image_error(exc):
                     photo_rejected = True
                     logger.exception(
                         "Validated news image was rejected by Telegram: uuid=%s",
@@ -164,6 +164,19 @@ async def _retry_after(method, **kwargs) -> Message:
                 raise
             await asyncio.sleep(exc.retry_after)
     raise AssertionError("unreachable")
+
+
+def _is_telegram_image_error(exc: TelegramBadRequest) -> bool:
+    message = exc.message.lower()
+    return any(
+        marker in message
+        for marker in (
+            "failed to get http url content",
+            "image_process_failed",
+            "photo_invalid_dimensions",
+            "wrong file identifier/http url specified",
+        )
+    )
 
 
 __all__ = ("deliver_news_article",)
