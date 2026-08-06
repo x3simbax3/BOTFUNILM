@@ -2,9 +2,6 @@
 
   on:
     push:
-      branches:
-        - master
-        - refactor/v0.1
     pull_request:
       branches:
         - master
