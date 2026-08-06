@@ -1,9 +1,12 @@
 import unittest
+from asyncio import sleep as yield_to_event_loop
 from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 from src.jobs.media_worker import (
+    LockLostError,
+    RedisJobLock,
     _news_result_text,
     _notify_admins_about_news_failure,
     _send_admin_job_result,
@@ -115,6 +118,30 @@ class MediaWorkerAdminResultTests(unittest.IsolatedAsyncioTestCase):
                 for call in bot.send_message.await_args_list
             )
         )
+
+
+class RedisJobLockTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stops_owner_when_lock_ownership_is_lost(self) -> None:
+        redis = AsyncMock()
+        redis.set.return_value = True
+        redis.eval.return_value = 0
+
+        with patch("src.jobs.media_worker.asyncio.sleep", new_callable=AsyncMock):
+            with self.assertRaisesRegex(LockLostError, "ownership was lost"):
+                async with RedisJobLock(redis, "test-lock", 30):
+                    await yield_to_event_loop(0)
+                    await yield_to_event_loop(0)
+
+    async def test_stops_owner_when_renewal_fails(self) -> None:
+        redis = AsyncMock()
+        redis.set.return_value = True
+        redis.eval.side_effect = ConnectionError("Redis is unavailable")
+
+        with patch("src.jobs.media_worker.asyncio.sleep", new_callable=AsyncMock):
+            with self.assertRaisesRegex(LockLostError, "Failed to renew"):
+                async with RedisJobLock(redis, "test-lock", 30):
+                    await yield_to_event_loop(0)
+                    await yield_to_event_loop(0)
 
 
 if __name__ == "__main__":
