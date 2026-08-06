@@ -33,11 +33,7 @@ def library_menu_keyboard() -> InlineKeyboardMarkup:
                     text=text.MAIN_TRACKED, callback_data="menu:tracked"
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text=text.MAIN_ADD, callback_data="menu:add"
-                )
-            ],
+            [InlineKeyboardButton(text=text.MAIN_ADD, callback_data="menu:add")],
             [InlineKeyboardButton(text=text.TO_MENU, callback_data="back:main")],
         ],
     )

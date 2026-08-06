@@ -41,6 +41,9 @@ def build_users_workbook(users: tuple[AdminExportUser, ...]) -> bytes:
     sheet.append(header)
     for user in users:
         values = list(astuple(user))
+        display_name = WriteOnlyCell(sheet, value=user.display_name)
+        display_name.data_type = "s"
+        values[2] = display_name
         values[3] = "Да" if user.is_active else "Нет"
         values[4] = "Да" if user.news_enabled else "Нет"
         sheet.append(values)

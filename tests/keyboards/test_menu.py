@@ -35,7 +35,9 @@ class MenuKeyboardTests(KeyboardTestCase):
             "⌂\u00a0Главное меню",
         )
 
-    def test_format_buttons_have_expected_callbacks_and_back_to_library_menu(self) -> None:
+    def test_format_buttons_have_expected_callbacks_and_back_to_library_menu(
+        self,
+    ) -> None:
         self.assert_callback_rows(
             keyboards.format_keyboard("add"),
             [
