@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, patch
 from aiogram.exceptions import TelegramBadRequest
 
 from src.fsm import MenuState
-from src.handlers import library as library_handlers
 from src.handlers import menu as menu_handlers
+from src.handlers.library import actions as library_actions
+from src.handlers.library import item as library_item_handlers
+from src.handlers.library import listing as library_listing_handlers
 from src.tmdb import TMDB_IMAGE_URL, TmdbTitle
 from tests.support.telegram import CallbackStub, MessageStub, StateStub
 
@@ -31,22 +33,27 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
-                AsyncMock(side_effect=[item, item | {"badge": "funny"}]),
+                AsyncMock(return_value=item),
             ),
             patch.object(
-                library_handlers,
+                library_actions,
+                "get_user_library_item",
+                AsyncMock(return_value=item | {"badge": "funny"}),
+            ),
+            patch.object(
+                library_actions,
                 "update_user_media_badge",
                 AsyncMock(return_value=True),
             ) as update_badge,
             patch.object(
-                library_handlers,
-                "_edit_library_item_message",
+                library_actions,
+                "edit_library_item_message",
                 AsyncMock(),
             ) as edit_item,
         ):
-            await library_handlers.change_library_item_badge(callback, state)
+            await library_actions.change_library_item_badge(callback, state)
 
         update_badge.assert_awaited_once_with(123, 7, "funny")
         edit_item.assert_awaited_once()
@@ -77,17 +84,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         }
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
                 AsyncMock(return_value=item),
             ),
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "update_media_telegram_poster_file_id",
                 AsyncMock(),
             ) as update_file_id,
         ):
-            await library_handlers.show_library_item(message, state, 123, 7)
+            await library_item_handlers.show_library_item(message, state, 123, 7)
 
         self.assertEqual(
             message.photo_answers[0]["photo"],
@@ -124,17 +131,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
                 AsyncMock(return_value=item),
             ),
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "clear_media_telegram_poster_file_id",
                 AsyncMock(),
             ) as clear_file_id,
         ):
-            opened = await library_handlers.show_library_item(
+            opened = await library_item_handlers.show_library_item(
                 message,
                 state,
                 123,
@@ -170,7 +177,7 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
                 AsyncMock(return_value=item),
             ),
@@ -228,22 +235,22 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
                 AsyncMock(return_value=item),
             ),
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "fetch_title_details",
                 AsyncMock(return_value=details),
             ),
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "update_media_metadata",
                 AsyncMock(),
             ) as update_metadata,
         ):
-            await library_handlers.show_library_item(message, state, 123, 7)
+            await library_item_handlers.show_library_item(message, state, 123, 7)
 
         update_metadata.assert_awaited_once_with(
             7,
@@ -287,17 +294,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         }
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "get_user_library_item",
                 AsyncMock(return_value=item),
             ),
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "fetch_title_details",
                 AsyncMock(),
             ) as fetch_metadata,
         ):
-            await library_handlers.show_library_item(message, state, 123, 8)
+            await library_item_handlers.show_library_item(message, state, 123, 8)
 
         fetch_metadata.assert_not_awaited()
         self.assertIn(
@@ -318,12 +325,12 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_item_handlers,
                 "fetch_title_details",
                 AsyncMock(),
             ) as fetch_metadata,
         ):
-            await library_handlers._refresh_item_metadata(item)
+            await library_item_handlers._refresh_item_metadata(item)
 
         fetch_metadata.assert_not_awaited()
 
@@ -351,17 +358,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "get_user_library_filters",
                 AsyncMock(return_value=filters),
             ),
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "list_user_library",
                 AsyncMock(return_value=items),
             ),
         ):
-            await library_handlers.open_library(callback, state)
+            await library_listing_handlers.open_library(callback, state)
 
         rendered = message.edit_text_calls[0]
         self.assertIn("1.", rendered["text"])
@@ -385,17 +392,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "get_user_library_filters",
                 AsyncMock(return_value={"movie": True, "series": True}),
             ),
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "list_user_library",
                 AsyncMock(return_value=[]),
             ),
         ):
-            await library_handlers.open_library(callback, state)
+            await library_listing_handlers.open_library(callback, state)
 
         self.assertIn(
             "Добавь первую запись в библиотеку.",
@@ -408,14 +415,14 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"library_sort": "recent"})
 
         with patch.object(
-            library_handlers,
+            library_listing_handlers,
             "open_library_page",
             AsyncMock(),
         ) as open_page:
-            await library_handlers.change_library_sort(rating_callback, state)
+            await library_listing_handlers.change_library_sort(rating_callback, state)
             self.assertEqual(state.data["library_sort"], "rating")
 
-            await library_handlers.change_library_sort(recent_callback, state)
+            await library_listing_handlers.change_library_sort(recent_callback, state)
             self.assertEqual(state.data["library_sort"], "recent")
 
         self.assertEqual(open_page.await_count, 2)
@@ -428,13 +435,13 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         back = CallbackStub("library:filters:back", MessageStub())
 
         with patch.object(
-            library_handlers,
+            library_listing_handlers,
             "open_library_page",
             AsyncMock(),
         ) as open_page:
-            await library_handlers.open_library_filter_group(category, state)
+            await library_listing_handlers.open_library_filter_group(category, state)
             self.assertEqual(state.data["library_filter_group"], "category")
-            await library_handlers.open_library_filter_group(back, state)
+            await library_listing_handlers.open_library_filter_group(back, state)
 
         self.assertIsNone(state.data["library_filter_group"])
         self.assertEqual(open_page.await_count, 2)
@@ -445,11 +452,11 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
         state = StateStub({"library_sort": "rating"})
 
         with patch.object(
-            library_handlers,
+            library_listing_handlers,
             "open_library_page",
             AsyncMock(),
         ) as open_page:
-            await library_handlers.change_library_sort(callback, state)
+            await library_listing_handlers.change_library_sort(callback, state)
 
         self.assertEqual(state.data["library_sort"], "rating")
         open_page.assert_awaited_once_with(callback, state, 0)
@@ -460,17 +467,17 @@ class LibraryHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "update_user_library_filter",
                 AsyncMock(),
             ) as update_filter,
             patch.object(
-                library_handlers,
+                library_listing_handlers,
                 "open_library_page",
                 AsyncMock(),
             ) as open_page,
         ):
-            await library_handlers.change_library_filter(callback, state)
+            await library_listing_handlers.change_library_filter(callback, state)
 
         update_filter.assert_awaited_once_with(123, "all")
         self.assertEqual(state.data["library_sort"], "recent")

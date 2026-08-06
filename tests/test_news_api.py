@@ -11,8 +11,8 @@ from src.news_api import (
     NewsApiRateLimitError,
     NewsApiUnavailableError,
     _MetaDescriptionParser,
-    _PublicResolver,
     _parse_article,
+    _PublicResolver,
     fetch_news,
 )
 
@@ -185,9 +185,7 @@ class NewsApiSsrfTests(unittest.IsolatedAsyncioTestCase):
     async def test_resolver_returns_only_checked_public_address(self) -> None:
         loop = MagicMock()
         loop.getaddrinfo = AsyncMock(
-            return_value=[
-                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-            ]
+            return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
         )
 
         with patch.object(news_api.asyncio, "get_running_loop", return_value=loop):
@@ -226,7 +224,9 @@ class NewsApiSsrfTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(news_api.aiohttp, "ClientSession", return_value=session),
             patch.object(news_api.aiohttp, "TCPConnector") as connector,
-            patch.object(news_api, "get_http_session", new=AsyncMock()) as shared_session,
+            patch.object(
+                news_api, "get_http_session", new=AsyncMock()
+            ) as shared_session,
         ):
             self.assertIsNone(await news_api.fetch_news_image("https://example.com/a"))
             self.assertIsNone(
@@ -234,9 +234,7 @@ class NewsApiSsrfTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(connector.call_count, 2)
-        self.assertIsInstance(
-            connector.call_args.kwargs["resolver"], _PublicResolver
-        )
+        self.assertIsInstance(connector.call_args.kwargs["resolver"], _PublicResolver)
         shared_session.assert_not_awaited()
 
 

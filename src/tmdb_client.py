@@ -13,8 +13,8 @@ from config.config import (
     TMDB_RATE_LIMIT_COOLDOWN_SECONDS,
     validate_tmdb_url,
 )
-from src.tmdb_limiter import get_tmdb_request_limiter
 from src.observability import record_api_error
+from src.tmdb_limiter import get_tmdb_request_limiter
 from src.tmdb_models import (
     TmdbAuthenticationError,
     TmdbError,

@@ -17,8 +17,8 @@ import aiohttp
 from config.config import NEWS_ALLOWED_DOMAINS, NEWS_API_RETRIES, THENEWSAPI_KEY
 from src.http_client import get_http_session
 from src.news_models import NewsArticle, NewsFetchResult, NewsImage
-from src.observability import record_api_error
 from src.news_provider import BeforeNewsRequest
+from src.observability import record_api_error
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -177,7 +177,12 @@ async def fetch_news_image(url: str) -> NewsImage | None:
                     if response.status != 200:
                         return None
                     return await _read_image_response(response)
-            except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
+            except (
+                asyncio.TimeoutError,
+                TimeoutError,
+                aiohttp.ClientError,
+                ValueError,
+            ):
                 return None
     return None
 
@@ -207,7 +212,12 @@ async def fetch_article_description(url: str) -> str | None:
                     if "text/html" not in content_type:
                         return None
                     return await _read_meta_description(response)
-            except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
+            except (
+                asyncio.TimeoutError,
+                TimeoutError,
+                aiohttp.ClientError,
+                ValueError,
+            ):
                 return None
     return None
 

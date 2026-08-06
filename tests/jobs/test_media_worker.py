@@ -4,17 +4,15 @@ from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
-from src.jobs.media_worker import (
-    LockLostError,
-    RedisJobLock,
-    _news_result_text,
-    _notify_admins_about_news_failure,
-    _send_admin_job_result,
-    _short_traceback,
-    daily_news_targets,
-    next_scheduled_run,
+from src.jobs.media_worker_jobs import (
+    news_result_text,
+    notify_admins_about_news_failure,
+    send_admin_job_result,
+    short_traceback,
 )
+from src.jobs.media_worker_schedule import daily_news_targets, next_scheduled_run
 from src.jobs.news_broadcast import NewsBroadcastStats
+from src.jobs.worker_lock import LockLostError, RedisJobLock
 
 
 class MediaWorkerScheduleTests(unittest.TestCase):
@@ -69,9 +67,9 @@ class MediaWorkerScheduleTests(unittest.TestCase):
         self.assertLess(targets[-1], datetime(2026, 7, 30, 23, tzinfo=self.timezone))
 
     def test_admin_news_result_explains_empty_and_successful_runs(self) -> None:
-        self.assertIn("не найдена", _news_result_text(NewsBroadcastStats()))
+        self.assertIn("не найдена", news_result_text(NewsBroadcastStats()))
         self.assertEqual(
-            _news_result_text(
+            news_result_text(
                 NewsBroadcastStats(
                     selected=3,
                     sent=2,
@@ -87,8 +85,8 @@ class MediaWorkerAdminResultTests(unittest.IsolatedAsyncioTestCase):
     async def test_sends_job_result_only_for_valid_admin_id(self) -> None:
         bot = AsyncMock()
 
-        await _send_admin_job_result(bot, 123, "Готово")
-        await _send_admin_job_result(bot, "123", "Не отправлять")
+        await send_admin_job_result(bot, 123, "Готово")
+        await send_admin_job_result(bot, "123", "Не отправлять")
 
         bot.send_message.assert_awaited_once_with(123, "Готово")
 
@@ -97,12 +95,12 @@ class MediaWorkerAdminResultTests(unittest.IsolatedAsyncioTestCase):
         try:
             raise ValueError("secret details")
         except ValueError as exception:
-            traceback_text = _short_traceback(exception)
+            traceback_text = short_traceback(exception)
             with patch(
-                "src.jobs.media_worker.ADMIN_USER_IDS",
+                "src.jobs.media_worker_jobs.ADMIN_USER_IDS",
                 frozenset({42, 7}),
             ):
-                await _notify_admins_about_news_failure(bot, exception)
+                await notify_admins_about_news_failure(bot, exception)
 
         self.assertIn("Traceback", traceback_text)
         self.assertIn("ValueError", traceback_text)
@@ -126,7 +124,7 @@ class RedisJobLockTests(unittest.IsolatedAsyncioTestCase):
         redis.set.return_value = True
         redis.eval.return_value = 0
 
-        with patch("src.jobs.media_worker.asyncio.sleep", new_callable=AsyncMock):
+        with patch("src.jobs.worker_lock.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaisesRegex(LockLostError, "ownership was lost"):
                 async with RedisJobLock(redis, "test-lock", 30):
                     await yield_to_event_loop(0)
@@ -137,7 +135,7 @@ class RedisJobLockTests(unittest.IsolatedAsyncioTestCase):
         redis.set.return_value = True
         redis.eval.side_effect = ConnectionError("Redis is unavailable")
 
-        with patch("src.jobs.media_worker.asyncio.sleep", new_callable=AsyncMock):
+        with patch("src.jobs.worker_lock.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaisesRegex(LockLostError, "Failed to renew"):
                 async with RedisJobLock(redis, "test-lock", 30):
                     await yield_to_event_loop(0)
