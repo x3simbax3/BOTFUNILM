@@ -62,6 +62,7 @@ from src.jobs.media_refresh import (
 from src.jobs.news_broadcast import NewsBroadcastStats, send_news_broadcast
 from src.jobs.series_notifications import send_release_notifications
 from src.logging_config import configure_logging, safe_exception_info
+from src.observability import ObservabilityServer
 from src.news_api import (
     NewsApiAuthenticationError,
     NewsApiError,
@@ -877,7 +878,16 @@ async def async_main(arguments: list[str] | None = None) -> None:
 def main() -> None:
     configure_logging(debug=DEBUG)
     os.umask(0o077)
-    asyncio.run(async_main())
+
+    async def run() -> None:
+        observability = ObservabilityServer("media-worker")
+        await observability.start()
+        try:
+            await async_main()
+        finally:
+            await observability.close()
+
+    asyncio.run(run())
 
 
 if __name__ == "__main__":

@@ -119,6 +119,28 @@ make stop
 3. После миграций `bot` запускает `python -m src.bot`, а worker —
    `python -m src.jobs.media_worker`.
 
+## Наблюдаемость
+
+У `bot` и `media-worker` есть healthcheck: он проверяет работающий процесс,
+SQLite и Redis. Docker-логи каждого постоянно работающего сервиса ограничены
+тремя файлами по 10 МБ.
+
+Для метрик и алертов запустите дополнительный профиль:
+
+```bash
+docker compose --profile monitoring up --detach
+```
+
+Prometheus доступен только с хоста по `http://127.0.0.1:9090`, Alertmanager —
+по `http://127.0.0.1:9093`. Метрики содержат доступность SQLite и Redis,
+размер SQLite, длину очереди задач, возраст heartbeat worker и ошибки TMDB/
+TheNewsAPI. Правила алертов находятся в `monitoring/alerts.yml`.
+
+По умолчанию Alertmanager сохраняет активные алерты, но не отправляет их во
+внешний канал. Перед production-настройкой замените receiver `discard` в
+`monitoring/alertmanager.yml` на утверждённый webhook, email или другой
+канал уведомлений.
+
 SQLite-база находится в именованном volume `bot_data`, поэтому
 пересборка образа, перезапуск и обычный `docker compose down` их не удаляют.
 Не добавляйте `--volumes` к команде остановки, если не хотите безвозвратно

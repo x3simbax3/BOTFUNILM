@@ -15,6 +15,7 @@ import aiohttp
 from config.config import NEWS_ALLOWED_DOMAINS, NEWS_API_RETRIES, THENEWSAPI_KEY
 from src.http_client import get_http_session
 from src.news_models import NewsArticle, NewsFetchResult, NewsImage
+from src.observability import record_api_error
 from src.news_provider import BeforeNewsRequest
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
@@ -76,16 +77,20 @@ async def fetch_news(
             ) as response:
                 return await _parse_news_response(response)
         except NewsApiRateLimitError as exc:
+            record_api_error("thenewsapi", exc)
             if exc.retry_after is None or attempt + 1 == NEWS_API_RETRIES:
                 raise
             await asyncio.sleep(min(exc.retry_after, 30))
-        except NewsApiUnavailableError:
+        except NewsApiUnavailableError as exc:
+            record_api_error("thenewsapi", exc)
             if attempt + 1 == NEWS_API_RETRIES:
                 raise
             await asyncio.sleep(2**attempt)
         except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError) as exc:
             if attempt + 1 == NEWS_API_RETRIES:
-                raise NewsApiUnavailableError("TheNewsAPI request failed") from exc
+                error = NewsApiUnavailableError("TheNewsAPI request failed")
+                record_api_error("thenewsapi", error)
+                raise error from exc
             await asyncio.sleep(2**attempt)
     raise AssertionError("unreachable")
 

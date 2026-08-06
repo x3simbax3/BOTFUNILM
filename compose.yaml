@@ -22,6 +22,17 @@ services:
         condition: service_healthy
     volumes:
       - bot_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
 
   media-worker:
     build:
@@ -49,6 +60,17 @@ services:
     volumes:
       - bot_data:/data
     command: ["python", "-m", "src.jobs.media_worker"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "src.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
 
   backup:
     build:
@@ -71,6 +93,11 @@ services:
       - ./backups:/backups
     user: "0:0"
     command: ["python", "-m", "src.jobs.database_backup"]
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
 
   redis:
     image: redis:7.4.10-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
@@ -98,6 +125,62 @@ services:
       start_period: 5s
     volumes:
       - redis_data:/data
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  prometheus:
+    profiles:
+      - monitoring
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 128m
+    pids_limit: 64
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      bot:
+        condition: service_healthy
+      media-worker:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
+    ports:
+      - "127.0.0.1:9090:9090"
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  alertmanager:
+    profiles:
+      - monitoring
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    cpus: "0.10"
+    mem_limit: 64m
+    pids_limit: 64
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
 
   test:
     profiles:
@@ -117,3 +200,4 @@ services:
 volumes:
   bot_data:
   redis_data:
+  prometheus_data:
