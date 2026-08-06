@@ -9,7 +9,7 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify news-broadcast media-worker-logs commit
+.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset db-backup media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify news-broadcast media-worker-logs commit
 .NOTPARALLEL: check
 
 help:
@@ -41,6 +41,7 @@ help:
 	@echo "  make db-check       Validate migration files and schema"
 	@echo "  make migration name='...'  Generate a migration"
 	@echo "  make db-status      Show local database migration status"
+	@echo "  make db-backup      Create and verify a production backup now"
 
 check: compose-check db-check test-image
 	$(COMPOSE) --profile test run --rm test ruff format --check $(QUALITY_PATHS)
@@ -123,6 +124,7 @@ ps:
 
 secure-files:
 	chmod 600 config/.env
+	install -d -m 700 backups
 	@if [ -e bot.db ]; then chmod 600 bot.db; fi
 
 migrate: secure-files
@@ -145,6 +147,9 @@ db-check:
 
 db-status:
 	$(ATLAS) migrate status --env local
+
+db-backup:
+	$(COMPOSE) run --rm backup python -m src.jobs.database_backup backup
 
 db-downgrade:
 	$(ATLAS) migrate down 1 --env local
