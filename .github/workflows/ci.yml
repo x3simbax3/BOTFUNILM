@@ -2,11 +2,6 @@
 
   on:
     push:
-      branches:
-        - master
-    pull_request:
-      branches:
-        - master
     workflow_dispatch:
 
   permissions:
@@ -18,7 +13,7 @@
 
   jobs:
     check:
-      name: check
+      name: Fast checks
       runs-on: ubuntu-latest
       timeout-minutes: 20
 
@@ -33,4 +28,84 @@
           uses: ariga/setup-atlas@v0
 
         - name: Run project checks
-          run: make check TEST_PROCESSES=1
+          run: make ci-check TEST_PROCESSES=2
+
+    integration:
+      name: Integration and load tests
+      runs-on: ubuntu-latest
+      timeout-minutes: 20
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Prepare safe configuration
+          run: cp .env.example config/.env
+        - name: Run integration tests
+          run: make test-integration
+        - name: Run SQLite load test
+          run: make test-load
+
+    dependency-scan:
+      name: Dependency scan
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Install uv
+          uses: astral-sh/setup-uv@v7
+        - name: Export locked dependencies
+          run: uv export --locked --all-groups --no-emit-project --no-hashes --format requirements-txt --output-file /tmp/requirements.txt
+        - name: Audit locked dependencies
+          run: uvx pip-audit --no-deps --disable-pip --requirement /tmp/requirements.txt
+
+    sast:
+      name: SAST
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        security-events: write
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Initialize CodeQL
+          uses: github/codeql-action/init@v4
+          with:
+            languages: python
+        - name: Analyze
+          uses: github/codeql-action/analyze@v4
+
+    container-scan:
+      name: Container image scan
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        security-events: write
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Build runtime image
+          run: docker build --target runtime --tag botfunilm:ci .
+        - name: Generate image scan report
+          uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+          with:
+            image-ref: botfunilm:ci
+            format: sarif
+            output: trivy-results.sarif
+            severity: HIGH,CRITICAL
+            ignore-unfixed: true
+            trivyignores: .trivyignore
+            exit-code: "0"
+        - name: Upload scan results
+          uses: github/codeql-action/upload-sarif@v4
+          with:
+            sarif_file: trivy-results.sarif
+        - name: Enforce image vulnerability gate
+          uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+          with:
+            image-ref: botfunilm:ci
+            format: table
+            severity: HIGH,CRITICAL
+            ignore-unfixed: true
+            trivyignores: .trivyignore
+            exit-code: "1"

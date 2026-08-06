@@ -23,6 +23,7 @@ from src.database.media_search import backfill_media_search_index
 from src.file_security import verify_private_files
 from src.http_client import close_http_session
 from src.logging_config import configure_logging
+from src.observability import ObservabilityServer
 from src.routers import router
 from src.tmdb_limiter import close_tmdb_request_limiter
 from src.update_throttling import UserThrottleMiddleware
@@ -71,46 +72,50 @@ async def main() -> None:
     configure_logging(debug=DEBUG)
     logger = logging.getLogger(__name__)
     logger.info("Bot startup initiated")
-
-    os.umask(0o077)
-    verify_private_files(
-        (
-            PROJECT_ROOT / "config" / ".env",
-            Path(database_path(DATABASE_URL)),
-        )
-    )
-
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN is not set in config/.env")
-    if UPDATE_TASKS_CONCURRENCY_LIMIT <= 0:
-        raise ValueError("UPDATE_TASKS_CONCURRENCY_LIMIT must be positive")
-
-    indexed_rows = await backfill_media_search_index()
-    if indexed_rows:
-        logging.getLogger(__name__).info(
-            "Indexed normalized titles for %s existing media rows",
-            indexed_rows,
-        )
-
-    bot = Bot(token=BOT_TOKEN)
+    observability = ObservabilityServer("bot")
+    await observability.start()
     try:
-        await bot.me()
-        logger.info("Telegram connection verified; polling starting")
-        dp = create_dispatcher()
-        dp.include_router(router)
-        await dp.start_polling(
-            bot,
-            tasks_concurrency_limit=UPDATE_TASKS_CONCURRENCY_LIMIT,
+        os.umask(0o077)
+        verify_private_files(
+            (
+                PROJECT_ROOT / "config" / ".env",
+                Path(database_path(DATABASE_URL)),
+            )
         )
-    finally:
-        logger.info("Bot shutdown initiated")
+
+        if not BOT_TOKEN:
+            raise RuntimeError("BOT_TOKEN is not set in config/.env")
+        if UPDATE_TASKS_CONCURRENCY_LIMIT <= 0:
+            raise ValueError("UPDATE_TASKS_CONCURRENCY_LIMIT must be positive")
+
+        indexed_rows = await backfill_media_search_index()
+        if indexed_rows:
+            logging.getLogger(__name__).info(
+                "Indexed normalized titles for %s existing media rows",
+                indexed_rows,
+            )
+
+        bot = Bot(token=BOT_TOKEN)
         try:
-            await close_http_session()
+            await bot.me()
+            logger.info("Telegram connection verified; polling starting")
+            dp = create_dispatcher()
+            dp.include_router(router)
+            await dp.start_polling(
+                bot,
+                tasks_concurrency_limit=UPDATE_TASKS_CONCURRENCY_LIMIT,
+            )
         finally:
+            logger.info("Bot shutdown initiated")
             try:
-                await close_tmdb_request_limiter()
+                await close_http_session()
             finally:
-                await bot.session.close()
+                try:
+                    await close_tmdb_request_limiter()
+                finally:
+                    await bot.session.close()
+    finally:
+        await observability.close()
 
 
 if __name__ == "__main__":

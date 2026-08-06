@@ -1,15 +1,11 @@
 from src.database.admin import (
+    get_admin_export_users,
     get_admin_libraries,
     get_admin_overview,
-    get_admin_system,
-    get_admin_user,
-    get_admin_users,
-    toggle_feature,
 )
 from src.database.bot_users import (
     mark_bot_user_inactive,
     register_bot_user,
-    touch_bot_user,
 )
 from src.database.connection import connection_scope
 from tests.support.database import DatabaseTestCase
@@ -75,53 +71,18 @@ class AdminOverviewDatabaseTests(DatabaseTestCase):
         self.assertEqual(overview.tracked_series, 1)
         self.assertEqual(overview.news_users, 2)
 
-        await touch_bot_user(
-            1,
-            username="viewer",
-            display_name="Test Viewer",
-            database_url=self.database_url,
-        )
-        first_page = await get_admin_users(
-            1,
-            page_size=2,
-            database_url=self.database_url,
-        )
-        second_page = await get_admin_users(
-            2,
-            page_size=2,
+    async def test_export_limits_number_of_loaded_users(self) -> None:
+        for user_id in (1, 2):
+            await register_bot_user(user_id, database_url=self.database_url)
+
+        users = await get_admin_export_users(
+            limit=1,
             database_url=self.database_url,
         )
 
-        self.assertEqual(first_page.total_users, 3)
-        self.assertEqual(first_page.total_pages, 2)
-        self.assertEqual([user.user_id for user in first_page.users], [1, 2])
-        self.assertEqual(first_page.users[0].username, "viewer")
-        self.assertEqual(first_page.users[0].display_name, "Test Viewer")
-        self.assertEqual(first_page.users[0].library_items, 2)
-        self.assertEqual([user.user_id for user in second_page.users], [3])
-
-        user = await get_admin_user(1, database_url=self.database_url)
-
-        self.assertIsNotNone(user)
-        self.assertEqual(user.library_items, 2)
-        self.assertEqual(user.planned_items, 1)
-        self.assertEqual(user.watching_items, 1)
-        self.assertEqual(user.rated_items, 1)
-        self.assertEqual(user.average_rating, 8)
-        self.assertEqual(user.tracked_series, 1)
-
-    async def test_missing_user_returns_none(self) -> None:
-        self.assertIsNone(await get_admin_user(999, database_url=self.database_url))
-
-    async def test_user_page_rejects_invalid_values(self) -> None:
-        with self.assertRaisesRegex(ValueError, "page must be positive"):
-            await get_admin_users(0, database_url=self.database_url)
-        with self.assertRaisesRegex(ValueError, "page_size must be positive"):
-            await get_admin_users(
-                1,
-                page_size=0,
-                database_url=self.database_url,
-            )
+        self.assertEqual([user.user_id for user in users], [1])
+        with self.assertRaisesRegex(ValueError, "limit must be positive"):
+            await get_admin_export_users(limit=0, database_url=self.database_url)
 
     async def test_empty_database_returns_zeroes(self) -> None:
         overview = await get_admin_overview(database_url=self.database_url)
@@ -198,30 +159,3 @@ class AdminLibrariesDatabaseTests(DatabaseTestCase):
         self.assertIsNone(libraries.average_rating)
         self.assertEqual(libraries.popular_movies, ())
         self.assertEqual(libraries.popular_series, ())
-
-
-class AdminSystemDatabaseTests(DatabaseTestCase):
-    async def test_returns_catalog_queues_database_and_features(self) -> None:
-        await self.create_series(title="Due series")
-        await self.create_media(title="Movie")
-
-        system = await get_admin_system(database_url=self.database_url)
-
-        self.assertEqual(system.catalog_items, 2)
-        self.assertEqual(system.weekly_overdue, 1)
-        self.assertEqual(system.daily_overdue, 0)
-        self.assertGreater(system.database_size_bytes, 0)
-        self.assertEqual(system.database_journal_mode, "wal")
-        self.assertEqual(system.media_refresh_enabled, 1)
-        self.assertEqual(system.notifications_enabled, 1)
-        self.assertEqual(system.news_enabled, 1)
-
-    async def test_toggles_only_known_feature(self) -> None:
-        enabled = await toggle_feature("news", 123, database_url=self.database_url)
-        self.assertFalse(enabled)
-
-        system = await get_admin_system(database_url=self.database_url)
-        self.assertEqual(system.news_enabled, 0)
-
-        with self.assertRaisesRegex(ValueError, "Unknown feature"):
-            await toggle_feature("unknown", 123, database_url=self.database_url)

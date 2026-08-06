@@ -13,6 +13,7 @@ from config.config import (
     TMDB_RATE_LIMIT_COOLDOWN_SECONDS,
     validate_tmdb_url,
 )
+from src.observability import record_api_error
 from src.tmdb_limiter import get_tmdb_request_limiter
 from src.tmdb_models import (
     TmdbAuthenticationError,
@@ -71,6 +72,7 @@ async def fetch_json(
                         raise TmdbError("TMDB вернул некорректный ответ") from exc
         raise TmdbRateLimitError
     except TmdbError as exc:
+        record_api_error("tmdb", exc)
         logger.warning(
             "TMDB request failed host=%s error=%s",
             _request_host(url),
@@ -78,9 +80,11 @@ async def fetch_json(
         )
         raise
     except asyncio.TimeoutError:
+        record_api_error("tmdb", TmdbUnavailableError())
         logger.warning("TMDB request timed out host=%s", _request_host(url))
         raise TmdbUnavailableError from None
     except aiohttp.ClientError as exc:
+        record_api_error("tmdb", exc)
         logger.warning(
             "TMDB network failure host=%s error=%s",
             _request_host(url),

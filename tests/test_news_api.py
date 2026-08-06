@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from src.news_api import (
     NewsApiUnavailableError,
     _MetaDescriptionParser,
     _parse_article,
+    _PublicResolver,
     fetch_news,
 )
 
@@ -178,6 +180,65 @@ class NewsApiRequestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.get.call_count, 2)
         self.assertEqual(before_request.await_count, 2)
 
+
+class NewsApiSsrfTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resolver_returns_only_checked_public_address(self) -> None:
+        loop = MagicMock()
+        loop.getaddrinfo = AsyncMock(
+            return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
+        )
+
+        with patch.object(news_api.asyncio, "get_running_loop", return_value=loop):
+            addresses = await _PublicResolver().resolve("example.com", 443)
+
+        self.assertEqual(addresses[0]["host"], "8.8.8.8")
+        loop.getaddrinfo.assert_awaited_once_with(
+            "example.com",
+            443,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+        )
+
+    async def test_resolver_rejects_private_address(self) -> None:
+        loop = MagicMock()
+        loop.getaddrinfo = AsyncMock(
+            return_value=[
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))
+            ]
+        )
+
+        with patch.object(news_api.asyncio, "get_running_loop", return_value=loop):
+            with self.assertRaisesRegex(ValueError, "non-public"):
+                await _PublicResolver().resolve("example.com", 80)
+
+    async def test_source_downloads_use_public_resolver_session(self) -> None:
+        response = SimpleNamespace(status=404, headers={})
+        request_context = MagicMock()
+        request_context.__aenter__ = AsyncMock(return_value=response)
+        request_context.__aexit__ = AsyncMock(return_value=None)
+        session = MagicMock()
+        session.__aenter__ = AsyncMock(return_value=session)
+        session.__aexit__ = AsyncMock(return_value=None)
+        session.get.return_value = request_context
+
+        with (
+            patch.object(news_api.aiohttp, "ClientSession", return_value=session),
+            patch.object(news_api.aiohttp, "TCPConnector") as connector,
+            patch.object(
+                news_api, "get_http_session", new=AsyncMock()
+            ) as shared_session,
+        ):
+            self.assertIsNone(await news_api.fetch_news_image("https://example.com/a"))
+            self.assertIsNone(
+                await news_api.fetch_article_description("https://example.com/a")
+            )
+
+        self.assertEqual(connector.call_count, 2)
+        self.assertIsInstance(connector.call_args.kwargs["resolver"], _PublicResolver)
+        shared_session.assert_not_awaited()
+
+
+class NewsApiAdditionalRequestTests(unittest.IsolatedAsyncioTestCase):
     async def test_retries_non_json_server_error(self) -> None:
         response = SimpleNamespace(status=502, headers={})
         request_context = MagicMock()

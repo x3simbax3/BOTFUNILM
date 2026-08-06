@@ -1,0 +1,50 @@
+groups:
+  - name: botfunilm
+    rules:
+      - alert: BotFunilmProcessUnavailable
+        expr: up{job="botfunilm"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BotFunilm process is unavailable"
+
+      - alert: BotFunilmDependencyUnavailable
+        expr: botfunilm_database_up{service="bot"} == 0 or botfunilm_redis_up{service="bot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BotFunilm dependency is unavailable"
+
+      - alert: MediaWorkerHeartbeatStale
+        expr: botfunilm_media_worker_heartbeat_age_seconds{service="media-worker"} > 45
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Media worker heartbeat is stale"
+
+      - alert: AdminJobQueueBacklog
+        expr: botfunilm_admin_job_queue_length{service="media-worker"} > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Admin job queue has more than 100 pending jobs"
+
+      - alert: SQLiteDatabaseLarge
+        expr: botfunilm_sqlite_database_size_bytes{service="bot"} > 4294967296
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SQLite database is larger than 4 GiB"
+
+      - alert: ExternalApiErrors
+        expr: increase(botfunilm_api_errors_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "External API errors exceed 10 in 10 minutes"

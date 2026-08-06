@@ -1,6 +1,6 @@
-FROM arigaio/atlas@sha256:ff5291f4995d545479a8301aa364eb256d9f94747d82ae9d6d691ba877fbe8d3 AS atlas
+FROM arigaio/atlas@sha256:1e9e0fb15d8ee6393ebf874aeefd8ffd784718957f832670081eaa3965f4628e AS atlas
 
-FROM python:3.10-slim-trixie@sha256:c1e4e6c01eb489c422288b2de34b0761ca316f7a2d98e2c33f47659a73ed108a AS base
+FROM python:3.10-slim-trixie@sha256:34a2c9467a0231d8c29a5ecadc219733a9393b026882b44d91616b9dae6088b6 AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 COPY --from=atlas /atlas /usr/local/bin/atlas
@@ -38,6 +38,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable \
+    && /usr/local/bin/python -m pip uninstall --yes setuptools wheel \
     && useradd --system --uid 10001 --create-home botfunilm \
     && mkdir -p /data/media/posters \
     && chown -R botfunilm:botfunilm /data \

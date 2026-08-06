@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from src.database.admin import (
+    ADMIN_EXPORT_USERS_LIMIT,
     AdminActivity,
     AdminLibraries,
     AdminNotifications,
@@ -181,6 +182,20 @@ class AdminHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         enqueue.assert_not_awaited()
         self.assertEqual(callback.answers[0]["show_alert"], True)
+
+    async def test_export_refuses_unsafe_number_of_users(self) -> None:
+        message = MessageStub()
+        callback = CallbackStub("admin:export:users", message)
+
+        with patch.object(
+            admin_handlers,
+            "get_admin_export_users",
+            AsyncMock(return_value=(object(),) * (ADMIN_EXPORT_USERS_LIMIT + 1)),
+        ) as get_users:
+            await admin_handlers.export_admin_users(callback)
+
+        get_users.assert_awaited_once_with(limit=ADMIN_EXPORT_USERS_LIMIT + 1)
+        self.assertIn("10 000", message.answers[0]["text"])
 
     async def test_denies_unconfigured_user_command(self) -> None:
         message = MessageStub("/admin")

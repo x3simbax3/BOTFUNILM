@@ -6,6 +6,8 @@ import asyncio
 import ipaddress
 import json
 import socket
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from html.parser import HTMLParser
 from urllib.parse import unquote, urljoin, urlsplit
@@ -16,6 +18,7 @@ from config.config import NEWS_ALLOWED_DOMAINS, NEWS_API_RETRIES, THENEWSAPI_KEY
 from src.http_client import get_http_session
 from src.news_models import NewsArticle, NewsFetchResult, NewsImage
 from src.news_provider import BeforeNewsRequest
+from src.observability import record_api_error
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -76,16 +79,20 @@ async def fetch_news(
             ) as response:
                 return await _parse_news_response(response)
         except NewsApiRateLimitError as exc:
+            record_api_error("thenewsapi", exc)
             if exc.retry_after is None or attempt + 1 == NEWS_API_RETRIES:
                 raise
             await asyncio.sleep(min(exc.retry_after, 30))
-        except NewsApiUnavailableError:
+        except NewsApiUnavailableError as exc:
+            record_api_error("thenewsapi", exc)
             if attempt + 1 == NEWS_API_RETRIES:
                 raise
             await asyncio.sleep(2**attempt)
         except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError) as exc:
             if attempt + 1 == NEWS_API_RETRIES:
-                raise NewsApiUnavailableError("TheNewsAPI request failed") from exc
+                error = NewsApiUnavailableError("TheNewsAPI request failed")
+                record_api_error("thenewsapi", error)
+                raise error from exc
             await asyncio.sleep(2**attempt)
     raise AssertionError("unreachable")
 
@@ -150,62 +157,73 @@ class TheNewsApiProvider:
 
 async def fetch_news_image(url: str) -> NewsImage | None:
     """Download and validate an article image before broadcasting it."""
-    session = await get_http_session()
     current_url = url
-    for _ in range(3):
-        try:
-            await _validate_public_url(current_url)
-            async with session.get(
-                current_url,
-                timeout=aiohttp.ClientTimeout(total=15),
-                allow_redirects=False,
-                headers={"User-Agent": "BotFunilm/1.0"},
-            ) as response:
-                if response.status in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("Location")
-                    if not location:
+    async with _public_http_session() as session:
+        for _ in range(3):
+            try:
+                _validate_public_url(current_url)
+                async with session.get(
+                    current_url,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                    allow_redirects=False,
+                    headers={"User-Agent": "BotFunilm/1.0"},
+                ) as response:
+                    if response.status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location")
+                        if not location:
+                            return None
+                        current_url = urljoin(current_url, location)
+                        continue
+                    if response.status != 200:
                         return None
-                    current_url = urljoin(current_url, location)
-                    continue
-                if response.status != 200:
-                    return None
-                return await _read_image_response(response)
-        except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
-            return None
+                    return await _read_image_response(response)
+            except (
+                asyncio.TimeoutError,
+                TimeoutError,
+                aiohttp.ClientError,
+                ValueError,
+            ):
+                return None
     return None
 
 
 async def fetch_article_description(url: str) -> str | None:
     """Read a source page's complete meta description without scraping its body."""
-    session = await get_http_session()
     current_url = url
-    for _ in range(3):
-        try:
-            await _validate_public_url(current_url)
-            async with session.get(
-                current_url,
-                timeout=aiohttp.ClientTimeout(total=15),
-                allow_redirects=False,
-                headers={"User-Agent": "BotFunilm/1.0"},
-            ) as response:
-                if response.status in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("Location")
-                    if not location:
+    async with _public_http_session() as session:
+        for _ in range(3):
+            try:
+                _validate_public_url(current_url)
+                async with session.get(
+                    current_url,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                    allow_redirects=False,
+                    headers={"User-Agent": "BotFunilm/1.0"},
+                ) as response:
+                    if response.status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location")
+                        if not location:
+                            return None
+                        current_url = urljoin(current_url, location)
+                        continue
+                    if response.status != 200:
                         return None
-                    current_url = urljoin(current_url, location)
-                    continue
-                if response.status != 200:
-                    return None
-                content_type = response.headers.get("Content-Type", "").lower()
-                if "text/html" not in content_type:
-                    return None
-                return await _read_meta_description(response)
-        except (asyncio.TimeoutError, TimeoutError, aiohttp.ClientError, ValueError):
-            return None
+                    content_type = response.headers.get("Content-Type", "").lower()
+                    if "text/html" not in content_type:
+                        return None
+                    return await _read_meta_description(response)
+            except (
+                asyncio.TimeoutError,
+                TimeoutError,
+                aiohttp.ClientError,
+                ValueError,
+            ):
+                return None
     return None
 
 
-async def _validate_public_url(url: str) -> None:
+def _validate_public_url(url: str) -> None:
+    """Validate URL syntax; destination addresses are checked by _PublicResolver."""
     parsed = urlsplit(url)
     if (
         parsed.scheme.lower() not in {"http", "https"}
@@ -214,16 +232,52 @@ async def _validate_public_url(url: str) -> None:
         or parsed.password is not None
     ):
         raise ValueError("invalid article URL")
-    port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
-    addresses = await asyncio.get_running_loop().getaddrinfo(
-        parsed.hostname,
-        port,
-        type=socket.SOCK_STREAM,
+    _ = parsed.port
+
+
+class _PublicResolver(aiohttp.abc.AbstractResolver):
+    """Resolve article hosts once and allow only globally routable addresses."""
+
+    async def resolve(
+        self,
+        host: str,
+        port: int = 0,
+        family: socket.AddressFamily = socket.AF_UNSPEC,
+    ) -> list[aiohttp.abc.ResolveResult]:
+        addresses = await asyncio.get_running_loop().getaddrinfo(
+            host,
+            port,
+            family=family,
+            type=socket.SOCK_STREAM,
+        )
+        if not addresses or any(
+            not ipaddress.ip_address(address[4][0]).is_global for address in addresses
+        ):
+            raise ValueError("article URL resolves to a non-public address")
+        return [
+            {
+                "hostname": host,
+                "host": address[4][0],
+                "port": port,
+                "family": address[0],
+                "proto": address[2],
+                "flags": address[3],
+            }
+            for address in addresses
+        ]
+
+    async def close(self) -> None:
+        pass
+
+
+@asynccontextmanager
+async def _public_http_session() -> AsyncIterator[aiohttp.ClientSession]:
+    connector = aiohttp.TCPConnector(
+        resolver=_PublicResolver(),
+        use_dns_cache=False,
     )
-    if not addresses or any(
-        not ipaddress.ip_address(address[4][0]).is_global for address in addresses
-    ):
-        raise ValueError("article URL resolves to a non-public address")
+    async with aiohttp.ClientSession(connector=connector) as session:
+        yield session
 
 
 async def _read_image_response(response: aiohttp.ClientResponse) -> NewsImage | None:

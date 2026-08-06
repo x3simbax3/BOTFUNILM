@@ -1,6 +1,6 @@
 import unittest
 
-from src.services.series import (
+from src.services.series_tracking import (
     SeriesProgressError,
     apply_episode_selection,
     validate_series_progress,

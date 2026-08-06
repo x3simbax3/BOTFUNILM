@@ -35,3 +35,32 @@ class AdminExportTests(unittest.TestCase):
         self.assertEqual(sheet.cell(2, 5).value, "Нет")
         self.assertEqual(sheet.cell(2, 14).value, 2)
         self.assertEqual(sheet.cell(2, 15).value, 1)
+
+    def test_saves_formula_like_user_fields_as_text(self) -> None:
+        for value in ("=1+1", "+1+1", "-1+1", "@SUM(A1:A2)"):
+            for field, column in (("username", 2), ("display_name", 3)):
+                with self.subTest(value=value, field=field):
+                    fields = {"username": "viewer", "display_name": "Viewer"}
+                    fields[field] = value
+                    user = AdminExportUser(
+                        user_id=123,
+                        is_active=1,
+                        news_enabled=0,
+                        started_at="2026-08-01 10:00:00",
+                        last_started_at="2026-08-02 10:00:00",
+                        last_activity_at="2026-08-04 12:00:00",
+                        library_items=5,
+                        planned_items=1,
+                        watching_items=1,
+                        completed_items=2,
+                        on_hold_items=0,
+                        rated_items=2,
+                        tracked_series=1,
+                        **fields,
+                    )
+
+                    workbook = load_workbook(BytesIO(build_users_workbook((user,))))
+                    cell = workbook["Пользователи"].cell(2, column)
+
+                    self.assertEqual(cell.value, value)
+                    self.assertEqual(cell.data_type, "s")
