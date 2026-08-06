@@ -33,6 +33,39 @@ class DatabaseBackupTests(unittest.TestCase):
                 ).fetchall()
             self.assertEqual(values, [("first",), ("second",)])
 
+    def test_backup_restores_to_a_new_working_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_file = root / "source.db"
+            backup_file = root / "backup.db"
+            restored_file = root / "restored.db"
+            with sqlite3.connect(source_file) as source:
+                source.execute("PRAGMA foreign_keys = ON")
+                source.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
+                source.execute(
+                    "CREATE TABLE child (parent_id INTEGER REFERENCES parent(id))"
+                )
+                source.execute("INSERT INTO parent VALUES (1)")
+                source.execute("INSERT INTO child VALUES (1)")
+
+            create_backup(source_file, backup_file)
+            with (
+                sqlite3.connect(backup_file) as backup,
+                sqlite3.connect(restored_file) as restored,
+            ):
+                backup.backup(restored)
+
+            with sqlite3.connect(restored_file) as restored:
+                restored.execute("PRAGMA foreign_keys = ON")
+                self.assertEqual(
+                    restored.execute("PRAGMA integrity_check").fetchone(), ("ok",)
+                )
+                self.assertEqual(
+                    restored.execute("SELECT parent_id FROM child").fetchall(), [(1,)]
+                )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    restored.execute("INSERT INTO child VALUES (999)")
+
     def test_next_backup_run_moves_to_tomorrow_after_scheduled_time(self) -> None:
         timezone = ZoneInfo("Europe/Moscow")
         target = next_backup_run(

@@ -1,0 +1,5 @@
+# Atlas CLI latest image still embeds these fixed upstream Go dependencies.
+# Remove each exception as soon as arigaio/atlas publishes an updated binary.
+CVE-2026-56852
+GHSA-hrxh-6v49-42gf
+CVE-2026-39822
