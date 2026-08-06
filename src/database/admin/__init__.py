@@ -1,4 +1,4 @@
-"""Backward-compatible public API for admin database queries."""
+"""Public API for admin database queries."""
 
 from src.database.admin.activity import get_admin_activity
 from src.database.admin.libraries import get_admin_libraries
@@ -38,17 +38,17 @@ __all__ = (
     "AdminExportUser",
     "AdminLibraries",
     "AdminNotifications",
-    "AdminSystem",
     "AdminOverview",
     "AdminPopularTitle",
+    "AdminSystem",
     "AdminUserDetails",
     "AdminUserPage",
     "AdminUserSummary",
-    "get_admin_overview",
     "get_admin_activity",
     "get_admin_export_users",
     "get_admin_libraries",
     "get_admin_notifications",
+    "get_admin_overview",
     "get_admin_system",
     "get_admin_user",
     "get_admin_users",

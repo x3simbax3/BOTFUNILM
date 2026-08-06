@@ -14,9 +14,9 @@ from config.config import ADMIN_USER_IDS, MEDIA_REFRESH_LOCK_TTL_SECONDS
 from src.database.news_api_usage import NewsApiDailyBudgetError
 from src.jobs.media_refresh import RefreshMode
 from src.jobs.media_refresh_runner import run_refresh_job
+from src.jobs.media_worker_settings import worker_timezone
 from src.jobs.news_broadcast import NewsBroadcastStats, send_news_broadcast
 from src.jobs.series_notifications import send_release_notifications
-from src.jobs.media_worker_settings import worker_timezone
 from src.jobs.worker_lock import JobAlreadyRunningError, RedisJobLock
 from src.logging_config import safe_exception_info
 from src.news_api import (

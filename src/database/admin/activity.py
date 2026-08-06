@@ -65,5 +65,7 @@ async def get_admin_activity(
             """,
             (start_modifier,),
         ) as cursor:
-            daily = tuple(AdminActivityDay(**dict(row)) for row in await cursor.fetchall())
+            daily = tuple(
+                AdminActivityDay(**dict(row)) for row in await cursor.fetchall()
+            )
     return AdminActivity(days=days, daily=daily, **totals)

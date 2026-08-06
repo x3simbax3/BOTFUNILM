@@ -10,7 +10,7 @@ from redis.asyncio import Redis
 
 from src.database.bot_users import get_news_recipients
 from src.jobs.news_broadcast.delivery import deliver_news_article
-from src.jobs.news_broadcast.message import _article_text
+from src.jobs.news_broadcast.message import _article_text as _article_text
 from src.jobs.news_broadcast.models import (
     NEWS_FILTERS,
     USER_BATCH_SIZE,
@@ -74,6 +74,7 @@ __all__ = (
     "NEWS_FILTERS",
     "NewsBroadcastStats",
     "NewsFilter",
+    "_article_text",
     "select_news_article",
     "send_news_broadcast",
 )

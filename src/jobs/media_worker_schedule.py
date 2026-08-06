@@ -108,7 +108,9 @@ async def run_worker(
             if job == "weekly" and await has_due_media(
                 "daily", database_url=database_url
             ):
-                await run_refresh_locked_or_log("daily", redis, database_url=database_url)
+                await run_refresh_locked_or_log(
+                    "daily", redis, database_url=database_url
+                )
             if (
                 await is_feature_enabled("notifications", database_url=database_url)
                 and datetime.now(timezone).hour >= NOTIFICATION_HOUR

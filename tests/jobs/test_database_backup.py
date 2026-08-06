@@ -28,7 +28,9 @@ class DatabaseBackupTests(unittest.TestCase):
 
             self.assertEqual(backup_file.name, "bot-mon.db")
             with sqlite3.connect(backup_file) as restored:
-                values = restored.execute("SELECT value FROM entries ORDER BY value").fetchall()
+                values = restored.execute(
+                    "SELECT value FROM entries ORDER BY value"
+                ).fetchall()
             self.assertEqual(values, [("first",), ("second",)])
 
     def test_next_backup_run_moves_to_tomorrow_after_scheduled_time(self) -> None:

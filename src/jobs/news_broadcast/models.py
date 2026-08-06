@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 USER_BATCH_SIZE = 100
 SEND_INTERVAL_SECONDS = 0.06
 TELEGRAM_CAPTION_LIMIT = 1024

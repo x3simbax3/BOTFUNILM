@@ -11,7 +11,6 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_BACKUP_DIRECTORY = "/backups"
@@ -32,7 +31,10 @@ def backup_path(backup_directory: Path, now: datetime) -> Path:
 
 
 def _verify_restore(backup_file: Path) -> None:
-    with sqlite3.connect(backup_file) as backup, sqlite3.connect(":memory:") as restored:
+    with (
+        sqlite3.connect(backup_file) as backup,
+        sqlite3.connect(":memory:") as restored,
+    ):
         backup.backup(restored)
         result = restored.execute("PRAGMA integrity_check").fetchone()
 
@@ -50,9 +52,10 @@ def create_backup(database_file: Path, backup_file: Path) -> None:
     temporary_file.unlink(missing_ok=True)
 
     try:
-        with sqlite3.connect(database_file) as source, sqlite3.connect(
-            temporary_file
-        ) as destination:
+        with (
+            sqlite3.connect(database_file) as source,
+            sqlite3.connect(temporary_file) as destination,
+        ):
             source.backup(destination)
 
         os.chmod(temporary_file, 0o600)
@@ -62,7 +65,9 @@ def create_backup(database_file: Path, backup_file: Path) -> None:
         temporary_file.unlink(missing_ok=True)
 
 
-def next_backup_run(now: datetime, scheduled_time: time, timezone: ZoneInfo) -> datetime:
+def next_backup_run(
+    now: datetime, scheduled_time: time, timezone: ZoneInfo
+) -> datetime:
     """Return the next daily backup moment in the configured timezone."""
     local_now = now.astimezone(timezone)
     target = datetime.combine(local_now.date(), scheduled_time, tzinfo=timezone)
@@ -98,9 +103,7 @@ def run_scheduler(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "command", choices=("backup", "run"), nargs="?", default="run"
-    )
+    parser.add_argument("command", choices=("backup", "run"), nargs="?", default="run")
     arguments = parser.parse_args()
 
     database_file = Path(os.environ.get("BACKUP_DATABASE_PATH", "/data/bot.db"))
@@ -110,7 +113,9 @@ def main() -> None:
     timezone = ZoneInfo(os.environ.get("BACKUP_TIMEZONE", os.environ.get("TZ", "UTC")))
     scheduled_time = _backup_time(os.environ.get("BACKUP_TIME", DEFAULT_BACKUP_TIME))
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     if arguments.command == "backup":
         run_backup(database_file, backup_directory, datetime.now(timezone))
         return

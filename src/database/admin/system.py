@@ -43,8 +43,12 @@ async def get_admin_system(*, database_url: str | None = None) -> AdminSystem:
         for pragma in ("page_count", "page_size", "freelist_count", "journal_mode"):
             async with connection.execute(f"PRAGMA {pragma}") as cursor:
                 pragmas[pragma] = (await cursor.fetchone())[0]
-        async with connection.execute("SELECT feature, enabled FROM bot_features") as cursor:
-            features = {row["feature"]: row["enabled"] for row in await cursor.fetchall()}
+        async with connection.execute(
+            "SELECT feature, enabled FROM bot_features"
+        ) as cursor:
+            features = {
+                row["feature"]: row["enabled"] for row in await cursor.fetchall()
+            }
 
     page_size = int(pragmas["page_size"])
     values.update(

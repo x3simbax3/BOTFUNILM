@@ -72,7 +72,9 @@ async def get_admin_users(
             """,
             (page_size, (current_page - 1) * page_size),
         ) as cursor:
-            users = tuple(AdminUserSummary(**dict(row)) for row in await cursor.fetchall())
+            users = tuple(
+                AdminUserSummary(**dict(row)) for row in await cursor.fetchall()
+            )
     return AdminUserPage(users, current_page, total_pages, total_users)
 
 
@@ -130,4 +132,6 @@ async def get_admin_export_users(
             """,
             (limit,),
         ) as cursor:
-            return tuple(AdminExportUser(**dict(row)) for row in await cursor.fetchall())
+            return tuple(
+                AdminExportUser(**dict(row)) for row in await cursor.fetchall()
+            )

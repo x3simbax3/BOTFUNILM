@@ -52,11 +52,15 @@ async def run_admin_job_listener(
             if job in {"daily", "weekly"}:
                 await run_refresh_locked_or_log(job, redis, database_url=database_url)
             elif job == "notifications":
-                await run_notifications_locked_or_log(redis, bot, database_url=database_url)
+                await run_notifications_locked_or_log(
+                    redis, bot, database_url=database_url
+                )
             elif job == "news":
                 if not THENEWSAPI_KEY:
                     raise RuntimeError("THENEWSAPI_KEY is required")
-                stats = await run_news_locked_or_log(redis, bot, database_url=database_url)
+                stats = await run_news_locked_or_log(
+                    redis, bot, database_url=database_url
+                )
                 await send_admin_job_result(
                     bot,
                     payload.get("requested_by"),
