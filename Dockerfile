@@ -38,6 +38,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable \
+    && /usr/local/bin/python -m pip uninstall --yes setuptools wheel \
     && useradd --system --uid 10001 --create-home botfunilm \
     && mkdir -p /data/media/posters \
     && chown -R botfunilm:botfunilm /data \
