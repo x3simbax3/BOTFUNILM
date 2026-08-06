@@ -142,7 +142,7 @@ class NewsBroadcastTests(DatabaseTestCase):
                 "src.jobs.news_broadcast.select_news_article",
                 new=AsyncMock(return_value=(article_filter, article, self.image())),
             ),
-            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+            patch("src.jobs.news_broadcast.delivery.asyncio.sleep", new=AsyncMock()),
         ):
             stats = await send_news_broadcast(
                 AsyncMock(),
@@ -285,7 +285,7 @@ class NewsBroadcastTests(DatabaseTestCase):
                 "src.jobs.news_broadcast.select_news_article",
                 new=AsyncMock(return_value=(NEWS_FILTERS[0], article, self.image())),
             ),
-            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+            patch("src.jobs.news_broadcast.delivery.asyncio.sleep", new=AsyncMock()),
         ):
             stats = await send_news_broadcast(
                 AsyncMock(),
@@ -336,7 +336,7 @@ class NewsBroadcastTests(DatabaseTestCase):
                 "src.jobs.news_broadcast.select_news_article",
                 new=AsyncMock(return_value=selected),
             ),
-            patch("src.jobs.news_broadcast.asyncio.sleep", new=AsyncMock()),
+            patch("src.jobs.news_broadcast.delivery.asyncio.sleep", new=AsyncMock()),
         ):
             first_stats = await send_news_broadcast(
                 AsyncMock(),
