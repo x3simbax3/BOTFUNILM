@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 from src.database.connection import connection_scope
 
-ADMIN_USERS_PAGE_SIZE = 10
 ADMIN_EXPORT_USERS_LIMIT = 10_000
+ALLOWED_FEATURES = frozenset({"media_refresh", "notifications", "news"})
 
 
 @dataclass(frozen=True)
@@ -39,45 +39,6 @@ class AdminOverview:
         if not self.total_users:
             return 0.0
         return self.library_items / self.total_users
-
-
-@dataclass(frozen=True)
-class AdminUserSummary:
-    user_id: int
-    username: str | None
-    display_name: str | None
-    is_active: int
-    started_at: str
-    last_activity_at: str
-    library_items: int
-
-
-@dataclass(frozen=True)
-class AdminUserPage:
-    users: tuple[AdminUserSummary, ...]
-    page: int
-    total_pages: int
-    total_users: int
-
-
-@dataclass(frozen=True)
-class AdminUserDetails:
-    user_id: int
-    username: str | None
-    display_name: str | None
-    is_active: int
-    news_enabled: int
-    started_at: str
-    last_started_at: str
-    last_activity_at: str
-    library_items: int
-    planned_items: int
-    watching_items: int
-    completed_items: int
-    on_hold_items: int
-    rated_items: int
-    average_rating: float | None
-    tracked_series: int
 
 
 @dataclass(frozen=True)
@@ -185,98 +146,6 @@ class AdminNotifications:
         return self.sent_30d * 100 / self.selected_30d
 
 
-@dataclass(frozen=True)
-class AdminSystem:
-    catalog_items: int
-    tmdb_errors: int
-    daily_overdue: int
-    weekly_overdue: int
-    pending_series_notifications: int
-    pending_release_notifications: int
-    database_size_bytes: int
-    database_free_bytes: int
-    database_journal_mode: str
-    media_refresh_enabled: int
-    notifications_enabled: int
-    news_enabled: int
-    generated_at: str
-
-
-ALLOWED_FEATURES = frozenset({"media_refresh", "notifications", "news"})
-
-
-async def get_admin_system(*, database_url: str | None = None) -> AdminSystem:
-    async with connection_scope(database_url) as connection:
-        async with connection.execute(
-            """
-            SELECT
-                COUNT(*) AS catalog_items,
-                COUNT(*) FILTER (WHERE tmdb_refresh_error IS NOT NULL)
-                    AS tmdb_errors,
-                COUNT(*) FILTER (
-                    WHERE tmdb_id IS NOT NULL
-                      AND (
-                        (content_format = 'series' AND (
-                            tmdb_in_production = 1 OR tmdb_status IN (
-                                'Returning Series', 'Planned', 'In Production'
-                            )
-                        ))
-                        OR (is_released = 0 AND EXISTS (
-                            SELECT 1 FROM user_media
-                            WHERE user_media.media_id = media.id
-                              AND user_media.status = 'planned'
-                        ))
-                      )
-                      AND (
-                        tmdb_release_checked_at IS NULL
-                        OR tmdb_release_checked_at < datetime('now', '-23 hours')
-                      )
-                ) AS daily_overdue,
-                COUNT(*) FILTER (
-                    WHERE tmdb_id IS NOT NULL
-                      AND content_format = 'series'
-                      AND (
-                        tmdb_metadata_checked_at IS NULL
-                        OR tmdb_metadata_checked_at
-                            < datetime('now', '-6 days 23 hours')
-                      )
-                ) AS weekly_overdue,
-                (SELECT COUNT(*) FROM user_series_notifications AS n
-                 LEFT JOIN series_notification_batches AS b ON b.id = n.batch_id
-                 WHERE n.batch_id IS NULL OR b.sent_at IS NULL)
-                    AS pending_series_notifications,
-                (SELECT COUNT(*) FROM user_media_release_notifications
-                 WHERE sent_at IS NULL) AS pending_release_notifications,
-                CURRENT_TIMESTAMP AS generated_at
-            FROM media
-            """
-        ) as cursor:
-            values = dict(await cursor.fetchone())
-
-        pragmas: dict[str, object] = {}
-        for pragma in ("page_count", "page_size", "freelist_count", "journal_mode"):
-            async with connection.execute(f"PRAGMA {pragma}") as cursor:
-                pragmas[pragma] = (await cursor.fetchone())[0]
-
-        async with connection.execute(
-            "SELECT feature, enabled FROM bot_features"
-        ) as cursor:
-            features = {
-                row["feature"]: row["enabled"] for row in await cursor.fetchall()
-            }
-
-    page_size = int(pragmas["page_size"])
-    values.update(
-        database_size_bytes=int(pragmas["page_count"]) * page_size,
-        database_free_bytes=int(pragmas["freelist_count"]) * page_size,
-        database_journal_mode=str(pragmas["journal_mode"]),
-        media_refresh_enabled=int(features.get("media_refresh", 1)),
-        notifications_enabled=int(features.get("notifications", 1)),
-        news_enabled=int(features.get("news", 1)),
-    )
-    return AdminSystem(**values)
-
-
 async def is_feature_enabled(feature: str, *, database_url: str | None = None) -> bool:
     if feature not in ALLOWED_FEATURES:
         raise ValueError("Unknown feature")
@@ -286,31 +155,6 @@ async def is_feature_enabled(feature: str, *, database_url: str | None = None) -
         ) as cursor:
             row = await cursor.fetchone()
     return bool(row["enabled"]) if row else True
-
-
-async def toggle_feature(
-    feature: str, updated_by: int, *, database_url: str | None = None
-) -> bool:
-    if feature not in ALLOWED_FEATURES:
-        raise ValueError("Unknown feature")
-    async with connection_scope(database_url) as connection:
-        await connection.execute(
-            """
-            INSERT INTO bot_features (feature, enabled, updated_at, updated_by)
-            VALUES (?, 0, CURRENT_TIMESTAMP, ?)
-            ON CONFLICT(feature) DO UPDATE SET
-                enabled = CASE bot_features.enabled WHEN 1 THEN 0 ELSE 1 END,
-                updated_at = CURRENT_TIMESTAMP,
-                updated_by = excluded.updated_by
-            """,
-            (feature, updated_by),
-        )
-        async with connection.execute(
-            "SELECT enabled FROM bot_features WHERE feature = ?", (feature,)
-        ) as cursor:
-            row = await cursor.fetchone()
-    return bool(row["enabled"])
-
 
 async def get_admin_overview(
     *,
@@ -362,96 +206,6 @@ async def get_admin_overview(
             row = await cursor.fetchone()
 
     return AdminOverview(**dict(row))
-
-
-async def get_admin_users(
-    page: int,
-    *,
-    page_size: int = ADMIN_USERS_PAGE_SIZE,
-    database_url: str | None = None,
-) -> AdminUserPage:
-    if page <= 0:
-        raise ValueError("page must be positive")
-    if page_size <= 0:
-        raise ValueError("page_size must be positive")
-
-    async with connection_scope(database_url) as connection:
-        async with connection.execute("SELECT COUNT(*) FROM bot_users") as cursor:
-            total_users = int((await cursor.fetchone())[0])
-
-        total_pages = max(1, (total_users + page_size - 1) // page_size)
-        current_page = min(page, total_pages)
-        async with connection.execute(
-            """
-            SELECT
-                bot_users.user_id,
-                bot_users.username,
-                bot_users.display_name,
-                bot_users.is_active,
-                bot_users.started_at,
-                bot_users.last_activity_at,
-                COUNT(user_media.media_id) AS library_items
-            FROM bot_users
-            LEFT JOIN user_media ON user_media.user_id = bot_users.user_id
-            GROUP BY bot_users.user_id
-            ORDER BY bot_users.last_activity_at DESC, bot_users.user_id
-            LIMIT ? OFFSET ?
-            """,
-            (page_size, (current_page - 1) * page_size),
-        ) as cursor:
-            users = tuple(
-                AdminUserSummary(**dict(row)) for row in await cursor.fetchall()
-            )
-
-    return AdminUserPage(
-        users=users,
-        page=current_page,
-        total_pages=total_pages,
-        total_users=total_users,
-    )
-
-
-async def get_admin_user(
-    user_id: int,
-    *,
-    database_url: str | None = None,
-) -> AdminUserDetails | None:
-    async with connection_scope(database_url) as connection:
-        async with connection.execute(
-            """
-            SELECT
-                bot_users.user_id,
-                bot_users.username,
-                bot_users.display_name,
-                bot_users.is_active,
-                bot_users.news_enabled,
-                bot_users.started_at,
-                bot_users.last_started_at,
-                bot_users.last_activity_at,
-                COUNT(user_media.media_id) AS library_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'planned')
-                    AS planned_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'watching')
-                    AS watching_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'completed')
-                    AS completed_items,
-                COUNT(*) FILTER (WHERE user_media.status = 'on_hold')
-                    AS on_hold_items,
-                COUNT(*) FILTER (WHERE user_media.user_rating IS NOT NULL)
-                    AS rated_items,
-                AVG(user_media.user_rating) AS average_rating,
-                COUNT(*) FILTER (WHERE user_media.is_tracking = 1)
-                    AS tracked_series
-            FROM bot_users
-            LEFT JOIN user_media ON user_media.user_id = bot_users.user_id
-            WHERE bot_users.user_id = ?
-            GROUP BY bot_users.user_id
-            """,
-            (user_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-
-    return None if row is None else AdminUserDetails(**dict(row))
 
 
 async def get_admin_activity(
@@ -758,26 +512,17 @@ async def get_admin_export_users(
 
 __all__ = (
     "ADMIN_EXPORT_USERS_LIMIT",
-    "ADMIN_USERS_PAGE_SIZE",
     "AdminActivity",
     "AdminActivityDay",
     "AdminExportUser",
     "AdminLibraries",
     "AdminNotifications",
-    "AdminSystem",
     "AdminOverview",
     "AdminPopularTitle",
-    "AdminUserDetails",
-    "AdminUserPage",
-    "AdminUserSummary",
     "get_admin_overview",
     "get_admin_activity",
     "get_admin_export_users",
     "get_admin_libraries",
     "get_admin_notifications",
-    "get_admin_system",
-    "get_admin_user",
-    "get_admin_users",
     "is_feature_enabled",
-    "toggle_feature",
 )
