@@ -9,7 +9,7 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 FORMAT_VOLUMES := --volume $(CURDIR)/src:/app/src --volume $(CURDIR)/config/config.py:/app/config/config.py --volume $(CURDIR)/tests:/app/tests
 
-.PHONY: help check compose-check test-image lint format test test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset db-backup media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify news-broadcast media-worker-logs commit
+.PHONY: help check check-all compose-check test-image lint format test test-integration test-load security test-local build start up deploy start-local stop down restart logs ps secure-files migrate migration db-check db-status db-downgrade db-reset db-backup media-refresh-daily media-refresh-weekly media-refresh media-refresh-tmdb media-refresh-dry series-notify news-broadcast media-worker-logs commit
 .NOTPARALLEL: check
 
 help:
@@ -20,7 +20,8 @@ help:
 	@echo "  make lint           Check formatting and lint in Docker"
 	@echo "  make format         Fix lint issues and format source files in Docker"
 	@echo "  make test           Build the test target and run tests in Docker"
-	@echo "  make check          Validate Compose/DB, then run lint and tests"
+	@echo "  make check          Validate, lint and run the fast coverage suite"
+	@echo "  make check-all      Run check plus integration and load suites"
 	@echo "  make restart        Alias for make deploy"
 	@echo "  make logs           Follow bot, media worker and Redis logs"
 	@echo "  make media-worker-logs  Follow media worker logs"
@@ -44,9 +45,11 @@ help:
 	@echo "  make db-backup      Create and verify a production backup now"
 
 check: compose-check db-check test-image
-	$(COMPOSE) --profile test run --rm test ruff format --check $(QUALITY_PATHS)
-	$(COMPOSE) --profile test run --rm test ruff check $(QUALITY_PATHS)
-	$(COMPOSE) --profile test run --rm test pytest -q -n $(TEST_PROCESSES)
+	$(COMPOSE) --profile test run --rm --no-deps test ruff format --check $(QUALITY_PATHS)
+	$(COMPOSE) --profile test run --rm --no-deps test ruff check $(QUALITY_PATHS)
+	$(COMPOSE) --profile test run --rm --no-deps test pytest -q -n $(TEST_PROCESSES) -m "not integration and not load" --cov --cov-report=term-missing
+
+check-all: check test-integration test-load
 
 compose-check:
 	$(COMPOSE) config --quiet
@@ -55,18 +58,29 @@ test-image:
 	$(COMPOSE) --profile test build test
 
 lint: test-image
-	$(COMPOSE) --profile test run --rm test ruff format --check $(QUALITY_PATHS)
-	$(COMPOSE) --profile test run --rm test ruff check $(QUALITY_PATHS)
+	$(COMPOSE) --profile test run --rm --no-deps test ruff format --check $(QUALITY_PATHS)
+	$(COMPOSE) --profile test run --rm --no-deps test ruff check $(QUALITY_PATHS)
 
 format: test-image
 	$(COMPOSE) --profile test run --rm --user $(HOST_UID):$(HOST_GID) $(FORMAT_VOLUMES) test ruff check --fix $(FORMAT_PATHS)
 	$(COMPOSE) --profile test run --rm --user $(HOST_UID):$(HOST_GID) $(FORMAT_VOLUMES) test ruff format $(FORMAT_PATHS)
 
 test: test-image
-	$(COMPOSE) --profile test run --rm test pytest -q -n $(TEST_PROCESSES)
+	$(COMPOSE) --profile test run --rm --no-deps test pytest -q -n $(TEST_PROCESSES) -m "not integration and not load"
+
+test-integration: test-image
+	$(COMPOSE) up --detach --wait redis
+	$(COMPOSE) --profile test run --rm --env REDIS_URL=redis://redis:6379/15 test pytest -q -n 1 -m integration
+
+test-load: test-image
+	$(COMPOSE) --profile test run --rm --no-deps test pytest -q -n 1 -m load
+
+security:
+	docker run --rm --volume $(CURDIR):/app --workdir /app ghcr.io/astral-sh/uv:0.11.32 uvx pip-audit --locked .
+	docker run --rm --volume $(CURDIR):/src aquasec/trivy:0.65.0 fs --exit-code 1 --severity HIGH,CRITICAL /src
 
 test-local:
-	$(PYTEST) -q -n $(TEST_PROCESSES)
+	$(PYTEST) -q -n $(TEST_PROCESSES) -m "not integration and not load"
 
 build: compose-check
 	$(COMPOSE) build bot media-worker

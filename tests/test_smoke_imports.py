@@ -1,33 +1,30 @@
 import os
+import subprocess
 import sys
 import unittest
 
 
 class SmokeImportTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self._orig_token = os.environ.get("BOT_TOKEN")
-        os.environ["BOT_TOKEN"] = ""
-
-        modules_to_reload = [
-            k for k in list(sys.modules) if k.startswith(("src", "config"))
-        ]
-        for mod in modules_to_reload:
-            del sys.modules[mod]
-
-    def tearDown(self) -> None:
-        if self._orig_token is not None:
-            os.environ["BOT_TOKEN"] = self._orig_token
-        else:
-            os.environ.pop("BOT_TOKEN", None)
+    def assert_imports_in_fresh_process(self, module: str) -> None:
+        environment = os.environ.copy()
+        environment["BOT_TOKEN"] = ""
+        result = subprocess.run(
+            [sys.executable, "-c", f"import {module}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_import_src_bot(self) -> None:
-        import src.bot  # noqa: F401
+        self.assert_imports_in_fresh_process("src.bot")
 
     def test_import_src_routers(self) -> None:
-        import src.routers  # noqa: F401
+        self.assert_imports_in_fresh_process("src.routers")
 
     def test_import_src_handlers(self) -> None:
-        import src.handlers  # noqa: F401
+        self.assert_imports_in_fresh_process("src.handlers")
 
     def test_router_contains_domain_routers(self) -> None:
         from src.handlers.admin import router as admin_router

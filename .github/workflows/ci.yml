@@ -4,9 +4,11 @@
     push:
       branches:
         - master
+        - refactor/v0.1
     pull_request:
       branches:
         - master
+        - refactor/v0.1
     workflow_dispatch:
 
   permissions:
@@ -18,7 +20,7 @@
 
   jobs:
     check:
-      name: check
+      name: Fast checks
       runs-on: ubuntu-latest
       timeout-minutes: 20
 
@@ -34,3 +36,71 @@
 
         - name: Run project checks
           run: make check TEST_PROCESSES=1
+
+    integration:
+      name: Integration and load tests
+      runs-on: ubuntu-latest
+      timeout-minutes: 20
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Prepare safe configuration
+          run: cp .env.example config/.env
+        - name: Run integration tests
+          run: make test-integration
+        - name: Run SQLite load test
+          run: make test-load
+
+    dependency-scan:
+      name: Dependency scan
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Install uv
+          uses: astral-sh/setup-uv@v7
+        - name: Audit locked dependencies
+          run: uvx pip-audit --locked .
+
+    sast:
+      name: SAST
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        security-events: write
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Initialize CodeQL
+          uses: github/codeql-action/init@v3
+          with:
+            languages: python
+        - name: Analyze
+          uses: github/codeql-action/analyze@v3
+
+    container-scan:
+      name: Container image scan
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        security-events: write
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v6
+        - name: Build runtime image
+          run: docker build --target runtime --tag botfunilm:ci .
+        - name: Scan runtime image
+          uses: aquasecurity/trivy-action@0.33.1
+          with:
+            image-ref: botfunilm:ci
+            format: sarif
+            output: trivy-results.sarif
+            severity: HIGH,CRITICAL
+            exit-code: "1"
+        - name: Upload scan results
+          if: always()
+          uses: github/codeql-action/upload-sarif@v3
+          with:
+            sarif_file: trivy-results.sarif
