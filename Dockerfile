@@ -1,4 +1,4 @@
-FROM arigaio/atlas@sha256:ff5291f4995d545479a8301aa364eb256d9f94747d82ae9d6d691ba877fbe8d3 AS atlas
+FROM arigaio/atlas@sha256:1e9e0fb15d8ee6393ebf874aeefd8ffd784718957f832670081eaa3965f4628e AS atlas
 
 FROM python:3.10-slim-trixie@sha256:34a2c9467a0231d8c29a5ecadc219733a9393b026882b44d91616b9dae6088b6 AS base
 
