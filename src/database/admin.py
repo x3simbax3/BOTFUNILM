@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from src.database.connection import connection_scope
 
 ADMIN_USERS_PAGE_SIZE = 10
+ADMIN_EXPORT_USERS_LIMIT = 10_000
 
 
 @dataclass(frozen=True)
@@ -712,8 +713,11 @@ async def get_admin_notifications(
 
 async def get_admin_export_users(
     *,
+    limit: int = ADMIN_EXPORT_USERS_LIMIT,
     database_url: str | None = None,
 ) -> tuple[AdminExportUser, ...]:
+    if limit <= 0:
+        raise ValueError("limit must be positive")
     async with connection_scope(database_url) as connection:
         async with connection.execute(
             """
@@ -743,7 +747,9 @@ async def get_admin_export_users(
             LEFT JOIN user_media ON user_media.user_id = bot_users.user_id
             GROUP BY bot_users.user_id
             ORDER BY bot_users.user_id
-            """
+            LIMIT ?
+            """,
+            (limit,),
         ) as cursor:
             return tuple(
                 AdminExportUser(**dict(row)) for row in await cursor.fetchall()
@@ -751,6 +757,7 @@ async def get_admin_export_users(
 
 
 __all__ = (
+    "ADMIN_EXPORT_USERS_LIMIT",
     "ADMIN_USERS_PAGE_SIZE",
     "AdminActivity",
     "AdminActivityDay",

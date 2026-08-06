@@ -25,6 +25,7 @@ from config.config import (
 from src.admin_export import build_users_workbook
 from src.admin_runtime import enqueue_admin_job, enqueue_custom_broadcast
 from src.database.admin import (
+    ADMIN_EXPORT_USERS_LIMIT,
     AdminActivity,
     AdminLibraries,
     AdminNotifications,
@@ -201,7 +202,12 @@ async def export_admin_users(callback: CallbackQuery) -> None:
         return
     await callback.answer("Формирую файл")
     try:
-        users = await get_admin_export_users()
+        users = await get_admin_export_users(limit=ADMIN_EXPORT_USERS_LIMIT + 1)
+        if len(users) > ADMIN_EXPORT_USERS_LIMIT:
+            await callback.message.answer(
+                "Выгрузка доступна максимум для 10 000 пользователей."
+            )
+            return
         content = await asyncio.to_thread(build_users_workbook, users)
     except (aiosqlite.Error, OSError, ValueError):
         await callback.message.answer("Не удалось сформировать Excel-файл.")

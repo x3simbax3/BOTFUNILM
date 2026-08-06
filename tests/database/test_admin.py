@@ -1,4 +1,5 @@
 from src.database.admin import (
+    get_admin_export_users,
     get_admin_libraries,
     get_admin_overview,
     get_admin_system,
@@ -122,6 +123,19 @@ class AdminOverviewDatabaseTests(DatabaseTestCase):
                 page_size=0,
                 database_url=self.database_url,
             )
+
+    async def test_export_limits_number_of_loaded_users(self) -> None:
+        for user_id in (1, 2):
+            await register_bot_user(user_id, database_url=self.database_url)
+
+        users = await get_admin_export_users(
+            limit=1,
+            database_url=self.database_url,
+        )
+
+        self.assertEqual([user.user_id for user in users], [1])
+        with self.assertRaisesRegex(ValueError, "limit must be positive"):
+            await get_admin_export_users(limit=0, database_url=self.database_url)
 
     async def test_empty_database_returns_zeroes(self) -> None:
         overview = await get_admin_overview(database_url=self.database_url)
