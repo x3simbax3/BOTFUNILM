@@ -83,7 +83,9 @@ services:
       - --save
       - ""
       - --appendonly
-      - "no"
+      - "yes"
+      - --appendfsync
+      - everysec
       - --maxmemory
       - 64mb
       - --maxmemory-policy
@@ -94,6 +96,8 @@ services:
       timeout: 3s
       retries: 10
       start_period: 5s
+    volumes:
+      - redis_data:/data
 
   test:
     profiles:
@@ -112,3 +116,4 @@ services:
 
 volumes:
   bot_data:
+  redis_data:
