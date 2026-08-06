@@ -40,8 +40,9 @@ class NewsBroadcastTests(DatabaseTestCase):
     async def test_counts_every_provider_request_attempt(self) -> None:
         now = datetime(2026, 7, 30, 12, tzinfo=self.timezone)
 
-        async def fetch_with_retry(*, published_after, before_request):
+        async def fetch_with_retry(*, published_after, page, before_request):
             self.assertIsNotNone(published_after)
+            self.assertEqual(page, 1)
             await before_request()
             await before_request()
             return NewsFetchResult((), 100, 98)
@@ -119,8 +120,8 @@ class NewsBroadcastTests(DatabaseTestCase):
         self.assertEqual(selected[1].uuid, "with-image")
         fetch_image.assert_awaited_once_with(articles[1].image_url)
 
-    async def test_selects_fourth_article_when_first_three_are_rejected(self) -> None:
-        articles = [
+    async def test_selects_article_from_second_page(self) -> None:
+        rejected = [
             NewsArticle(
                 **{
                     **self.article(f"rejected-{index}").__dict__,
@@ -129,12 +130,18 @@ class NewsBroadcastTests(DatabaseTestCase):
             )
             for index in range(3)
         ]
-        articles.append(self.article("fourth"))
+        fourth = self.article("fourth")
+        fetch_news = AsyncMock(
+            side_effect=(
+                NewsFetchResult(tuple(rejected), 100, 99),
+                NewsFetchResult((fourth,), 100, 98),
+            )
+        )
 
         with (
             patch(
                 "src.news_api.TheNewsApiProvider.fetch_news",
-                new=AsyncMock(return_value=NewsFetchResult(tuple(articles), 100, 99)),
+                new=fetch_news,
             ),
             patch(
                 "src.news_api.TheNewsApiProvider.fetch_image",
@@ -149,7 +156,11 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         self.assertIsNotNone(selected)
         self.assertEqual(selected[1].uuid, "fourth")
-        fetch_image.assert_awaited_once_with(articles[3].image_url)
+        self.assertEqual(
+            [call.kwargs["page"] for call in fetch_news.await_args_list],
+            [1, 2],
+        )
+        fetch_image.assert_awaited_once_with(fourth.image_url)
 
     async def test_broadcasts_in_batches_and_reuses_telegram_photo(self) -> None:
         async with connection_scope(self.database_url) as connection:

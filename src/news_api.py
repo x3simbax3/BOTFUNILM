@@ -21,7 +21,7 @@ from src.news_provider import BeforeNewsRequest
 from src.observability import record_api_error
 
 NEWS_API_URL = "https://api.thenewsapi.com/v1/news/all"
-NEWS_API_BATCH_SIZE = 20
+NEWS_API_BATCH_SIZE = 3
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_ARTICLE_METADATA_BYTES = 512 * 1024
 MAX_IMAGE_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -52,6 +52,7 @@ class NewsApiUnavailableError(NewsApiError):
 async def fetch_news(
     *,
     published_after: datetime,
+    page: int = 1,
     before_request: BeforeNewsRequest | None = None,
 ) -> NewsFetchResult:
     if not THENEWSAPI_KEY:
@@ -68,6 +69,7 @@ async def fetch_news(
         "published_after": published_after.strftime("%Y-%m-%dT%H:%M:%S"),
         "sort": "published_at",
         "limit": str(NEWS_API_BATCH_SIZE),
+        "page": str(page),
     }
     for attempt in range(NEWS_API_RETRIES):
         if before_request is not None:
@@ -142,10 +144,12 @@ class TheNewsApiProvider:
         self,
         *,
         published_after: datetime,
+        page: int = 1,
         before_request: BeforeNewsRequest | None = None,
     ) -> NewsFetchResult:
         return await fetch_news(
             published_after=published_after,
+            page=page,
             before_request=before_request,
         )
 

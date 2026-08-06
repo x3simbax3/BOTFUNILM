@@ -28,6 +28,7 @@ from src.database.news_articles import (
 )
 from src.jobs.news_broadcast.models import NEWS_FILTERS, NewsFilter
 from src.news_api import (
+    NEWS_API_BATCH_SIZE,
     NewsApiAuthenticationError,
     NewsApiError,
     NewsApiRateLimitError,
@@ -37,6 +38,7 @@ from src.news_models import NewsArticle, NewsImage
 from src.news_provider import NewsProvider
 
 logger = logging.getLogger(__name__)
+NEWS_API_MAX_PAGES = 4
 
 
 async def select_news_article(
@@ -121,40 +123,49 @@ async def _refresh_news_candidates(
             database_url=database_url,
         )
 
-    result = await provider.fetch_news(
-        published_after=published_after,
-        before_request=reserve_request,
-    )
-    await update_news_api_quota(
-        now.date(),
-        api_limit=result.api_limit,
-        api_remaining=result.api_remaining,
-        database_url=database_url,
-    )
+    for page in range(1, NEWS_API_MAX_PAGES + 1):
+        result = await provider.fetch_news(
+            published_after=published_after,
+            page=page,
+            before_request=reserve_request,
+        )
+        await update_news_api_quota(
+            now.date(),
+            api_limit=result.api_limit,
+            api_remaining=result.api_remaining,
+            database_url=database_url,
+        )
 
-    articles = sorted(
-        result.articles,
-        key=lambda article: (
-            _published_at(article) or datetime.min.replace(tzinfo=timezone.utc)
-        ),
-        reverse=True,
-    )
-    for article in articles:
-        rejection = _article_rejection_reason(article, now)
-        if rejection == "truncated-description":
-            complete_description = await provider.fetch_description(article.url)
-            if complete_description:
-                article = replace(article, description=complete_description)
-                rejection = _article_rejection_reason(article, now)
-        if rejection:
-            logger.info(
-                "News candidate rejected: uuid=%s source=%s reason=%s",
-                article.uuid,
-                article.source,
-                rejection,
+        articles = sorted(
+            result.articles,
+            key=lambda article: (
+                _published_at(article) or datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            reverse=True,
+        )
+        saved_candidate = False
+        for article in articles:
+            rejection = _article_rejection_reason(article, now)
+            if rejection == "truncated-description":
+                complete_description = await provider.fetch_description(article.url)
+                if complete_description:
+                    article = replace(article, description=complete_description)
+                    rejection = _article_rejection_reason(article, now)
+            if rejection:
+                logger.info(
+                    "News candidate rejected: uuid=%s source=%s reason=%s",
+                    article.uuid,
+                    article.source,
+                    rejection,
+                )
+                continue
+            saved_candidate = (
+                await save_news_candidate(article, database_url=database_url)
+                or saved_candidate
             )
-            continue
-        await save_news_candidate(article, database_url=database_url)
+
+        if saved_candidate or len(result.articles) < NEWS_API_BATCH_SIZE:
+            break
 
 
 def _article_rejection_reason(article: NewsArticle, now: datetime) -> str | None:

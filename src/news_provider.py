@@ -16,6 +16,7 @@ class NewsProvider(Protocol):
         self,
         *,
         published_after: datetime,
+        page: int = 1,
         before_request: BeforeNewsRequest | None = None,
     ) -> NewsFetchResult: ...
 
