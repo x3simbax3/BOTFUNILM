@@ -252,6 +252,19 @@ class NewsBroadcastTests(DatabaseTestCase):
         self.assertTrue(visible_caption.startswith("ззз"))
         self.assertTrue(visible_caption.endswith("daily.afisha.ru"))
 
+    def test_displayed_source_is_url_hostname_not_field(self) -> None:
+        """_article_text uses url hostname, not the source field."""
+        article = NewsArticle(
+            **{
+                **self.article().__dict__,
+                "source": "film.ru",
+                "url": "https://daily.afisha.ru/cinema/article/",
+            }
+        )
+        caption = _article_text(article)
+        self.assertIn("daily.afisha.ru", caption)
+        self.assertNotIn("film.ru", html.unescape(caption))
+
     async def test_rejects_provider_truncation_instead_of_shortening_caption(
         self,
     ) -> None:
@@ -311,6 +324,62 @@ class NewsBroadcastTests(DatabaseTestCase):
 
         self.assertIsNotNone(selected)
         self.assertEqual(selected[1].description, "Полное описание без обрезания.")
+
+    async def test_accepts_article_when_source_mismatches_url_hostname(self) -> None:
+        """Verify that trust check uses article.url hostname, not the source field."""
+        redis = AsyncMock()
+        # source says one domain, url hostname is another — both allowed
+        mismatched = NewsArticle(
+            **{
+                **self.article().__dict__,
+                "source": "film.ru",
+                "url": "https://daily.afisha.ru/cinema/safe/",
+            }
+        )
+        with (
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_news",
+                new=AsyncMock(return_value=NewsFetchResult((mismatched,), 100, 99)),
+            ),
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_image",
+                new=AsyncMock(return_value=self.image()),
+            ),
+        ):
+            selected = await select_news_article(
+                redis,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected[1].uuid, "fresh")
+
+    async def test_rejects_article_when_url_hostname_is_not_allowed(self) -> None:
+        """URL hostname not in NEWS_ALLOWED_DOMAINS — reject even if source field is allowed."""
+        redis = AsyncMock()
+        rogue = NewsArticle(
+            **{
+                **self.article().__dict__,
+                "source": "daily.afisha.ru",
+                "url": "https://evil.example.com/malicious/",
+            }
+        )
+        with (
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_news",
+                new=AsyncMock(return_value=NewsFetchResult((rogue,), 100, 99)),
+            ),
+            patch(
+                "src.news_api.TheNewsApiProvider.fetch_image",
+                new=AsyncMock(),
+            ),
+        ):
+            selected = await select_news_article(
+                redis,
+                datetime(2026, 7, 30, 12, tzinfo=self.timezone),
+                database_url=self.database_url,
+            )
+        self.assertIsNone(selected)
 
     async def test_does_not_fall_back_to_text_when_image_is_rejected(self) -> None:
         async with connection_scope(self.database_url) as connection:

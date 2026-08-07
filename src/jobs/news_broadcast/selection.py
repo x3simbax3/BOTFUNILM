@@ -177,8 +177,9 @@ def _article_rejection_reason(article: NewsArticle, now: datetime) -> str | None
         return "future-published-at"
     if published_at < utc_now - timedelta(hours=NEWS_MAX_AGE_HOURS):
         return "stale"
+    url_hostname = urlsplit(article.url).hostname or ""
     if not any(
-        article.source == domain or article.source.endswith(f".{domain}")
+        url_hostname == domain or url_hostname.endswith(f".{domain}")
         for domain in NEWS_ALLOWED_DOMAINS
     ):
         return "untrusted-source"

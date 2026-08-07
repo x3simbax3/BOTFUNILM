@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+from urllib.parse import urlsplit
 
 from aiogram.types import Message
 
@@ -11,7 +12,7 @@ from src.news_models import NewsArticle
 
 
 def _article_text(article: NewsArticle) -> str:
-    source_text = article.source or "Источник"
+    source_text = urlsplit(article.url).hostname or article.source or "Источник"
     source_text = _truncate_caption_part(source_text, TELEGRAM_CAPTION_LIMIT - 4)
     title_limit = TELEGRAM_CAPTION_LIMIT - len(source_text) - 4
     title_text = _truncate_caption_part(article.title, title_limit)
